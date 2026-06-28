@@ -1,0 +1,7 @@
+{
+  "name": "YCPL_lsp",
+  "version": "0.4.0",
+  "entry": "src/main.ec",
+  "src": ["src/"],
+  "output": "build/"
+}

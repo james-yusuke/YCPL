@@ -1,0 +1,1964 @@
+import "std/fmt" as fmt
+import "std/array" as array
+import "std/io" as io
+import "std/json" as json
+import "std/map" as map
+import "std/mem" as mem
+import "std/text" as text
+
+fn append_str(out string, at i32, value string) i32 {
+    if value == none {
+        return at
+    }
+
+    i: i32 := 0
+    n := text.len(value)
+    for (; i < n; i++) {
+        out[at] = value[i]
+        at += 1
+    }
+
+    return at
+}
+
+fn append_i32(out string, at i32, value i32) i32 {
+    if value == 0 {
+        out[at] = '0'
+        return at + 1
+    }
+
+    n := value
+    if n < 0 {
+        out[at] = '-'
+        at += 1
+        n = -n
+    }
+
+    tmp: string := mem.calloc(16, 1)
+    count: i32 := 0
+    for (; n > 0; ) {
+        digit := n % 10
+        tmp[count] = '0' + digit
+        count += 1
+        n = n / 10
+    }
+
+    i := count - 1
+    for (; i >= 0; i--) {
+        out[at] = tmp[i]
+        at += 1
+    }
+
+    mem.free(tmp)
+    return at
+}
+
+fn send_json_body(body string) {
+    io.send_lsp_body(body)
+}
+
+fn send_initialize(id i32) {
+    body: string := mem.calloc(4096, 1)
+    at: i32 := 0
+    at = append_str(body, at, "{\"jsonrpc\":\"2.0\",\"id\":")
+    at = append_i32(body, at, id)
+    at = append_str(body, at, ",\"result\":{\"capabilities\":{\"textDocumentSync\":1,\"hoverProvider\":true,\"completionProvider\":{\"resolveProvider\":false,\"triggerCharacters\":[\".\"]},\"documentSymbolProvider\":true,\"semanticTokensProvider\":{\"legend\":{\"tokenTypes\":[\"namespace\",\"type\",\"function\",\"variable\",\"property\",\"keyword\",\"string\",\"number\",\"operator\",\"comment\"],\"tokenModifiers\":[\"declaration\",\"readonly\"]},\"full\":true},\"documentFormattingProvider\":true,\"documentRangeFormattingProvider\":true,\"foldingRangeProvider\":true,\"signatureHelpProvider\":{\"triggerCharacters\":[\"(\",\",\"]},\"definitionProvider\":true,\"declarationProvider\":true,\"typeDefinitionProvider\":true,\"referencesProvider\":true,\"documentHighlightProvider\":true,\"renameProvider\":{\"prepareProvider\":true},\"selectionRangeProvider\":true,\"workspaceSymbolProvider\":true}}}")
+    send_json_body(body)
+    mem.free(body)
+}
+
+fn send_shutdown(id i32) {
+    size := 37 + json.digits_i32(id)
+    fmt.printf("Content-Length: %d\r\n\r\n{\"jsonrpc\":\"2.0\",\"id\":%d,\"result\":null}", size, id)
+}
+
+fn send_hover(id i32) {
+    value := "YCPL symbol"
+    size := 76 + json.digits_i32(id) + text.len(value)
+    fmt.printf("Content-Length: %d\r\n\r\n{\"jsonrpc\":\"2.0\",\"id\":%d,\"result\":{\"contents\":{\"kind\":\"markdown\",\"value\":\"%s\"}}}", size, id, value)
+}
+
+fn send_hover_value(id i32, value string) {
+    escaped := json_escape_string(value)
+    body: string := mem.calloc(512 + text.len(escaped), 1)
+    at: i32 := 0
+    at = append_str(body, at, "{\"jsonrpc\":\"2.0\",\"id\":")
+    at = append_i32(body, at, id)
+    at = append_str(body, at, ",\"result\":{\"contents\":{\"kind\":\"markdown\",\"value\":\"")
+    at = append_str(body, at, escaped)
+    at = append_str(body, at, "\"}}}")
+    send_json_body(body)
+    mem.free(body)
+    mem.free(escaped)
+}
+
+fn send_hover_for_word(id i32, source string, word string) {
+    if source == none || word == none {
+        send_hover(id)
+        return
+    }
+
+    message: string := mem.calloc(256 + text.len(word) * 2, 1)
+    at: i32 := 0
+    at = append_str(message, at, "**")
+    at = append_str(message, at, word)
+    at = append_str(message, at, "**")
+
+    decl := find_declaration_offset(source, word)
+    if decl >= 0 {
+        if word_before_eq(source, decl, "fn") {
+            at = append_str(message, at, " - YCPL function")
+        } else if word_before_eq(source, decl, "struct") {
+            at = append_str(message, at, " - YCPL struct type")
+        } else if word_before_eq(source, decl, "module") || word_before_eq(source, decl, "package") || word_before_eq(source, decl, "as") {
+            at = append_str(message, at, " - YCPL module namespace")
+        } else {
+            at = append_str(message, at, " - YCPL variable or field")
+            type_name := type_name_from_declaration(source, decl)
+            if type_name != none {
+                at = append_str(message, at, " of type `")
+                at = append_str(message, at, type_name)
+                at = append_str(message, at, "`")
+                mem.free(type_name)
+            }
+        }
+    } else if is_type_token(word, 0, text.len(word)) {
+        at = append_str(message, at, " - YCPL primitive type")
+    } else {
+        at = append_str(message, at, " - YCPL symbol")
+    }
+
+    send_hover_value(id, message)
+    mem.free(message)
+}
+
+fn send_completion(id i32) {
+    size := 556 + json.digits_i32(id)
+    fmt.printf("Content-Length: %d\r\n\r\n{\"jsonrpc\":\"2.0\",\"id\":%d,\"result\":{\"isIncomplete\":false,\"items\":[{\"label\":\"fn\",\"kind\":14},{\"label\":\"main\",\"kind\":15,\"insertTextFormat\":2,\"insertText\":\"fn main() i32 {\\n    $1\\n}\"},{\"label\":\"struct\",\"kind\":14},{\"label\":\"import\",\"kind\":14},{\"label\":\"const\",\"kind\":14},{\"label\":\"mut\",\"kind\":14},{\"label\":\"i32\",\"kind\":7},{\"label\":\"string\",\"kind\":7},{\"label\":\"bool\",\"kind\":7},{\"label\":\"std/fmt\",\"kind\":9},{\"label\":\"std/array\",\"kind\":9},{\"label\":\"std/json\",\"kind\":9},{\"label\":\"std/io\",\"kind\":9},{\"label\":\"fmt.println\",\"kind\":3},{\"label\":\"array.append\",\"kind\":3}]}}", size, id)
+}
+
+fn is_ident_char(ch i32) bool {
+    if ch >= 'a' && ch <= 'z' {
+        return true
+    }
+    if ch >= 'A' && ch <= 'Z' {
+        return true
+    }
+    if ch >= '0' && ch <= '9' {
+        return true
+    }
+    return ch == '_'
+}
+
+fn symbol_name_after(source string, needle string) string {
+    pos := text.find(source, needle)
+    if pos < 0 {
+        return none
+    }
+
+    i := pos + text.len(needle)
+    n := text.len(source)
+    for (; i < n && source[i] == ' '; i++) {
+    }
+
+    start := i
+    for (; i < n && is_ident_char(source[i]); i++) {
+    }
+
+    if i <= start {
+        return none
+    }
+
+    return text.slice(source, start, i - start)
+}
+
+fn symbol_line(source string, needle string) i32 {
+    pos := text.find(source, needle)
+    if pos < 0 {
+        return 0
+    }
+
+    return text.line_of_offset(source, pos)
+}
+
+fn ident_len_at(source string, start i32) i32 {
+    i := start
+    n := text.len(source)
+    for (; i < n && is_ident_char(source[i]); i++) {
+    }
+
+    return i - start
+}
+
+fn slice_eq(source string, start i32, len i32, value string) bool {
+    if len != text.len(value) {
+        return false
+    }
+
+    i: i32 := 0
+    for (; i < len; i++) {
+        if source[start + i] != value[i] {
+            return false
+        }
+    }
+
+    return true
+}
+
+fn is_keyword_token(source string, start i32, len i32) bool {
+    return slice_eq(source, start, len, "module") || slice_eq(source, start, len, "package") || slice_eq(source, start, len, "import") || slice_eq(source, start, len, "pub") || slice_eq(source, start, len, "extern") || slice_eq(source, start, len, "intrinsic") || slice_eq(source, start, len, "fn") || slice_eq(source, start, len, "struct") || slice_eq(source, start, len, "const") || slice_eq(source, start, len, "mut") || slice_eq(source, start, len, "if") || slice_eq(source, start, len, "else") || slice_eq(source, start, len, "for") || slice_eq(source, start, len, "in") || slice_eq(source, start, len, "return") || slice_eq(source, start, len, "break") || slice_eq(source, start, len, "continue") || slice_eq(source, start, len, "as") || slice_eq(source, start, len, "none") || slice_eq(source, start, len, "true") || slice_eq(source, start, len, "false") || slice_eq(source, start, len, "enum") || slice_eq(source, start, len, "interface") || slice_eq(source, start, len, "match") || slice_eq(source, start, len, "switch")
+}
+
+fn is_type_token(source string, start i32, len i32) bool {
+    return slice_eq(source, start, len, "i32") || slice_eq(source, start, len, "i64") || slice_eq(source, start, len, "bool") || slice_eq(source, start, len, "char") || slice_eq(source, start, len, "byte") || slice_eq(source, start, len, "string") || slice_eq(source, start, len, "float") || slice_eq(source, start, len, "double") || slice_eq(source, start, len, "void") || slice_eq(source, start, len, "size_t") || slice_eq(source, start, len, "Type") || slice_eq(source, start, len, "T") || slice_eq(source, start, len, "any")
+}
+
+fn is_upper_ident(source string, start i32) bool {
+    return source[start] >= 'A' && source[start] <= 'Z'
+}
+
+fn is_operator_char(ch i32) bool {
+    return ch == ':' || ch == '=' || ch == '+' || ch == '-' || ch == '*' || ch == '/' || ch == '%' || ch == '<' || ch == '>' || ch == '!' || ch == '&' || ch == '|'
+}
+
+fn append_semantic_token(out string, at i32, first bool, delta_line i32, delta_col i32, len i32, token_type i32, modifiers i32) i32 {
+    if !first {
+        out[at] = ','
+        at += 1
+    }
+    at = append_i32(out, at, delta_line)
+    out[at] = ','
+    at += 1
+    at = append_i32(out, at, delta_col)
+    out[at] = ','
+    at += 1
+    at = append_i32(out, at, len)
+    out[at] = ','
+    at += 1
+    at = append_i32(out, at, token_type)
+    out[at] = ','
+    at += 1
+    at = append_i32(out, at, modifiers)
+    return at
+}
+
+fn send_empty_result(id i32) {
+    size := 35 + json.digits_i32(id)
+    fmt.printf("Content-Length: %d\r\n\r\n{\"jsonrpc\":\"2.0\",\"id\":%d,\"result\":[]}", size, id)
+}
+
+fn send_semantic_tokens(id i32, source string) {
+    if source == none {
+        body: string := mem.calloc(128, 1)
+        at: i32 := 0
+        at = append_str(body, at, "{\"jsonrpc\":\"2.0\",\"id\":")
+        at = append_i32(body, at, id)
+        at = append_str(body, at, ",\"result\":{\"data\":[]}}")
+        send_json_body(body)
+        mem.free(body)
+        return
+    }
+
+    body: string := mem.calloc(text.len(source) * 24 + 512, 1)
+    at: i32 := 0
+    at = append_str(body, at, "{\"jsonrpc\":\"2.0\",\"id\":")
+    at = append_i32(body, at, id)
+    at = append_str(body, at, ",\"result\":{\"data\":[")
+
+    i: i32 := 0
+    n := text.len(source)
+    line: i32 := 0
+    col: i32 := 0
+    last_line: i32 := 0
+    last_col: i32 := 0
+    token_count: i32 := 0
+    expect_fn_name := false
+    expect_struct_name := false
+    expect_namespace := false
+
+    for (; i < n; ) {
+        ch := source[i]
+        if ch == 10 {
+            line += 1
+            col = 0
+            i += 1
+        } else if ch == ' ' || ch == 9 || ch == 13 {
+            col += 1
+            i += 1
+        } else if ch == '/' && i + 1 < n && source[i + 1] == '/' {
+            start_col := col
+            start := i
+            for (; i < n && source[i] != 10; i++) {
+                col += 1
+            }
+            len := i - start
+            delta_line := line - last_line
+            delta_col := start_col
+            if delta_line == 0 {
+                delta_col = start_col - last_col
+            }
+            at = append_semantic_token(body, at, token_count == 0, delta_line, delta_col, len, 9, 0)
+            token_count += 1
+            last_line = line
+            last_col = start_col
+        } else if ch == '/' && i + 1 < n && source[i + 1] == '*' {
+            start_col := col
+            start := i
+            for (; i < n; ) {
+                if source[i] == 10 {
+                    line += 1
+                    col = 0
+                    i += 1
+                } else if source[i] == '*' && i + 1 < n && source[i + 1] == '/' {
+                    i += 2
+                    col += 2
+                    break
+                } else {
+                    col += 1
+                    i += 1
+                }
+            }
+            if line == last_line {
+                len := i - start
+                delta_line := line - last_line
+                delta_col := start_col
+                if delta_line == 0 {
+                    delta_col = start_col - last_col
+                }
+                at = append_semantic_token(body, at, token_count == 0, delta_line, delta_col, len, 9, 0)
+                token_count += 1
+                last_line = line
+                last_col = start_col
+            }
+        } else if ch == '"' || ch == '\'' || ch == '`' {
+            quote := ch
+            start_col := col
+            start := i
+            i += 1
+            col += 1
+            escape := false
+            for (; i < n; ) {
+                c := source[i]
+                if c == 10 {
+                    break
+                }
+                i += 1
+                col += 1
+                if quote != '`' && escape {
+                    escape = false
+                } else if quote != '`' && c == '\\' {
+                    escape = true
+                } else if c == quote {
+                    break
+                }
+            }
+            len := i - start
+            delta_line := line - last_line
+            delta_col := start_col
+            if delta_line == 0 {
+                delta_col = start_col - last_col
+            }
+            at = append_semantic_token(body, at, token_count == 0, delta_line, delta_col, len, 6, 0)
+            token_count += 1
+            last_line = line
+            last_col = start_col
+        } else if ch >= '0' && ch <= '9' {
+            start_col := col
+            start := i
+            for (; i < n && ((source[i] >= '0' && source[i] <= '9') || source[i] == '.' || source[i] == 'x' || source[i] == 'b' || (source[i] >= 'A' && source[i] <= 'F') || (source[i] >= 'a' && source[i] <= 'f')); i++) {
+                col += 1
+            }
+            len := i - start
+            delta_line := line - last_line
+            delta_col := start_col
+            if delta_line == 0 {
+                delta_col = start_col - last_col
+            }
+            at = append_semantic_token(body, at, token_count == 0, delta_line, delta_col, len, 7, 0)
+            token_count += 1
+            last_line = line
+            last_col = start_col
+        } else if is_ident_char(ch) {
+            start_col := col
+            start := i
+            len := ident_len_at(source, start)
+            i += len
+            col += len
+
+            token_type := 3
+            modifiers := 0
+            if is_keyword_token(source, start, len) {
+                token_type = 5
+                if slice_eq(source, start, len, "fn") {
+                    expect_fn_name = true
+                } else if slice_eq(source, start, len, "struct") {
+                    expect_struct_name = true
+                } else if slice_eq(source, start, len, "module") || slice_eq(source, start, len, "package") || slice_eq(source, start, len, "import") || slice_eq(source, start, len, "as") {
+                    expect_namespace = true
+                }
+            } else if expect_fn_name {
+                token_type = 2
+                modifiers = 1
+                expect_fn_name = false
+            } else if expect_struct_name {
+                token_type = 1
+                modifiers = 1
+                expect_struct_name = false
+            } else if expect_namespace {
+                token_type = 0
+                modifiers = 1
+                expect_namespace = false
+            } else if is_type_token(source, start, len) || is_upper_ident(source, start) {
+                token_type = 1
+            } else {
+                next := next_non_ws(source, i)
+                if next < n && source[next] == '.' {
+                    token_type = 0
+                } else if next < n && source[next] == '(' {
+                    token_type = 2
+                } else {
+                    token_type = 3
+                }
+            }
+
+            delta_line := line - last_line
+            delta_col := start_col
+            if delta_line == 0 {
+                delta_col = start_col - last_col
+            }
+            at = append_semantic_token(body, at, token_count == 0, delta_line, delta_col, len, token_type, modifiers)
+            token_count += 1
+            last_line = line
+            last_col = start_col
+        } else if ch == '.' {
+            i += 1
+            col += 1
+            if i < n && is_ident_char(source[i]) {
+                start_col := col
+                start := i
+                len := ident_len_at(source, start)
+                i += len
+                col += len
+                token_type := 4
+                next := next_non_ws(source, i)
+                if next < n && source[next] == '(' {
+                    token_type = 2
+                }
+                delta_line := line - last_line
+                delta_col := start_col
+                if delta_line == 0 {
+                    delta_col = start_col - last_col
+                }
+                at = append_semantic_token(body, at, token_count == 0, delta_line, delta_col, len, token_type, 0)
+                token_count += 1
+                last_line = line
+                last_col = start_col
+            }
+        } else if is_operator_char(ch) {
+            start_col := col
+            start := i
+            for (; i < n && is_operator_char(source[i]); i++) {
+                col += 1
+            }
+            len := i - start
+            delta_line := line - last_line
+            delta_col := start_col
+            if delta_line == 0 {
+                delta_col = start_col - last_col
+            }
+            at = append_semantic_token(body, at, token_count == 0, delta_line, delta_col, len, 8, 0)
+            token_count += 1
+            last_line = line
+            last_col = start_col
+        } else {
+            i += 1
+            col += 1
+        }
+    }
+
+    at = append_str(body, at, "]}}")
+    send_json_body(body)
+    mem.free(body)
+}
+
+fn append_indent(out string, at i32, indent i32) i32 {
+    spaces := indent * 4
+    i: i32 := 0
+    for (; i < spaces; i++) {
+        out[at] = ' '
+        at += 1
+    }
+
+    return at
+}
+
+fn append_newline(out string, at i32) i32 {
+    if at == 0 || out[at - 1] != 10 {
+        out[at] = 10
+        at += 1
+    }
+
+    return at
+}
+
+fn next_non_ws(source string, start i32) i32 {
+    i := start
+    n := text.len(source)
+    for (; i < n && (source[i] == ' ' || source[i] == 9 || source[i] == 10 || source[i] == 13); i++) {
+    }
+
+    return i
+}
+
+fn is_word_boundary(source string, pos i32) bool {
+    if pos < 0 || pos >= text.len(source) {
+        return true
+    }
+
+    return !is_ident_char(source[pos])
+}
+
+fn find_word_from(source string, word string, start i32) i32 {
+    if source == none || word == none {
+        return -1
+    }
+
+    pos := text.find_from(source, word, start)
+    word_len := text.len(word)
+    for (; pos >= 0; ) {
+        if is_word_boundary(source, pos - 1) && is_word_boundary(source, pos + word_len) {
+            return pos
+        }
+        pos = text.find_from(source, word, pos + word_len)
+    }
+
+    return -1
+}
+
+fn word_before_eq(source string, start i32, word string) bool {
+    i := start - 1
+    for (; i >= 0 && (source[i] == ' ' || source[i] == 9 || source[i] == 10 || source[i] == 13); i--) {
+    }
+    if i < 0 {
+        return false
+    }
+
+    end_pos := i + 1
+    for (; i >= 0 && is_ident_char(source[i]); i--) {
+    }
+    word_start := i + 1
+    return slice_eq(source, word_start, end_pos - word_start, word)
+}
+
+fn looks_like_type_at(source string, start i32) bool {
+    if start < 0 || start >= text.len(source) {
+        return false
+    }
+
+    if source[start] == '*' || source[start] == '[' {
+        return true
+    }
+
+    len := ident_len_at(source, start)
+    if len <= 0 {
+        return false
+    }
+
+    return is_type_token(source, start, len) || is_upper_ident(source, start)
+}
+
+fn identifier_has_type_after(source string, start i32, len i32) bool {
+    next := next_non_ws(source, start + len)
+    return looks_like_type_at(source, next)
+}
+
+fn offset_of_position(source string, line i32, character i32) i32 {
+    if source == none {
+        return 0
+    }
+
+    current_line: i32 := 0
+    current_col: i32 := 0
+    i: i32 := 0
+    n := text.len(source)
+    for (; i < n; i++) {
+        if current_line == line && current_col >= character {
+            return i
+        }
+        if source[i] == 10 {
+            current_line += 1
+            current_col = 0
+        } else {
+            current_col += 1
+        }
+    }
+
+    return n
+}
+
+fn word_at_position(source string, line i32, character i32) string {
+    if source == none {
+        return none
+    }
+
+    n := text.len(source)
+    if n == 0 {
+        return none
+    }
+
+    pos := offset_of_position(source, line, character)
+    if pos >= n {
+        pos = n - 1
+    }
+    if !is_ident_char(source[pos]) && pos > 0 && is_ident_char(source[pos - 1]) {
+        pos -= 1
+    }
+    if !is_ident_char(source[pos]) {
+        return none
+    }
+
+    start := pos
+    for (; start > 0 && is_ident_char(source[start - 1]); start--) {
+    }
+
+    end_pos := pos
+    for (; end_pos < n && is_ident_char(source[end_pos]); end_pos++) {
+    }
+
+    return text.slice(source, start, end_pos - start)
+}
+
+fn find_declaration_offset(source string, word string) i32 {
+    if source == none || word == none {
+        return -1
+    }
+
+    pos := find_word_from(source, word, 0)
+    word_len := text.len(word)
+    n := text.len(source)
+    for (; pos >= 0; ) {
+        if word_before_eq(source, pos, "fn") || word_before_eq(source, pos, "struct") || word_before_eq(source, pos, "module") || word_before_eq(source, pos, "package") || word_before_eq(source, pos, "as") || word_before_eq(source, pos, "const") || word_before_eq(source, pos, "mut") {
+            return pos
+        }
+
+        next := next_non_ws(source, pos + word_len)
+        if next < n && source[next] == ':' {
+            return pos
+        }
+        if identifier_has_type_after(source, pos, word_len) {
+            return pos
+        }
+
+        pos = find_word_from(source, word, pos + word_len)
+    }
+
+    return -1
+}
+
+fn type_name_from_declaration(source string, decl_offset i32) string {
+    if source == none || decl_offset < 0 {
+        return none
+    }
+
+    word_len := ident_len_at(source, decl_offset)
+    if word_len <= 0 {
+        return none
+    }
+
+    i := next_non_ws(source, decl_offset + word_len)
+    n := text.len(source)
+    if i >= n {
+        return none
+    }
+
+    if source[i] == ':' {
+        i = next_non_ws(source, i + 1)
+        if i < n && source[i] == '=' {
+            i = next_non_ws(source, i + 1)
+        }
+    } else {
+        i = next_non_ws(source, i)
+    }
+
+    if i < n && source[i] == '=' {
+        i = next_non_ws(source, i + 1)
+    }
+
+    if i < n && source[i] == '*' {
+        i = next_non_ws(source, i + 1)
+    }
+    if i + 1 < n && source[i] == '[' && source[i + 1] == ']' {
+        i = next_non_ws(source, i + 2)
+    }
+
+    len := ident_len_at(source, i)
+    if len <= 0 {
+        return none
+    }
+
+    if is_type_token(source, i, len) || is_upper_ident(source, i) {
+        return text.slice(source, i, len)
+    }
+
+    return none
+}
+
+fn append_range_json(out string, at i32, line i32, ch i32, end_ch i32) i32 {
+    at = append_str(out, at, "{\"start\":{\"line\":")
+    at = append_i32(out, at, line)
+    at = append_str(out, at, ",\"character\":")
+    at = append_i32(out, at, ch)
+    at = append_str(out, at, "},\"end\":{\"line\":")
+    at = append_i32(out, at, line)
+    at = append_str(out, at, ",\"character\":")
+    at = append_i32(out, at, end_ch)
+    at = append_str(out, at, "}}")
+    return at
+}
+
+fn append_location_json(out string, at i32, uri string, line i32, ch i32, end_ch i32) i32 {
+    at = append_str(out, at, "{\"uri\":\"")
+    at = append_str(out, at, uri)
+    at = append_str(out, at, "\",\"range\":")
+    at = append_range_json(out, at, line, ch, end_ch)
+    at = append_str(out, at, "}")
+    return at
+}
+
+fn send_null_result(id i32) {
+    body: string := mem.calloc(128, 1)
+    at: i32 := 0
+    at = append_str(body, at, "{\"jsonrpc\":\"2.0\",\"id\":")
+    at = append_i32(body, at, id)
+    at = append_str(body, at, ",\"result\":null}")
+    send_json_body(body)
+    mem.free(body)
+}
+
+fn send_definition(id i32, uri string, source string, word string) {
+    if source == none || word == none {
+        send_null_result(id)
+        return
+    }
+
+    offset := find_declaration_offset(source, word)
+    if offset < 0 {
+        send_null_result(id)
+        return
+    }
+
+    escaped_uri := json_escape_string(uri)
+    line := text.line_of_offset(source, offset)
+    ch := text.column_of_offset(source, offset)
+    body: string := mem.calloc(2048 + text.len(escaped_uri), 1)
+    at: i32 := 0
+    at = append_str(body, at, "{\"jsonrpc\":\"2.0\",\"id\":")
+    at = append_i32(body, at, id)
+    at = append_str(body, at, ",\"result\":")
+    at = append_location_json(body, at, escaped_uri, line, ch, ch + text.len(word))
+    at = append_str(body, at, "}")
+    send_json_body(body)
+    mem.free(body)
+    mem.free(escaped_uri)
+}
+
+fn send_references(id i32, uri string, source string, word string) {
+    if source == none || word == none {
+        send_empty_result(id)
+        return
+    }
+
+    escaped_uri := json_escape_string(uri)
+    body: string := mem.calloc(1048576, 1)
+    at: i32 := 0
+    at = append_str(body, at, "{\"jsonrpc\":\"2.0\",\"id\":")
+    at = append_i32(body, at, id)
+    at = append_str(body, at, ",\"result\":[")
+
+    first := true
+    pos := find_word_from(source, word, 0)
+    word_len := text.len(word)
+    for (; pos >= 0; ) {
+        if !first {
+            at = append_str(body, at, ",")
+        }
+        line := text.line_of_offset(source, pos)
+        ch := text.column_of_offset(source, pos)
+        at = append_location_json(body, at, escaped_uri, line, ch, ch + word_len)
+        first = false
+        pos = find_word_from(source, word, pos + word_len)
+    }
+
+    at = append_str(body, at, "]}")
+    send_json_body(body)
+    mem.free(body)
+    mem.free(escaped_uri)
+}
+
+fn send_document_highlights(id i32, source string, word string) {
+    if source == none || word == none {
+        send_empty_result(id)
+        return
+    }
+
+    body: string := mem.calloc(1048576, 1)
+    at: i32 := 0
+    at = append_str(body, at, "{\"jsonrpc\":\"2.0\",\"id\":")
+    at = append_i32(body, at, id)
+    at = append_str(body, at, ",\"result\":[")
+
+    first := true
+    pos := find_word_from(source, word, 0)
+    word_len := text.len(word)
+    for (; pos >= 0; ) {
+        if !first {
+            at = append_str(body, at, ",")
+        }
+        line := text.line_of_offset(source, pos)
+        ch := text.column_of_offset(source, pos)
+        at = append_str(body, at, "{\"range\":")
+        at = append_range_json(body, at, line, ch, ch + word_len)
+        at = append_str(body, at, ",\"kind\":1}")
+        first = false
+        pos = find_word_from(source, word, pos + word_len)
+    }
+
+    at = append_str(body, at, "]}")
+    send_json_body(body)
+    mem.free(body)
+}
+
+fn send_rename(id i32, uri string, source string, word string, new_name string) {
+    if source == none || word == none || new_name == none {
+        send_null_result(id)
+        return
+    }
+
+    escaped_uri := json_escape_string(uri)
+    escaped_name := json_escape_string(new_name)
+    body: string := mem.calloc(1048576, 1)
+    at: i32 := 0
+    at = append_str(body, at, "{\"jsonrpc\":\"2.0\",\"id\":")
+    at = append_i32(body, at, id)
+    at = append_str(body, at, ",\"result\":{\"changes\":{\"")
+    at = append_str(body, at, escaped_uri)
+    at = append_str(body, at, "\":[")
+
+    first := true
+    pos := find_word_from(source, word, 0)
+    word_len := text.len(word)
+    for (; pos >= 0; ) {
+        if !first {
+            at = append_str(body, at, ",")
+        }
+        line := text.line_of_offset(source, pos)
+        ch := text.column_of_offset(source, pos)
+        at = append_str(body, at, "{\"range\":")
+        at = append_range_json(body, at, line, ch, ch + word_len)
+        at = append_str(body, at, ",\"newText\":\"")
+        at = append_str(body, at, escaped_name)
+        at = append_str(body, at, "\"}")
+        first = false
+        pos = find_word_from(source, word, pos + word_len)
+    }
+
+    at = append_str(body, at, "]}}}")
+    send_json_body(body)
+    mem.free(body)
+    mem.free(escaped_uri)
+    mem.free(escaped_name)
+}
+
+fn append_location_for_offset(out string, at i32, uri string, source string, offset i32, word string) i32 {
+    escaped_uri := json_escape_string(uri)
+    line := text.line_of_offset(source, offset)
+    ch := text.column_of_offset(source, offset)
+    at = append_location_json(out, at, escaped_uri, line, ch, ch + text.len(word))
+    mem.free(escaped_uri)
+    return at
+}
+
+fn send_definition_all(id i32, uri string, source string, word string, uris []string, texts []string) {
+    if word == none {
+        send_null_result(id)
+        return
+    }
+
+    if source != none && uri != none {
+        offset := find_declaration_offset(source, word)
+        if offset >= 0 {
+            body: string := mem.calloc(4096 + text.len(uri), 1)
+            at: i32 := 0
+            at = append_str(body, at, "{\"jsonrpc\":\"2.0\",\"id\":")
+            at = append_i32(body, at, id)
+            at = append_str(body, at, ",\"result\":")
+            at = append_location_for_offset(body, at, uri, source, offset, word)
+            at = append_str(body, at, "}")
+            send_json_body(body)
+            mem.free(body)
+            return
+        }
+    }
+
+    i: i32 := 0
+    for (; i < array.len(uris); i++) {
+        doc_uri := array.get(uris, i)
+        doc_source := array.get(texts, i)
+        if doc_uri != none && doc_source != none {
+            offset := find_declaration_offset(doc_source, word)
+            if offset >= 0 {
+                body: string := mem.calloc(4096 + text.len(doc_uri), 1)
+                at: i32 := 0
+                at = append_str(body, at, "{\"jsonrpc\":\"2.0\",\"id\":")
+                at = append_i32(body, at, id)
+                at = append_str(body, at, ",\"result\":")
+                at = append_location_for_offset(body, at, doc_uri, doc_source, offset, word)
+                at = append_str(body, at, "}")
+                send_json_body(body)
+                mem.free(body)
+                return
+            }
+        }
+    }
+
+    send_null_result(id)
+}
+
+fn send_type_definition_all(id i32, uri string, source string, word string, uris []string, texts []string) {
+    if word == none {
+        send_null_result(id)
+        return
+    }
+
+    if source != none {
+        if is_type_token(word, 0, text.len(word)) || is_upper_ident(word, 0) {
+            send_definition_all(id, uri, source, word, uris, texts)
+            return
+        }
+
+        decl := find_declaration_offset(source, word)
+        type_name := type_name_from_declaration(source, decl)
+        if type_name != none {
+            send_definition_all(id, uri, source, type_name, uris, texts)
+            mem.free(type_name)
+            return
+        }
+    }
+
+    send_null_result(id)
+}
+
+fn append_references_for_doc(out string, at i32, first bool, uri string, source string, word string) i32 {
+    pos := find_word_from(source, word, 0)
+    word_len := text.len(word)
+    for (; pos >= 0; ) {
+        if !first {
+            at = append_str(out, at, ",")
+        }
+        at = append_location_for_offset(out, at, uri, source, pos, word)
+        first = false
+        pos = find_word_from(source, word, pos + word_len)
+    }
+
+    return at
+}
+
+fn send_references_all(id i32, word string, uris []string, texts []string) {
+    if word == none {
+        send_empty_result(id)
+        return
+    }
+
+    body: string := mem.calloc(1048576, 1)
+    at: i32 := 0
+    at = append_str(body, at, "{\"jsonrpc\":\"2.0\",\"id\":")
+    at = append_i32(body, at, id)
+    at = append_str(body, at, ",\"result\":[")
+
+    first := true
+    i: i32 := 0
+    for (; i < array.len(uris); i++) {
+        doc_uri := array.get(uris, i)
+        doc_source := array.get(texts, i)
+        if doc_uri != none && doc_source != none {
+            old_at := at
+            at = append_references_for_doc(body, at, first, doc_uri, doc_source, word)
+            if at > old_at {
+                first = false
+            }
+        }
+    }
+
+    at = append_str(body, at, "]}")
+    send_json_body(body)
+    mem.free(body)
+}
+
+fn send_rename_all(id i32, word string, new_name string, uris []string, texts []string) {
+    if word == none || new_name == none {
+        send_null_result(id)
+        return
+    }
+
+    escaped_name := json_escape_string(new_name)
+    body: string := mem.calloc(1048576, 1)
+    at: i32 := 0
+    at = append_str(body, at, "{\"jsonrpc\":\"2.0\",\"id\":")
+    at = append_i32(body, at, id)
+    at = append_str(body, at, ",\"result\":{\"changes\":{")
+
+    first_doc := true
+    i: i32 := 0
+    word_len := text.len(word)
+    for (; i < array.len(uris); i++) {
+        doc_uri := array.get(uris, i)
+        doc_source := array.get(texts, i)
+        if doc_uri != none && doc_source != none {
+            pos := find_word_from(doc_source, word, 0)
+            if pos >= 0 {
+                if !first_doc {
+                    at = append_str(body, at, ",")
+                }
+                escaped_uri := json_escape_string(doc_uri)
+                at = append_str(body, at, "\"")
+                at = append_str(body, at, escaped_uri)
+                at = append_str(body, at, "\":[")
+                first_edit := true
+                for (; pos >= 0; ) {
+                    if !first_edit {
+                        at = append_str(body, at, ",")
+                    }
+                    line := text.line_of_offset(doc_source, pos)
+                    ch := text.column_of_offset(doc_source, pos)
+                    at = append_str(body, at, "{\"range\":")
+                    at = append_range_json(body, at, line, ch, ch + word_len)
+                    at = append_str(body, at, ",\"newText\":\"")
+                    at = append_str(body, at, escaped_name)
+                    at = append_str(body, at, "\"}")
+                    first_edit = false
+                    pos = find_word_from(doc_source, word, pos + word_len)
+                }
+                at = append_str(body, at, "]")
+                mem.free(escaped_uri)
+                first_doc = false
+            }
+        }
+    }
+
+    at = append_str(body, at, "}}}")
+    send_json_body(body)
+    mem.free(body)
+    mem.free(escaped_name)
+}
+
+fn send_prepare_rename(id i32, source string, word string, line i32, ch i32) {
+    if source == none || word == none {
+        send_null_result(id)
+        return
+    }
+
+    offset := offset_of_position(source, line, ch)
+    start := offset
+    for (; start > 0 && is_ident_char(source[start - 1]); start--) {
+    }
+    end_pos := offset
+    n := text.len(source)
+    for (; end_pos < n && is_ident_char(source[end_pos]); end_pos++) {
+    }
+
+    body: string := mem.calloc(512, 1)
+    at: i32 := 0
+    at = append_str(body, at, "{\"jsonrpc\":\"2.0\",\"id\":")
+    at = append_i32(body, at, id)
+    at = append_str(body, at, ",\"result\":")
+    at = append_range_json(body, at, line, text.column_of_offset(source, start), text.column_of_offset(source, end_pos))
+    at = append_str(body, at, "}")
+    send_json_body(body)
+    mem.free(body)
+}
+
+fn send_selection_range(id i32, source string, line i32, ch i32) {
+    if source == none {
+        send_empty_result(id)
+        return
+    }
+
+    offset := offset_of_position(source, line, ch)
+    start := offset
+    for (; start > 0 && is_ident_char(source[start - 1]); start--) {
+    }
+    end_pos := offset
+    n := text.len(source)
+    for (; end_pos < n && is_ident_char(source[end_pos]); end_pos++) {
+    }
+
+    body: string := mem.calloc(512, 1)
+    at: i32 := 0
+    at = append_str(body, at, "{\"jsonrpc\":\"2.0\",\"id\":")
+    at = append_i32(body, at, id)
+    at = append_str(body, at, ",\"result\":[{\"range\":")
+    at = append_range_json(body, at, line, text.column_of_offset(source, start), text.column_of_offset(source, end_pos))
+    at = append_str(body, at, "}]}")
+    send_json_body(body)
+    mem.free(body)
+}
+
+fn append_document_symbol_json(out string, at i32, first bool, name string, kind i32, source string, name_offset i32) i32 {
+    if !first {
+        at = append_str(out, at, ",")
+    }
+
+    escaped_name := json_escape_string(name)
+    line := text.line_of_offset(source, name_offset)
+    ch := text.column_of_offset(source, name_offset)
+    at = append_str(out, at, "{\"name\":\"")
+    at = append_str(out, at, escaped_name)
+    at = append_str(out, at, "\",\"kind\":")
+    at = append_i32(out, at, kind)
+    at = append_str(out, at, ",\"range\":")
+    at = append_range_json(out, at, line, ch, ch + text.len(name))
+    at = append_str(out, at, ",\"selectionRange\":")
+    at = append_range_json(out, at, line, ch, ch + text.len(name))
+    at = append_str(out, at, "}")
+    mem.free(escaped_name)
+    return at
+}
+
+fn append_symbol_after_keyword(out string, at i32, first bool, source string, keyword string, kind i32, search_start i32) i32 {
+    key_pos := text.find_from(source, keyword, search_start)
+    if key_pos < 0 {
+        return at
+    }
+
+    name_start := key_pos + text.len(keyword)
+    name_start = next_non_ws(source, name_start)
+    len := ident_len_at(source, name_start)
+    if len <= 0 {
+        return at
+    }
+
+    name := text.slice(source, name_start, len)
+    at = append_document_symbol_json(out, at, first, name, kind, source, name_start)
+    mem.free(name)
+    return at
+}
+
+fn send_document_symbols(id i32, source string) {
+    if source == none {
+        send_empty_result(id)
+        return
+    }
+
+    body: string := mem.calloc(text.len(source) * 20 + 2048, 1)
+    at: i32 := 0
+    at = append_str(body, at, "{\"jsonrpc\":\"2.0\",\"id\":")
+    at = append_i32(body, at, id)
+    at = append_str(body, at, ",\"result\":[")
+
+    first := true
+    search := 0
+    for (; search < text.len(source); ) {
+        next_module := text.find_from(source, "module ", search)
+        next_struct := text.find_from(source, "struct ", search)
+        next_fn := text.find_from(source, "fn ", search)
+        chosen := -1
+        kind := 0
+        keyword := ""
+        if next_module >= 0 {
+            chosen = next_module
+            kind = 2
+            keyword = "module "
+        }
+        if next_struct >= 0 && (chosen < 0 || next_struct < chosen) {
+            chosen = next_struct
+            kind = 23
+            keyword = "struct "
+        }
+        if next_fn >= 0 && (chosen < 0 || next_fn < chosen) {
+            chosen = next_fn
+            kind = 12
+            keyword = "fn "
+        }
+        if chosen < 0 {
+            search = text.len(source)
+        } else {
+            old_at := at
+            at = append_symbol_after_keyword(body, at, first, source, keyword, kind, chosen)
+            if at > old_at {
+                first = false
+            }
+            search = chosen + text.len(keyword)
+        }
+    }
+
+    at = append_str(body, at, "]}")
+    send_json_body(body)
+    mem.free(body)
+}
+
+fn query_matches_symbol(name string, query string) bool {
+    if query == none {
+        return true
+    }
+    if text.len(query) == 0 {
+        return true
+    }
+
+    return text.contains(name, query)
+}
+
+fn append_workspace_symbol_json(out string, at i32, first bool, name string, kind i32, uri string, source string, name_offset i32) i32 {
+    if !first {
+        at = append_str(out, at, ",")
+    }
+
+    escaped_name := json_escape_string(name)
+    escaped_uri := json_escape_string(uri)
+    line := text.line_of_offset(source, name_offset)
+    ch := text.column_of_offset(source, name_offset)
+    at = append_str(out, at, "{\"name\":\"")
+    at = append_str(out, at, escaped_name)
+    at = append_str(out, at, "\",\"kind\":")
+    at = append_i32(out, at, kind)
+    at = append_str(out, at, ",\"location\":")
+    at = append_location_json(out, at, escaped_uri, line, ch, ch + text.len(name))
+    at = append_str(out, at, "}")
+    mem.free(escaped_name)
+    mem.free(escaped_uri)
+    return at
+}
+
+fn append_workspace_symbol_after_keyword(out string, at i32, first bool, source string, uri string, keyword string, kind i32, search_start i32, query string) i32 {
+    key_pos := text.find_from(source, keyword, search_start)
+    if key_pos < 0 {
+        return at
+    }
+
+    name_start := key_pos + text.len(keyword)
+    name_start = next_non_ws(source, name_start)
+    len := ident_len_at(source, name_start)
+    if len <= 0 {
+        return at
+    }
+
+    name := text.slice(source, name_start, len)
+    if query_matches_symbol(name, query) {
+        at = append_workspace_symbol_json(out, at, first, name, kind, uri, source, name_start)
+    }
+    mem.free(name)
+    return at
+}
+
+fn append_workspace_symbols_for_source(out string, at i32, first bool, source string, uri string, query string) i32 {
+    search := 0
+    for (; search < text.len(source); ) {
+        next_module := text.find_from(source, "module ", search)
+        next_struct := text.find_from(source, "struct ", search)
+        next_fn := text.find_from(source, "fn ", search)
+        chosen := -1
+        kind := 0
+        keyword := ""
+        if next_module >= 0 {
+            chosen = next_module
+            kind = 2
+            keyword = "module "
+        }
+        if next_struct >= 0 && (chosen < 0 || next_struct < chosen) {
+            chosen = next_struct
+            kind = 23
+            keyword = "struct "
+        }
+        if next_fn >= 0 && (chosen < 0 || next_fn < chosen) {
+            chosen = next_fn
+            kind = 12
+            keyword = "fn "
+        }
+        if chosen < 0 {
+            search = text.len(source)
+        } else {
+            old_at := at
+            at = append_workspace_symbol_after_keyword(out, at, first, source, uri, keyword, kind, chosen, query)
+            if at > old_at {
+                first = false
+            }
+            search = chosen + text.len(keyword)
+        }
+    }
+
+    return at
+}
+
+fn send_workspace_symbols(id i32, query string, uris []string, texts []string) {
+    body: string := mem.calloc(1048576, 1)
+    at: i32 := 0
+    at = append_str(body, at, "{\"jsonrpc\":\"2.0\",\"id\":")
+    at = append_i32(body, at, id)
+    at = append_str(body, at, ",\"result\":[")
+
+    first := true
+    i: i32 := 0
+    for (; i < array.len(uris); i++) {
+        doc_uri := array.get(uris, i)
+        doc_source := array.get(texts, i)
+        if doc_uri != none && doc_source != none {
+            old_at := at
+            at = append_workspace_symbols_for_source(body, at, first, doc_source, doc_uri, query)
+            if at > old_at {
+                first = false
+            }
+        }
+    }
+
+    at = append_str(body, at, "]}")
+    send_json_body(body)
+    mem.free(body)
+}
+
+fn format_source(source string) string {
+    if source == none {
+        return mem.calloc(1, 1)
+    }
+
+    n := text.len(source)
+    out: string := mem.calloc(n * 4 + 64, 1)
+    i: i32 := 0
+    j: i32 := 0
+    indent: i32 := 0
+    at_line_start := true
+    in_string := false
+    in_raw := false
+    line_comment := false
+    block_comment := false
+    escape := false
+
+    for (; i < n; i++) {
+        ch := source[i]
+
+        if line_comment {
+            out[j] = ch
+            j += 1
+            if ch == 10 {
+                line_comment = false
+                at_line_start = true
+            }
+        } else if block_comment {
+            out[j] = ch
+            j += 1
+            if ch == 10 {
+                at_line_start = true
+            } else {
+                at_line_start = false
+            }
+            if ch == '*' && i + 1 < n && source[i + 1] == '/' {
+                i += 1
+                out[j] = '/'
+                j += 1
+                block_comment = false
+            }
+        } else if in_string {
+            out[j] = ch
+            j += 1
+            if escape {
+                escape = false
+            } else if ch == '\\' {
+                escape = true
+            } else if ch == '"' {
+                in_string = false
+            }
+            at_line_start = false
+        } else if in_raw {
+            out[j] = ch
+            j += 1
+            if ch == '`' {
+                in_raw = false
+            }
+            if ch == 10 {
+                at_line_start = true
+            } else {
+                at_line_start = false
+            }
+        } else if ch == '/' && i + 1 < n && source[i + 1] == '/' {
+            if at_line_start {
+                j = append_indent(out, j, indent)
+            }
+            out[j] = '/'
+            out[j + 1] = '/'
+            j += 2
+            i += 1
+            line_comment = true
+            at_line_start = false
+        } else if ch == '/' && i + 1 < n && source[i + 1] == '*' {
+            if at_line_start {
+                j = append_indent(out, j, indent)
+            }
+            out[j] = '/'
+            out[j + 1] = '*'
+            j += 2
+            i += 1
+            block_comment = true
+            at_line_start = false
+        } else if at_line_start && (ch == ' ' || ch == 9 || ch == 13) {
+        } else if at_line_start && ch == 10 {
+            j = append_newline(out, j)
+        } else if ch == ' ' || ch == 9 || ch == 13 {
+            if j > 0 && out[j - 1] != ' ' && out[j - 1] != 10 && out[j - 1] != '(' && out[j - 1] != '[' && out[j - 1] != '{' {
+                out[j] = ' '
+                j += 1
+            }
+        } else if ch == '}' {
+            if j > 0 && out[j - 1] != 10 {
+                j = append_newline(out, j)
+            }
+            indent -= 1
+            if indent < 0 {
+                indent = 0
+            }
+            j = append_indent(out, j, indent)
+            out[j] = '}'
+            j += 1
+            at_line_start = false
+            next := next_non_ws(source, i + 1)
+            if next < n && source[next] != '}' {
+                j = append_newline(out, j)
+                at_line_start = true
+            }
+        } else {
+            if at_line_start {
+                j = append_indent(out, j, indent)
+            }
+
+            if ch == '"' {
+                in_string = true
+                out[j] = ch
+                j += 1
+                at_line_start = false
+            } else if ch == '`' {
+                in_raw = true
+                out[j] = ch
+                j += 1
+                at_line_start = false
+            } else if ch == '{' {
+                if j > 0 && out[j - 1] != ' ' && out[j - 1] != 10 {
+                    out[j] = ' '
+                    j += 1
+                }
+                out[j] = '{'
+                j += 1
+                indent += 1
+                j = append_newline(out, j)
+                at_line_start = true
+            } else if ch == ';' {
+                j = append_newline(out, j)
+                at_line_start = true
+            } else {
+                out[j] = ch
+                j += 1
+                at_line_start = false
+            }
+        }
+    }
+
+    j = append_newline(out, j)
+    return out
+}
+
+fn json_escape_string(source string) string {
+    if source == none {
+        return mem.calloc(1, 1)
+    }
+
+    n := text.len(source)
+    out: string := mem.calloc(n * 2 + 1, 1)
+    i: i32 := 0
+    j: i32 := 0
+    for (; i < n; i++) {
+        ch := source[i]
+        if ch == '"' {
+            out[j] = '\\'
+            out[j + 1] = '"'
+            j += 2
+        } else if ch == '\\' {
+            out[j] = '\\'
+            out[j + 1] = '\\'
+            j += 2
+        } else if ch == 10 {
+            out[j] = '\\'
+            out[j + 1] = 'n'
+            j += 2
+        } else if ch == 13 {
+            out[j] = '\\'
+            out[j + 1] = 'r'
+            j += 2
+        } else if ch == 9 {
+            out[j] = '\\'
+            out[j + 1] = 't'
+            j += 2
+        } else {
+            out[j] = ch
+            j += 1
+        }
+    }
+
+    return out
+}
+
+fn send_formatting(id i32, source string) {
+    if source == none {
+        send_empty_result(id)
+        return
+    }
+
+    formatted := format_source(source)
+    escaped := json_escape_string(formatted)
+    end_line := 9999
+    escaped_len := text.len(escaped)
+    size := 122 + json.digits_i32(id) + json.digits_i32(end_line) + escaped_len
+    fmt.printf("Content-Length: %d\r\n\r\n{\"jsonrpc\":\"2.0\",\"id\":%d,\"result\":[{\"range\":{\"start\":{\"line\":0,\"character\":0},\"end\":{\"line\":%d,\"character\":0}},\"newText\":\"%s\"}]}", size, id, end_line, escaped)
+    mem.free(escaped)
+    mem.free(formatted)
+}
+
+fn send_folding_ranges(id i32, source string) {
+    if source == none {
+        send_empty_result(id)
+        return
+    }
+
+    start_offset := text.find(source, "fn ")
+    if start_offset < 0 {
+        start_offset = text.find(source, "struct ")
+    }
+    if start_offset < 0 {
+        start_offset = text.find(source, "/*")
+    }
+    if start_offset < 0 {
+        send_empty_result(id)
+        return
+    }
+
+    start_line := text.line_of_offset(source, start_offset)
+    end_line := text.count_char(source, 10)
+    if end_line <= start_line {
+        send_empty_result(id)
+        return
+    }
+
+    size := 76 + json.digits_i32(id) + json.digits_i32(start_line) + json.digits_i32(end_line)
+    fmt.printf("Content-Length: %d\r\n\r\n{\"jsonrpc\":\"2.0\",\"id\":%d,\"result\":[{\"startLine\":%d,\"endLine\":%d,\"kind\":\"region\"}]}", size, id, start_line, end_line)
+}
+
+fn send_signature_help(id i32) {
+    size := 179 + json.digits_i32(id)
+    fmt.printf("Content-Length: %d\r\n\r\n{\"jsonrpc\":\"2.0\",\"id\":%d,\"result\":{\"signatures\":[{\"label\":\"fmt.println(value any)\",\"documentation\":\"Print a value followed by a newline.\"}],\"activeSignature\":0,\"activeParameter\":0}}", size, id)
+}
+
+fn send_empty_diagnostics(uri string) {
+    size := 97 + text.len(uri)
+    fmt.printf("Content-Length: %d\r\n\r\n{\"jsonrpc\":\"2.0\",\"method\":\"textDocument/publishDiagnostics\",\"params\":{\"uri\":\"%s\",\"diagnostics\":[]}}", size, uri)
+}
+
+fn send_diagnostic(uri string, line i32, ch i32, message string) {
+    end_ch := ch + 1
+    size := 210 + text.len(uri) + json.digits_i32(line) + json.digits_i32(ch) + json.digits_i32(line) + json.digits_i32(end_ch) + text.len(message)
+    fmt.printf("Content-Length: %d\r\n\r\n{\"jsonrpc\":\"2.0\",\"method\":\"textDocument/publishDiagnostics\",\"params\":{\"uri\":\"%s\",\"diagnostics\":[{\"range\":{\"start\":{\"line\":%d,\"character\":%d},\"end\":{\"line\":%d,\"character\":%d}},\"severity\":1,\"source\":\"YCPL\",\"message\":\"%s\"}]}}", size, uri, line, ch, line, end_ch, message)
+}
+
+fn publish_diagnostics(uri string, source string) {
+    if uri == none {
+        uri = "file:///YCPL-lsp.ec"
+    }
+
+    if source == none {
+        send_empty_diagnostics(uri)
+        return
+    }
+
+    kind := json.syntax_error_kind(source)
+    if kind == 0 {
+        send_empty_diagnostics(uri)
+        return
+    }
+
+    offset := json.syntax_error_offset(source, kind)
+    line := text.line_of_offset(source, offset)
+    ch := text.utf16_col(source, offset)
+    send_diagnostic(uri, line, ch, json.syntax_error_message(kind))
+}
+
+fn free_document_slot(uris []string, texts []string, index i32) {
+    uri := array.get(uris, index)
+    source := array.get(texts, index)
+    if uri != none {
+        mem.free(uri)
+        array.set(uris, index, none)
+    }
+    if source != none {
+        mem.free(source)
+        array.set(texts, index, none)
+    }
+}
+
+fn free_documents(uris []string, texts []string) {
+    i: i32 := 0
+    for (; i < array.len(uris); i++) {
+        free_document_slot(uris, texts, i)
+    }
+}
+
+fn store_document(uris []string, texts []string, uri string, source string) {
+    if uri == none || source == none {
+        publish_diagnostics(uri, source)
+        if uri != none {
+            mem.free(uri)
+        }
+        if source != none {
+            mem.free(source)
+        }
+        return
+    }
+
+    existing := map.find(uris, uri)
+    if existing >= 0 {
+        old_source := array.get(texts, existing)
+        if old_source != none {
+            mem.free(old_source)
+        }
+        array.set(texts, existing, source)
+        publish_diagnostics(array.get(uris, existing), source)
+        mem.free(uri)
+        return
+    }
+
+    inserted := map.put(uris, texts, uri, source)
+    if inserted < 0 {
+        io.write_str(2, "YCPL-lsp: document store is full\n")
+        publish_diagnostics(uri, source)
+        mem.free(uri)
+        mem.free(source)
+        return
+    }
+
+    publish_diagnostics(uri, source)
+}
+
+fn handle_document_change(message string, uris []string, texts []string) {
+    uri := json.field_string(message, "\"uri\"")
+    source := json.field_string(message, "\"text\"")
+    store_document(uris, texts, uri, source)
+}
+
+fn handle_document_close(message string, uris []string, texts []string) {
+    uri := json.field_string(message, "\"uri\"")
+    if uri != none {
+        index := map.find(uris, uri)
+        if index >= 0 {
+            free_document_slot(uris, texts, index)
+        }
+        send_empty_diagnostics(uri)
+        mem.free(uri)
+    }
+}
+
+fn handle_message(message string, uris []string, texts []string) i32 {
+    id := json.id_i32(message)
+
+    if json.method_name_is(message, "initialize") {
+        send_initialize(id)
+    }
+
+    if json.method_name_is(message, "shutdown") {
+        send_shutdown(id)
+        return 0
+    }
+
+    if json.method_name_is(message, "textDocument/hover") {
+        uri := json.field_string(message, "\"uri\"")
+        source := map.get(uris, texts, uri)
+        line := json.field_i32(message, "\"line\"")
+        ch := json.field_i32(message, "\"character\"")
+        word := word_at_position(source, line, ch)
+        send_hover_for_word(id, source, word)
+        if word != none {
+            mem.free(word)
+        }
+        if uri != none {
+            mem.free(uri)
+        }
+    }
+
+    if json.method_name_is(message, "textDocument/completion") {
+        send_completion(id)
+    }
+
+    if json.method_name_is(message, "textDocument/signatureHelp") {
+        send_signature_help(id)
+    }
+
+    if json.method_name_is(message, "textDocument/semanticTokens/full") {
+        uri := json.field_string(message, "\"uri\"")
+        source := map.get(uris, texts, uri)
+        send_semantic_tokens(id, source)
+        if uri != none {
+            mem.free(uri)
+        }
+    }
+
+    if json.method_name_is(message, "textDocument/formatting") || json.method_name_is(message, "textDocument/rangeFormatting") {
+        uri := json.field_string(message, "\"uri\"")
+        source := map.get(uris, texts, uri)
+        send_formatting(id, source)
+        if uri != none {
+            mem.free(uri)
+        }
+    }
+
+    if json.method_name_is(message, "textDocument/foldingRange") {
+        uri := json.field_string(message, "\"uri\"")
+        source := map.get(uris, texts, uri)
+        send_folding_ranges(id, source)
+        if uri != none {
+            mem.free(uri)
+        }
+    }
+
+    if json.method_name_is(message, "textDocument/documentSymbol") {
+        uri := json.field_string(message, "\"uri\"")
+        source := map.get(uris, texts, uri)
+        send_document_symbols(id, source)
+        if uri != none {
+            mem.free(uri)
+        }
+    }
+
+    if json.method_name_is(message, "textDocument/definition") || json.method_name_is(message, "textDocument/declaration") {
+        uri := json.field_string(message, "\"uri\"")
+        source := map.get(uris, texts, uri)
+        line := json.field_i32(message, "\"line\"")
+        ch := json.field_i32(message, "\"character\"")
+        word := word_at_position(source, line, ch)
+        send_definition_all(id, uri, source, word, uris, texts)
+        if word != none {
+            mem.free(word)
+        }
+        if uri != none {
+            mem.free(uri)
+        }
+    }
+
+    if json.method_name_is(message, "textDocument/typeDefinition") {
+        uri := json.field_string(message, "\"uri\"")
+        source := map.get(uris, texts, uri)
+        line := json.field_i32(message, "\"line\"")
+        ch := json.field_i32(message, "\"character\"")
+        word := word_at_position(source, line, ch)
+        send_type_definition_all(id, uri, source, word, uris, texts)
+        if word != none {
+            mem.free(word)
+        }
+        if uri != none {
+            mem.free(uri)
+        }
+    }
+
+    if json.method_name_is(message, "textDocument/references") {
+        uri := json.field_string(message, "\"uri\"")
+        source := map.get(uris, texts, uri)
+        line := json.field_i32(message, "\"line\"")
+        ch := json.field_i32(message, "\"character\"")
+        word := word_at_position(source, line, ch)
+        send_references_all(id, word, uris, texts)
+        if word != none {
+            mem.free(word)
+        }
+        if uri != none {
+            mem.free(uri)
+        }
+    }
+
+    if json.method_name_is(message, "textDocument/documentHighlight") {
+        uri := json.field_string(message, "\"uri\"")
+        source := map.get(uris, texts, uri)
+        line := json.field_i32(message, "\"line\"")
+        ch := json.field_i32(message, "\"character\"")
+        word := word_at_position(source, line, ch)
+        send_document_highlights(id, source, word)
+        if word != none {
+            mem.free(word)
+        }
+        if uri != none {
+            mem.free(uri)
+        }
+    }
+
+    if json.method_name_is(message, "textDocument/prepareRename") {
+        uri := json.field_string(message, "\"uri\"")
+        source := map.get(uris, texts, uri)
+        line := json.field_i32(message, "\"line\"")
+        ch := json.field_i32(message, "\"character\"")
+        word := word_at_position(source, line, ch)
+        send_prepare_rename(id, source, word, line, ch)
+        if word != none {
+            mem.free(word)
+        }
+        if uri != none {
+            mem.free(uri)
+        }
+    }
+
+    if json.method_name_is(message, "textDocument/rename") {
+        uri := json.field_string(message, "\"uri\"")
+        source := map.get(uris, texts, uri)
+        line := json.field_i32(message, "\"line\"")
+        ch := json.field_i32(message, "\"character\"")
+        word := word_at_position(source, line, ch)
+        new_name := json.field_string(message, "\"newName\"")
+        send_rename_all(id, word, new_name, uris, texts)
+        if new_name != none {
+            mem.free(new_name)
+        }
+        if word != none {
+            mem.free(word)
+        }
+        if uri != none {
+            mem.free(uri)
+        }
+    }
+
+    if json.method_name_is(message, "textDocument/selectionRange") {
+        uri := json.field_string(message, "\"uri\"")
+        source := map.get(uris, texts, uri)
+        line := json.field_i32(message, "\"line\"")
+        ch := json.field_i32(message, "\"character\"")
+        send_selection_range(id, source, line, ch)
+        if uri != none {
+            mem.free(uri)
+        }
+    }
+
+    if json.method_name_is(message, "workspace/symbol") {
+        query := json.field_string(message, "\"query\"")
+        send_workspace_symbols(id, query, uris, texts)
+        if query != none {
+            mem.free(query)
+        }
+    }
+
+    if json.method_name_is(message, "textDocument/didOpen") || json.method_name_is(message, "textDocument/didChange") {
+        handle_document_change(message, uris, texts)
+    }
+
+    if json.method_name_is(message, "textDocument/didClose") {
+        handle_document_close(message, uris, texts)
+    }
+
+    return 1
+}
+
+fn compact_buffer(buf string, start i32, used i32) i32 {
+    remaining := used - start
+    i: i32 := 0
+    for (; i < remaining; i++) {
+        buf[i] = buf[start + i]
+    }
+    buf[remaining] = 0
+    return remaining
+}
+
+fn process_frames(buf string, used i32, uris []string, texts []string) i32 {
+    running: i32 := 1
+    offset: i32 := 0
+
+    for (; running != 0 && offset < used; ) {
+        header := text.find_from(buf, "Content-Length:", offset)
+        if header < 0 {
+            if offset > 0 {
+                return compact_buffer(buf, offset, used)
+            }
+            return used
+        }
+
+        length := json.content_length_at(buf, header)
+        if length < 0 || length > 1048576 {
+            io.write_str(2, "YCPL-lsp: invalid Content-Length\n")
+            return -1
+        }
+
+        sep := text.find_from(buf, "\r\n\r\n", header)
+        if sep < 0 {
+            if header > 0 {
+                return compact_buffer(buf, header, used)
+            }
+            return used
+        }
+
+        body_start := sep + 4
+        if body_start + length > used {
+            if header > 0 {
+                return compact_buffer(buf, header, used)
+            }
+            return used
+        }
+
+        body := text.slice(buf, body_start, length)
+        running = handle_message(body, uris, texts)
+        mem.free(body)
+        offset = body_start + length
+    }
+
+    if running == 0 {
+        return -1
+    }
+
+    if offset >= used {
+        buf[0] = 0
+        return 0
+    }
+
+    return compact_buffer(buf, offset, used)
+}
+
+fn main() i32 {
+    cap: i32 := 1048576
+    buf: string := mem.calloc(cap + 1, 1)
+    uris := array.new([]string, 128)
+    texts := array.new([]string, 128)
+    i: i32 := 0
+    for (; i < 128; i++) {
+        uris = array.append(uris, none)
+        texts = array.append(texts, none)
+    }
+    running: i32 := 1
+    used: i32 := 0
+
+    for (; running != 0; ) {
+        if used >= cap {
+            io.write_str(2, "YCPL-lsp: receive buffer limit exceeded\n")
+            running = 0
+        }
+
+        read_count := 65536
+        if cap - used < read_count {
+            read_count = cap - used
+        }
+
+        n := io.read(0, buf + used, read_count)
+        if n <= 0 {
+            running = 0
+        } else {
+            used += n
+            buf[used] = 0
+            next_used := process_frames(buf, used, uris, texts)
+            if next_used < 0 {
+                running = 0
+            } else {
+                used = next_used
+            }
+        }
+    }
+
+    free_documents(uris, texts)
+    array.free(uris)
+    array.free(texts)
+    mem.free(buf)
+    return 0
+}

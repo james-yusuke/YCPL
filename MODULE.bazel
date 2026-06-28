@@ -1,0 +1,3 @@
+module(name = "ecc")
+
+bazel_dep(name = "llvm_homebrew", version = "1.0")

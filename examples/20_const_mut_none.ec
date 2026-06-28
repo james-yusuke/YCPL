@@ -1,0 +1,16 @@
+import "std/fmt" as fmt
+
+fn main() {
+    const label: string := "ok"
+    mut name: string := none
+
+    if name == none {
+        fmt.println(label)
+    }
+
+    name = "set"
+
+    if name != none {
+        fmt.println(name)
+    }
+}

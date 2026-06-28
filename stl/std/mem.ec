@@ -1,0 +1,34 @@
+module std.mem
+
+extern fn c_malloc(size i64) *byte as "malloc"
+extern fn c_calloc(count i64, size i64) *byte as "calloc"
+extern fn c_realloc(ptr *byte, size i64) *byte as "realloc"
+extern fn c_free(ptr *byte) as "free"
+extern fn c_memcpy(dst *byte, src *byte, size i64) *byte as "memcpy"
+extern fn c_memset(dst *byte, value i32, size i64) *byte as "memset"
+
+pub fn alloc(size i64) *byte {
+    return c_malloc(size)
+}
+
+pub fn calloc(count i64, size i64) *byte {
+    return c_calloc(count, size)
+}
+
+pub fn realloc(ptr *byte, size i64) *byte {
+    return c_realloc(ptr, size)
+}
+
+pub fn free(ptr *byte) {
+    c_free(ptr)
+}
+
+pub fn copy(dst *byte, src *byte, size i64) {
+    c_memcpy(dst, src, size)
+}
+
+pub fn set(dst *byte, value i32, size i64) {
+    c_memset(dst, value, size)
+}
+
+pub intrinsic fn sizeof(typ Type) i64

@@ -1,0 +1,124 @@
+{
+  "name": "YCPL-vscode",
+  "displayName": "YCPL",
+  "description": "YCPL language support and YCPL LSP launcher.",
+  "version": "0.4.0",
+  "publisher": "YCPL",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "extensionKind": [
+    "workspace"
+  ],
+  "activationEvents": [
+    "onLanguage:YCPL"
+  ],
+  "main": "./extension.js",
+  "scripts": {
+    "test": "node test/serverResolver.test.js",
+    "check": "node --check extension.js && node --check serverResolver.js && npm test"
+  },
+  "contributes": {
+    "languages": [
+      {
+        "id": "YCPL",
+        "aliases": [
+          "YCPL",
+          "YCPL"
+        ],
+        "extensions": [
+          ".ec"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "YCPL",
+        "scopeName": "source.YCPL",
+        "path": "./syntaxes/YCPL.tmLanguage.json"
+      }
+    ],
+    "semanticTokenScopes": [
+      {
+        "language": "YCPL",
+        "scopes": {
+          "namespace": [
+            "entity.name.namespace.YCPL"
+          ],
+          "type": [
+            "entity.name.type.YCPL",
+            "storage.type.YCPL"
+          ],
+          "function": [
+            "entity.name.function.YCPL"
+          ],
+          "variable": [
+            "variable.other.YCPL"
+          ],
+          "property": [
+            "variable.other.property.YCPL"
+          ],
+          "keyword": [
+            "keyword.control.YCPL",
+            "keyword.declaration.YCPL"
+          ],
+          "string": [
+            "string.quoted.double.YCPL",
+            "string.quoted.single.YCPL",
+            "string.quoted.raw.YCPL"
+          ],
+          "number": [
+            "constant.numeric.YCPL"
+          ],
+          "operator": [
+            "keyword.operator.YCPL"
+          ],
+          "comment": [
+            "comment.line.double-slash.YCPL",
+            "comment.block.YCPL"
+          ]
+        }
+      }
+    ],
+    "snippets": [
+      {
+        "language": "YCPL",
+        "path": "./snippets/YCPL.code-snippets"
+      }
+    ],
+    "configurationDefaults": {
+      "[YCPL]": {
+        "editor.tabSize": 4,
+        "editor.insertSpaces": true,
+        "editor.semanticHighlighting.enabled": true,
+        "editor.formatOnSave": false,
+        "editor.defaultFormatter": "YCPL.YCPL-vscode"
+      }
+    },
+    "configuration": {
+      "title": "YCPL",
+      "properties": {
+        "YCPL.server.path": {
+          "type": "string",
+          "default": "",
+          "description": "Path to the native YCPL-lsp binary."
+        },
+        "YCPL.server.buildOnActivate": {
+          "type": "boolean",
+          "default": true,
+          "description": "Build tools/lsp/build/YCPL-lsp automatically when running in a workspace and no explicit server path is configured."
+        }
+      }
+    }
+  },
+  "dependencies": {
+    "vscode-languageclient": "^9.0.1"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.85.0"
+  }
+}

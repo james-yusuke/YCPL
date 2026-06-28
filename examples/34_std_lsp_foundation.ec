@@ -1,0 +1,34 @@
+import "std/array" as array
+import "std/fmt" as fmt
+import "std/fs" as fs
+import "std/json" as json
+import "std/map" as map
+import "std/mem" as mem
+import "std/text" as text
+
+fn main() {
+    msg := "{\"jsonrpc\":\"2.0\",\"id\":42,\"method\":\"initialize\",\"params\":{}}"
+    method := json.field_string(msg, "\"method\"")
+
+    fmt.println(json.id_i32(msg))
+    fmt.println(json.method_name_is(msg, "initialize"))
+    fmt.println(json.digits_i32(1234))
+    fmt.println(method)
+    fmt.println(text.find("hello YCPL", "YCPL"))
+    fmt.println(text.starts_with("Content-Length", "Content"))
+    fmt.println(text.line_of_offset("a\nb\nc", 3))
+    fmt.println(fs.exists("examples/01_hello.ec"))
+
+    keys := array.new([]string, 2)
+    values := array.new([]string, 2)
+    keys = array.append(keys, none)
+    values = array.append(values, none)
+    keys = array.append(keys, none)
+    values = array.append(values, none)
+    map.put(keys, values, "uri", "file:///main.ec")
+    map.put(keys, values, "text", "fn main() {}")
+    fmt.println(map.has(keys, "uri"))
+    fmt.println(map.get(keys, values, "text"))
+    map.free(keys, values)
+    mem.free(method)
+}

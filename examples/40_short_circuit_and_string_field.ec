@@ -1,0 +1,21 @@
+import "std/fmt" as fmt
+import "std/str" as str
+
+struct Label {
+    text string
+}
+
+fn main() {
+    label := Label{text: "YCPL"}
+    missing: string := none
+
+    if missing != none && str.eq(missing, "boom") {
+        fmt.println("bad")
+    } else {
+        fmt.println("safe")
+    }
+
+    if label.text[0] == 'E' || str.eq(missing, "boom") {
+        fmt.println(label.text[1])
+    }
+}

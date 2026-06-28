@@ -1,0 +1,7 @@
+{
+  "name": "missing_import_failure",
+  "version": "0.1.0",
+  "entry": "src/main.ec",
+  "src": ["src"],
+  "output": "build"
+}

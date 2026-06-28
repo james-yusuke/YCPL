@@ -1,0 +1,835 @@
+module std.json
+
+import "std/mem" as mem
+import "std/str" as str
+import "std/text" as text
+
+pub struct JsonValue {
+    kind i32
+    source string
+    start i32
+    end i32
+    owned bool
+    message string
+}
+
+pub fn invalid_value(message string) JsonValue {
+    return JsonValue{kind: -1, source: none, start: 0, end: 0, owned: false, message: message}
+}
+
+pub fn skip_ws(message string, i i32) i32 {
+    n := text.len(message)
+    for (; i < n && (message[i] == ' ' || message[i] == 10 || message[i] == 13 || message[i] == 9); i++) {
+    }
+
+    return i
+}
+
+fn string_end(source string, start i32) i32 {
+    i := start + 1
+    n := text.len(source)
+    escape := false
+
+    for (; i < n; i++) {
+        ch := source[i]
+        if escape {
+            escape = false
+        } else if ch == '\\' {
+            escape = true
+        } else if ch == '"' {
+            return i
+        }
+    }
+
+    return -1
+}
+
+fn matching_end(source string, start i32, open_ch i32, close_ch i32) i32 {
+    depth: i32 := 0
+    i := start
+    n := text.len(source)
+
+    for (; i < n; i++) {
+        ch := source[i]
+        if ch == '"' {
+            e := string_end(source, i)
+            if e < 0 {
+                return -1
+            }
+            i = e
+        } else if ch == open_ch {
+            depth += 1
+        } else if ch == close_ch {
+            depth -= 1
+            if depth == 0 {
+                return i
+            }
+        }
+    }
+
+    return -1
+}
+
+fn value_kind_at(source string, start i32) i32 {
+    i := skip_ws(source, start)
+    n := text.len(source)
+    if i >= n {
+        return -1
+    }
+
+    ch := source[i]
+    if ch == '{' {
+        return 1
+    }
+    if ch == '[' {
+        return 2
+    }
+    if ch == '"' {
+        return 3
+    }
+    if ch == 't' || ch == 'f' {
+        return 4
+    }
+    if ch == 'n' {
+        return 5
+    }
+    if ch == '-' || (ch >= '0' && ch <= '9') {
+        return 6
+    }
+
+    return -1
+}
+
+fn value_end(source string, start i32) i32 {
+    i := skip_ws(source, start)
+    n := text.len(source)
+    if i >= n {
+        return -1
+    }
+
+    ch := source[i]
+    if ch == '"' {
+        e := string_end(source, i)
+        if e < 0 {
+            return -1
+        }
+        return e + 1
+    }
+
+    if ch == '{' {
+        e := matching_end(source, i, '{', '}')
+        if e < 0 {
+            return -1
+        }
+        return e + 1
+    }
+
+    if ch == '[' {
+        e := matching_end(source, i, '[', ']')
+        if e < 0 {
+            return -1
+        }
+        return e + 1
+    }
+
+    for (; i < n && source[i] != ',' && source[i] != '}' && source[i] != ']' && source[i] != 10 && source[i] != 13 && source[i] != 9 && source[i] != ' '; i++) {
+    }
+
+    return i
+}
+
+fn make_view(source string, start i32, end_pos i32, owned bool) JsonValue {
+    real_start := skip_ws(source, start)
+    k := value_kind_at(source, real_start)
+    if k < 0 || end_pos < real_start {
+        return invalid_value("invalid JSON value")
+    }
+
+    return JsonValue{kind: k, source: source, start: real_start, end: end_pos, owned: owned, message: ""}
+}
+
+pub fn parse(source string) JsonValue {
+    if source == none {
+        return invalid_value("JSON source is none")
+    }
+
+    n := text.len(source)
+    copy := text.slice(source, 0, n)
+    start := skip_ws(copy, 0)
+    end_pos := value_end(copy, start)
+    if end_pos < 0 {
+        mem.free(copy)
+        return invalid_value("invalid JSON syntax")
+    }
+
+    trailing := skip_ws(copy, end_pos)
+    if trailing != n {
+        mem.free(copy)
+        return invalid_value("unexpected trailing JSON text")
+    }
+
+    return make_view(copy, start, end_pos, true)
+}
+
+pub fn kind(value JsonValue) i32 {
+    return value.kind
+}
+
+pub fn stringify(value JsonValue) string {
+    if value.kind < 0 || value.source == none {
+        return "null"
+    }
+
+    return text.slice(value.source, value.start, value.end - value.start)
+}
+
+fn key_eq(source string, key_start i32, key_end i32, key string) bool {
+    n := text.len(key)
+    if key_end - key_start - 1 != n {
+        return false
+    }
+
+    i: i32 := 0
+    for (; i < n; i++) {
+        if source[key_start + 1 + i] != key[i] {
+            return false
+        }
+    }
+
+    return true
+}
+
+fn object_value_start(obj JsonValue, key string) i32 {
+    if obj.kind != 1 || obj.source == none {
+        return -1
+    }
+
+    i := skip_ws(obj.source, obj.start + 1)
+    for (; i < obj.end; ) {
+        if obj.source[i] == '}' {
+            return -1
+        }
+
+        if obj.source[i] != '"' {
+            return -1
+        }
+
+        key_end := string_end(obj.source, i)
+        if key_end < 0 {
+            return -1
+        }
+
+        after_key := skip_ws(obj.source, key_end + 1)
+        if after_key >= obj.end || obj.source[after_key] != ':' {
+            return -1
+        }
+
+        value_start := skip_ws(obj.source, after_key + 1)
+        value_stop := value_end(obj.source, value_start)
+        if value_stop < 0 {
+            return -1
+        }
+
+        if key_eq(obj.source, i, key_end, key) {
+            return value_start
+        }
+
+        i = skip_ws(obj.source, value_stop)
+        if i < obj.end && obj.source[i] == ',' {
+            i = skip_ws(obj.source, i + 1)
+        }
+    }
+
+    return -1
+}
+
+pub fn get(obj JsonValue, key string) JsonValue {
+    start := object_value_start(obj, key)
+    if start < 0 {
+        return invalid_value("missing JSON object key")
+    }
+
+    end_pos := value_end(obj.source, start)
+    if end_pos < 0 {
+        return invalid_value("invalid JSON object value")
+    }
+
+    return make_view(obj.source, start, end_pos, false)
+}
+
+fn decode_string_slice(source string, start i32, end_pos i32) string {
+    if start < 0 || end_pos <= start || source[start] != '"' {
+        return none
+    }
+
+    out: string := mem.calloc(end_pos - start + 1, 1)
+    i := start + 1
+    j: i32 := 0
+
+    for (; i < end_pos - 1; i++) {
+        ch := source[i]
+        if ch == '\\' {
+            i += 1
+            esc := source[i]
+            if esc == 'n' {
+                out[j] = 10
+            } else if esc == 'r' {
+                out[j] = 13
+            } else if esc == 't' {
+                out[j] = 9
+            } else if esc == '"' {
+                out[j] = '"'
+            } else if esc == '\\' {
+                out[j] = '\\'
+            } else if esc == 'u' {
+                out[j] = '?'
+                i += 4
+            } else {
+                out[j] = esc
+            }
+        } else {
+            out[j] = ch
+        }
+
+        j += 1
+    }
+
+    return out
+}
+
+pub fn get_string(obj JsonValue, key string) string {
+    value := get(obj, key)
+    if value.kind != 3 {
+        return none
+    }
+
+    return decode_string_slice(value.source, value.start, value.end)
+}
+
+fn parse_i32_slice(source string, start i32, end_pos i32) i32 {
+    i := skip_ws(source, start)
+    sign: i32 := 1
+    if i < end_pos && source[i] == '-' {
+        sign = -1
+        i += 1
+    }
+
+    value: i32 := 0
+    for (; i < end_pos && source[i] >= '0' && source[i] <= '9'; i++) {
+        value = value * 10 + (source[i] - '0')
+    }
+
+    return value * sign
+}
+
+pub fn get_i32(obj JsonValue, key string) i32 {
+    value := get(obj, key)
+    if value.kind != 6 {
+        return 0
+    }
+
+    return parse_i32_slice(value.source, value.start, value.end)
+}
+
+pub fn get_bool(obj JsonValue, key string) bool {
+    value := get(obj, key)
+    if value.kind != 4 {
+        return false
+    }
+
+    return value.source[value.start] == 't'
+}
+
+pub fn at(array JsonValue, index i32) JsonValue {
+    if array.kind != 2 || array.source == none {
+        return invalid_value("JSON value is not an array")
+    }
+
+    i := skip_ws(array.source, array.start + 1)
+    current: i32 := 0
+
+    for (; i < array.end; ) {
+        if array.source[i] == ']' {
+            return invalid_value("JSON array index out of range")
+        }
+
+        end_pos := value_end(array.source, i)
+        if end_pos < 0 {
+            return invalid_value("invalid JSON array item")
+        }
+
+        if current == index {
+            return make_view(array.source, i, end_pos, false)
+        }
+
+        current += 1
+        i = skip_ws(array.source, end_pos)
+        if i < array.end && array.source[i] == ',' {
+            i = skip_ws(array.source, i + 1)
+        }
+    }
+
+    return invalid_value("JSON array index out of range")
+}
+
+pub fn len(value JsonValue) i32 {
+    if value.source == none {
+        return 0
+    }
+
+    if value.kind == 2 {
+        count: i32 := 0
+        i := skip_ws(value.source, value.start + 1)
+        for (; i < value.end; ) {
+            if value.source[i] == ']' {
+                return count
+            }
+
+            end_pos := value_end(value.source, i)
+            if end_pos < 0 {
+                return count
+            }
+            count += 1
+            i = skip_ws(value.source, end_pos)
+            if i < value.end && value.source[i] == ',' {
+                i = skip_ws(value.source, i + 1)
+            }
+        }
+        return count
+    }
+
+    if value.kind == 1 {
+        count: i32 := 0
+        i := skip_ws(value.source, value.start + 1)
+        for (; i < value.end; ) {
+            if value.source[i] == '}' {
+                return count
+            }
+
+            key_end := string_end(value.source, i)
+            if key_end < 0 {
+                return count
+            }
+            after_key := skip_ws(value.source, key_end + 1)
+            value_start := skip_ws(value.source, after_key + 1)
+            value_stop := value_end(value.source, value_start)
+            if value_stop < 0 {
+                return count
+            }
+
+            count += 1
+            i = skip_ws(value.source, value_stop)
+            if i < value.end && value.source[i] == ',' {
+                i = skip_ws(value.source, i + 1)
+            }
+        }
+        return count
+    }
+
+    return 0
+}
+
+pub fn free(value JsonValue) {
+    if value.owned && value.source != none {
+        mem.free(value.source)
+    }
+}
+
+pub fn method_is(message string, method string) bool {
+    return text.contains(message, method)
+}
+
+pub fn field_value_start(message string, key string) i32 {
+    key_pos := text.find(message, key)
+    if key_pos < 0 {
+        return -1
+    }
+
+    i := key_pos + text.len(key)
+    n := text.len(message)
+    for (; i < n && message[i] != ':'; i++) {
+    }
+    if i >= n {
+        return -1
+    }
+
+    return skip_ws(message, i + 1)
+}
+
+pub fn field_i32(message string, key string) i32 {
+    i := field_value_start(message, key)
+    if i < 0 {
+        return 0
+    }
+
+    n := text.len(message)
+    sign: i32 := 1
+    if i < n && message[i] == '-' {
+        sign = -1
+        i += 1
+    }
+
+    value: i32 := 0
+    for (; i < n && message[i] >= '0' && message[i] <= '9'; i++) {
+        value = value * 10 + (message[i] - '0')
+    }
+
+    return value * sign
+}
+
+pub fn id_i32(message string) i32 {
+    return field_i32(message, "\"id\"")
+}
+
+pub fn field_string(message string, key string) string {
+    start := field_value_start(message, key)
+    if start < 0 {
+        return none
+    }
+
+    n := text.len(message)
+    for (; start < n && message[start] != '"'; start++) {
+    }
+    if start >= n {
+        return none
+    }
+
+    end_pos := string_end(message, start)
+    if end_pos < 0 {
+        return none
+    }
+
+    return decode_string_slice(message, start, end_pos + 1)
+}
+
+pub fn method_name_is(message string, name string) bool {
+    method := field_string(message, "\"method\"")
+    if method == none {
+        return false
+    }
+
+    ok := str.eq(method, name)
+    mem.free(method)
+    return ok
+}
+
+pub fn content_length_at(message string, start i32) i32 {
+    key := text.find_from(message, "Content-Length:", start)
+    if key < 0 {
+        return -1
+    }
+
+    i := key + 15
+    n := text.len(message)
+    i = skip_ws(message, i)
+
+    value: i32 := 0
+    for (; i < n && message[i] >= '0' && message[i] <= '9'; i++) {
+        value = value * 10 + (message[i] - '0')
+    }
+
+    return value
+}
+
+pub fn digits_i32(value i32) i32 {
+    if value < 0 {
+        return digits_i32(-value) + 1
+    }
+    if value < 10 {
+        return 1
+    }
+    if value < 100 {
+        return 2
+    }
+    if value < 1000 {
+        return 3
+    }
+    if value < 10000 {
+        return 4
+    }
+    return 5
+}
+
+pub fn unclosed_block_comment_offset(source string) i32 {
+    open := false
+    start: i32 := -1
+    i: i32 := 0
+    n := text.len(source)
+
+    for (; i < n - 1; i++) {
+        if !open && source[i] == '/' && source[i + 1] == '*' {
+            open = true
+            start = i
+            i += 1
+        } else if open && source[i] == '*' && source[i + 1] == '/' {
+            open = false
+            start = -1
+            i += 1
+        }
+    }
+
+    if open {
+        return start
+    }
+
+    return -1
+}
+
+pub fn unclosed_string_offset(source string) i32 {
+    open := false
+    start: i32 := -1
+    escape := false
+    i: i32 := 0
+    n := text.len(source)
+
+    for (; i < n; i++) {
+        ch := source[i]
+        if escape {
+            escape = false
+        } else if ch == '\\' {
+            escape = true
+        } else if ch == '"' {
+            if open {
+                open = false
+                start = -1
+            } else {
+                open = true
+                start = i
+            }
+        }
+    }
+
+    if open {
+        return start
+    }
+
+    return -1
+}
+
+pub fn unclosed_brace_offset(source string) i32 {
+    depth: i32 := 0
+    first_open: i32 := -1
+    in_string := false
+    escape := false
+    i: i32 := 0
+    n := text.len(source)
+
+    for (; i < n; i++) {
+        ch := source[i]
+        if escape {
+            escape = false
+        } else if in_string && ch == '\\' {
+            escape = true
+        } else if ch == '"' {
+            in_string = !in_string
+        } else if !in_string && ch == '{' {
+            if depth == 0 {
+                first_open = i
+            }
+            depth += 1
+        } else if !in_string && ch == '}' {
+            if depth == 0 {
+                return i
+            }
+            depth -= 1
+        }
+    }
+
+    if depth != 0 {
+        return first_open
+    }
+
+    return -1
+}
+
+fn looks_like_ident_start(ch i32) bool {
+    return (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || ch == '_'
+}
+
+fn has_word_before(source string, pos i32, word string) bool {
+    n := text.len(word)
+    if pos < n {
+        return false
+    }
+
+    i: i32 := 0
+    start := pos - n
+    for (; i < n; i++) {
+        if source[start + i] != word[i] {
+            return false
+        }
+    }
+
+    return true
+}
+
+fn skip_inline_ws(source string, i i32) i32 {
+    n := text.len(source)
+    for (; i < n && (source[i] == ' ' || source[i] == 9); i++) {
+    }
+
+    return i
+}
+
+pub fn malformed_import_offset(source string) i32 {
+    pos := text.find(source, "import ")
+    if pos < 0 {
+        return -1
+    }
+
+    i := skip_ws(source, pos + 7)
+    n := text.len(source)
+    if i >= n || source[i] != '"' {
+        return pos
+    }
+
+    end_pos := string_end(source, i)
+    if end_pos < 0 {
+        return i
+    }
+
+    after := skip_ws(source, end_pos + 1)
+    if after < n && source[after] == 'a' {
+        if after + 1 >= n || source[after + 1] != 's' {
+            return after
+        }
+
+        alias_start := skip_inline_ws(source, after + 2)
+        if alias_start >= n || !looks_like_ident_start(source[alias_start]) {
+            return after
+        }
+    }
+
+    return -1
+}
+
+pub fn malformed_function_offset(source string) i32 {
+    pos := text.find(source, "fn ")
+    if pos < 0 {
+        return -1
+    }
+
+    if has_word_before(source, pos, "extern ") || has_word_before(source, pos, "intrinsic ") {
+        return -1
+    }
+
+    name_start := skip_ws(source, pos + 3)
+    n := text.len(source)
+    if name_start >= n || !looks_like_ident_start(source[name_start]) {
+        return pos
+    }
+
+    open_paren := text.find_from(source, "(", name_start)
+    if open_paren < 0 {
+        return pos
+    }
+
+    close_paren := text.find_from(source, ")", open_paren)
+    if close_paren < 0 {
+        return open_paren
+    }
+
+    block := text.find_from(source, "{", close_paren)
+    if block < 0 {
+        return close_paren
+    }
+
+    return -1
+}
+
+pub fn has_unclosed_brace(source string) bool {
+    return unclosed_brace_offset(source) >= 0
+}
+
+pub fn has_unclosed_string(source string) bool {
+    return unclosed_string_offset(source) >= 0
+}
+
+pub fn syntax_error_kind(source string) i32 {
+    if unclosed_block_comment_offset(source) >= 0 {
+        return 1
+    }
+
+    if unclosed_string_offset(source) >= 0 {
+        return 2
+    }
+
+    if unclosed_brace_offset(source) >= 0 {
+        return 3
+    }
+
+    if text.starts_with(source, "println(") || text.starts_with(source, "print(") || text.contains(source, "\nprintln(") || text.contains(source, "\nprint(") {
+        return 4
+    }
+
+    if malformed_import_offset(source) >= 0 {
+        return 5
+    }
+
+    if malformed_function_offset(source) >= 0 {
+        return 6
+    }
+
+    return 0
+}
+
+pub fn syntax_error_offset(source string, kind i32) i32 {
+    if kind == 1 {
+        return unclosed_block_comment_offset(source)
+    }
+
+    if kind == 2 {
+        return unclosed_string_offset(source)
+    }
+
+    if kind == 3 {
+        return unclosed_brace_offset(source)
+    }
+
+    if text.starts_with(source, "println(") || text.starts_with(source, "print(") {
+        return 0
+    }
+
+    direct := text.find(source, "\nprintln(")
+    if direct >= 0 {
+        return direct + 1
+    }
+
+    direct = text.find(source, "\nprint(")
+    if direct >= 0 {
+        return direct + 1
+    }
+
+    if kind == 5 {
+        return malformed_import_offset(source)
+    }
+
+    if kind == 6 {
+        return malformed_function_offset(source)
+    }
+
+    return 0
+}
+
+pub fn syntax_error_message(kind i32) string {
+    if kind == 1 {
+        return "unclosed block comment"
+    }
+    if kind == 2 {
+        return "unclosed string literal"
+    }
+    if kind == 3 {
+        return "unbalanced brace"
+    }
+    if kind == 4 {
+        return "imported std symbols must be called through their alias"
+    }
+    if kind == 5 {
+        return "malformed import declaration"
+    }
+    if kind == 6 {
+        return "malformed function declaration"
+    }
+
+    return ""
+}

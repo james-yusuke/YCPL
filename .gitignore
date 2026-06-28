@@ -1,0 +1,162 @@
+# ------------------------
+# OS
+# ------------------------
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Windows
+Thumbs.db
+ehthumbs.db
+
+# Linux / generic
+*~ 
+*.swp
+*.swo
+# core dumps
+core
+*.stackdump
+
+# ------------------------
+# Bazel
+# ------------------------
+# Bazel outputs (workspace-local)
+bazel-*
+bazel-bin/
+bazel-genfiles/
+bazel-out/
+bazel-testlogs/
+# Bazel module cache (locations may vary); typically outside repo but include common names
+.bazel_repo_cache/
+.bzlmod/
+# Local user cache/temporary files used by some toolchains
+.external_bazelrc
+# Do NOT ignore MODULE.bazel or WORKSPACE (they are source of truth)
+
+# ------------------------
+# CMake
+# ------------------------
+# Build directories (common names)
+build/
+cmake-build-debug/
+cmake-build-release/
+cmake-build-*/
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+Makefile
+install_manifest.txt
+Testing/
+CTestTestfile.cmake
+# compile commands (generated)
+compile_commands.json
+
+# ------------------------
+# Common build artifacts (C/C++)
+# ------------------------
+# object files, libs, executables
+*.o
+*.obj
+*.lo
+*.la
+*.al
+*.a
+*.lib
+*.so
+*.dylib
+*.dll
+# static analysis / intermediate
+*.s
+*.su
+# coverage
+*.gcno
+*.gcda
+*.gcov
+coverage.*
+coverage/
+# profiling
+*.prof
+*.profraw
+# executables
+*.out
+*.exe
+
+# ------------------------
+# Package / distribution
+# ------------------------
+dist/
+build-*/
+_deps/
+_deb/
+*.egg-info/
+pip-wheel-metadata/
+wheelhouse/
+
+# ------------------------
+# Editors & IDEs
+# ------------------------
+# VS Code
+.vscode/
+.history/
+# JetBrains
+.idea/
+*.iml
+# Sublime
+*.sublime-workspace
+*.sublime-project
+
+# ------------------------
+# Tooling / caches / logs
+# ------------------------
+# Homebrew / Mac port caches (local dev)
+**/.brew/
+# npm / node (if present)
+node_modules/
+npm-debug.log*
+yarn-error.log*
+# Python caches
+__pycache__/
+*.py[cod]
+# Logs
+*.log
+
+# ------------------------
+# Secret / ENV (safety)
+# ------------------------
+# Local environment files — keep out of repo unless intentionally versioned
+.env
+.env.local
+.env.*.local
+# Private keys
+*.pem
+*.key
+*.p12
+# Keystore / credentials
+keystore.*
+# Note: If you intentionally want to track env or keys, remove from this file and manage secrets via vault
+
+# ------------------------
+# Misc / Tools
+# ------------------------
+# clangd
+.clangd/
+# ccache
+.ccache/
+# ninja
+build.ninja
+# Ninja files from some toolchains
+.ninja_log
+.ninja_deps
+
+# ------------------------
+# Generated code (example)
+# ------------------------
+# Protobuf / generated sources
+generated/
+**/generated/
+*_pb2.py
+*_pb2.cpp
+
+service/
+example/
