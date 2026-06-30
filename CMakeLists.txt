@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(ecc LANGUAGES CXX C)
+project(ycc LANGUAGES CXX C)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -19,7 +19,7 @@ llvm_map_components_to_libnames(LLVM_LIBS
     support
 )
 
-add_library(ecclib
+add_library(ycclib
     src/lexer/lexer.cpp
     src/parser/parser.cpp
     src/codegen/codegen.cpp
@@ -28,16 +28,16 @@ add_library(ecclib
     src/module/resolver.cpp
 )
 
-target_link_libraries(ecclib ${LLVM_LIBS})
+target_link_libraries(ycclib ${LLVM_LIBS})
 
-add_executable(ecc
-    cli/ecc/ecc.cpp
+add_executable(ycc
+    cli/ycc/ycc.cpp
 )
 
-target_link_libraries(ecc ecclib ${LLVM_LIBS})
+target_link_libraries(ycc ycclib ${LLVM_LIBS})
 
-add_executable(ecc_legacy
+add_executable(ycc_legacy
     src/main.cpp
 )
 
-target_link_libraries(ecc_legacy ecclib ${LLVM_LIBS})
+target_link_libraries(ycc_legacy ycclib ${LLVM_LIBS})

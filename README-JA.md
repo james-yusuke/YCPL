@@ -6,51 +6,54 @@ YCPL は、システムプログラミング向けの実験的な言語です。
 LLVM バックエンド、YCPL で書かれた標準ライブラリ、サンプル、LSP を含みます。
 ソース拡張子は `.yc` です。
 
-```mermaid
-flowchart LR
-    Source[".yc ソース"] --> Lexer["Lexer"]
-    Lexer --> Parser["Parser"]
-    Parser --> AST["AST"]
-    AST --> Resolver["Module resolver"]
-    Resolver --> Codegen["LLVM IR codegen"]
-    Codegen --> IR[".ll 出力"]
-    IR --> Native["llc + clang"]
+```text
+.yc ソース
+    |
+    v
++--------+   +--------+   +-----+   +-----------------+   +----------+
+| Lexer  |-->| Parser |-->| AST |-->| Module resolver |-->| Codegen  |
++--------+   +--------+   +-----+   +-----------------+   +----------+
+                                                               |
+                                                               v
+                                                         LLVM IR (.ll)
+                                                               |
+                                                               v
+                                                          llc + clang
 ```
 
-```mermaid
-mindmap
-  root((YCPL))
-    言語
-      静的型
-      スライス
-      構造体
-      モジュール
-    コンパイラ
-      C++20
-      LLVM
-      プロジェクトビルド
-    標準ライブラリ
-      std/fmt
-      std/array
-      std/mem
-      std/json
-    ツール
-      VSCode
-      ネイティブLSP
-      回帰サンプル
+```text
+YCPL
+├─ 言語
+│  ├─ 静的型
+│  ├─ スライス
+│  ├─ 構造体
+│  └─ モジュール
+├─ コンパイラ
+│  ├─ C++20
+│  ├─ LLVM
+│  └─ プロジェクトビルド
+├─ 標準ライブラリ
+│  ├─ std/fmt
+│  ├─ std/array
+│  ├─ std/mem
+│  └─ std/json
+└─ ツール
+   ├─ VSCode
+   ├─ ネイティブ LSP
+   └─ 回帰サンプル
 ```
 
 ## 全体像
 
-```mermaid
-flowchart TB
-    repo["Repository"] --> src["src/: lexer, parser, AST, resolver, codegen"]
-    repo --> cli["cli/ecc/: コマンドラインコンパイラ"]
-    repo --> stl["stl/std/: YCPL 標準ライブラリ"]
-    repo --> examples["examples/: .yc サンプルと回帰テスト"]
-    repo --> lsp["tools/lsp/: YCPL 製 LSP"]
-    repo --> vscode["editors/vscode/: 言語拡張"]
-    repo --> docs["docs/: 英語/日本語ドキュメント"]
+```text
+Repository
+├─ src/             lexer, parser, AST, resolver, codegen
+├─ cli/ycc/         コマンドラインコンパイラ
+├─ stl/std/         YCPL 標準ライブラリ
+├─ examples/        .yc サンプルと回帰テスト
+├─ tools/lsp/       YCPL 製 LSP
+├─ editors/vscode/  言語拡張
+└─ docs/            英語/日本語ドキュメント
 ```
 
 | 項目 | 状態 |
@@ -59,20 +62,20 @@ flowchart TB
 | ソース拡張子 | `.yc` |
 | ビルド出力 | LLVM IR (`.ll`) |
 | プロジェクト設定 | `YCPL.json` |
-| 主なエディタ導線 | VSCode Remote Dev Containers |
+| コンパイラバイナリ | `ycc` |
 
 ## ビルド
 
-```mermaid
-sequenceDiagram
-    participant Dev as 開発者
-    participant CMake as CMake
-    participant LLVM as LLVM 18+
-    participant ECC as ecc
-    Dev->>CMake: cmake -DLLVM_DIR=/path/to/llvm ..
-    CMake->>LLVM: headers/libs を検出
-    Dev->>CMake: make
-    CMake->>ECC: コンパイラ生成
+```text
+開発者
+   |
+   | cmake -DLLVM_DIR=/path/to/llvm ..
+   v
+CMake ---- 検出 ----> LLVM 18+
+   |
+   | make
+   v
+build/ycc
 ```
 
 ```sh
@@ -84,28 +87,30 @@ make
 
 ## コンパイル
 
-```mermaid
-flowchart LR
-    Single["examples/01_hello.yc"] --> Cmd1["build/ecc examples/01_hello.yc -o /tmp/ycpl_hello"]
-    Project["プロジェクト"] --> Config["YCPL.json"]
-    Config --> Cmd2["build/ecc build"]
-    Cmd1 --> LL["LLVM IR"]
-    Cmd2 --> LL
+```text
+単一ファイル:
+  examples/01_hello.yc -> build/ycc -> LLVM IR
+
+プロジェクト:
+  YCPL.json -> src/*.yc を走査 -> build/ycc build -> LLVM IR
 ```
 
 ```sh
-build/ecc examples/01_hello.yc -o /tmp/ycpl_hello
-cd examples/04_module_project && ../../build/ecc build
+build/ycc examples/01_hello.yc -o /tmp/ycpl_hello
+cd examples/04_module_project && ../../build/ycc build
 ```
 
 ## 言語スナップショット
 
-```mermaid
-flowchart TD
-    Module["module math"] --> Public["pub fn add(...)"]
-    Import["import \"math\" as math"] --> Call["math.add(1, 2)"]
-    Types["i32, i64, bool, string, *T, []T"] --> Values["変数、リテラル、構造体"]
-    Flow["if / for / break / continue"] --> Main["fn main()"]
+```text
+module math        import "math" as math
+    |                       |
+    v                       v
+pub fn add(...)  ---->  math.add(1, 2)
+
+i32 / i64 / bool / string / *T / []T
+if / for / break / continue
+fn main()
 ```
 
 ```YCPL
@@ -118,18 +123,20 @@ fn main() {
 
 ## ドキュメント
 
-```mermaid
-flowchart LR
-    Root["README.md"] --> EN["docs/*.en.md"]
-    RootJA["README-JA.md"] --> JA["docs/*.ja.md"]
-    EN --> LanguageEN["language.en.md"]
-    EN --> ProjectsEN["projects.en.md"]
-    EN --> StdEN["stdlib.en.md"]
-    EN --> StatusEN["status.en.md"]
-    JA --> LanguageJA["language.ja.md"]
-    JA --> ProjectsJA["projects.ja.md"]
-    JA --> StdJA["stdlib.ja.md"]
-    JA --> StatusJA["status.ja.md"]
+```text
+README.md
+└─ docs/*.en.md
+   ├─ language.en.md
+   ├─ projects.en.md
+   ├─ stdlib.en.md
+   └─ status.en.md
+
+README-JA.md
+└─ docs/*.ja.md
+   ├─ language.ja.md
+   ├─ projects.ja.md
+   ├─ stdlib.ja.md
+   └─ status.ja.md
 ```
 
 - [言語構文](docs/language.ja.md)
@@ -140,12 +147,17 @@ flowchart LR
 
 ## エディタと LSP
 
-```mermaid
-flowchart LR
-    VSCode["VSCode"] --> Extension["YCPL extension"]
-    Extension --> Watcher["**/*.yc watcher"]
-    Extension --> Server["tools/lsp/build/YCPL-lsp"]
-    Server --> Features["hover, completion, symbols, semantic tokens, formatting, rename"]
+```text
+VSCode
+  |
+  v
+YCPL extension -- watches --> **/*.yc
+  |
+  v
+tools/lsp/build/YCPL-lsp
+  |
+  v
+hover / completion / symbols / semantic tokens / formatting / rename
 ```
 
 ```sh
@@ -156,14 +168,12 @@ tools/lsp/run_tests.sh
 
 ## テスト
 
-```mermaid
-flowchart TD
-    Tests["examples/run_tests.sh"] --> Positive["単一ファイル成功系"]
-    Tests --> Projects["プロジェクトビルド"]
-    Tests --> CompileFail["コンパイル失敗期待"]
-    Tests --> RuntimeFail["実行時失敗期待"]
-    Positive --> LLVM["LLVM IR チェック"]
-    Projects --> Config["YCPL.json"]
+```text
+examples/run_tests.sh
+├─ 単一ファイル成功系
+├─ プロジェクトビルド
+├─ コンパイル失敗期待
+└─ 実行時失敗期待
 ```
 
 ```sh

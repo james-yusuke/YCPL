@@ -140,7 +140,7 @@ For project-based examples:
 
 ```bash
 cd examples/04_module_project
-../../build/ecc build
+../../build/ycc build
 ```
 
 Requirements:

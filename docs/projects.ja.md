@@ -5,33 +5,34 @@
 YCPL は明示した `.yc` ファイル、または `YCPL.json` を持つプロジェクトを
 コンパイルできます。
 
-```mermaid
-flowchart LR
-    FileMode["File mode"] --> Input["build/ecc examples/01_hello.yc"]
-    ProjectMode["Project mode"] --> Config["YCPL.json"]
-    Config --> Scan["src dirs から .yc を走査"]
-    Input --> Resolve["modules 解決"]
-    Scan --> Resolve
-    Resolve --> IR[".ll を出力"]
+```text
+File mode:
+  build/ycc examples/01_hello.yc
+      |
+      v
+  modules 解決 -> .ll 出力
+
+Project mode:
+  YCPL.json -> source dirs から .yc を走査
+      |
+      v
+  modules 解決 -> .ll 出力
 ```
 
 ## 単一ファイル
 
 ```sh
-build/ecc examples/01_hello.yc -o /tmp/ycpl_hello
+build/ycc examples/01_hello.yc -o /tmp/ycpl_hello
 ```
 
 ## プロジェクト構成
 
-```mermaid
-flowchart TD
-    Project["my_project/"] --> Config["YCPL.json"]
-    Project --> Src["src/"]
-    Src --> Main["main.yc"]
-    Src --> Math["math.yc"]
-    Config --> Entry["entry: src/main.yc"]
-    Config --> SrcDirs["src: [src/]"]
-    Config --> Output["output: build/"]
+```text
+my_project/
+├─ YCPL.json
+└─ src/
+   ├─ main.yc
+   └─ math.yc
 ```
 
 ```json
@@ -53,29 +54,27 @@ flowchart TD
 | `output` | 生成 LLVM IR の出力先 |
 
 ```sh
-build/ecc build
+build/ycc build
 ```
 
 ## import 解決
 
-```mermaid
-flowchart TD
-    Import["import path"] --> Relative[". で始まる relative import"]
-    Import --> SourceDirs["project source dirs"]
-    Import --> Std["bundled stl/std"]
-    Relative --> RelFile["path.yc or path/index.yc"]
-    SourceDirs --> SrcFile["path.yc or path/index.yc"]
-    Std --> StdFile["stl/std/path.yc or index.yc"]
+```text
+import path
+├─ . で始まる relative path
+│  └─ path.yc or path/index.yc
+├─ project source directories
+│  └─ path.yc or path/index.yc
+└─ bundled standard library
+   └─ stl/std/path.yc or stl/std/path/index.yc
 ```
 
 ## 公開範囲
 
-```mermaid
-flowchart LR
-    ModuleA["module math"] --> Pub["pub fn add"]
-    ModuleA --> Private["fn helper"]
-    Pub --> Importer["importer は math.add を呼べる"]
-    Private --> Hidden["module 外から不可視"]
+```text
+module math
+├─ pub fn add     -> importer は math.add(...) を呼べる
+└─ fn helper      -> module 内だけ
 ```
 
 ```YCPL

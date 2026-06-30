@@ -5,16 +5,14 @@
 この docs は、現在のコンパイラが意図して対応している構文とツールチェーンを
 まとめています。YCPL ソースの拡張子は `.yc` です。
 
-```mermaid
-flowchart LR
-    Docs["docs"] --> Language["language.ja.md"]
-    Docs --> Projects["projects.ja.md"]
-    Docs --> Stdlib["stdlib.ja.md"]
-    Docs --> Status["status.ja.md"]
-    Language --> Examples["examples/*.yc"]
-    Projects --> Config["YCPL.json"]
-    Stdlib --> STL["stl/std/*.yc"]
-    Status --> Tests["examples/run_tests.sh"]
+```text
+docs/
+├─ README.en.md      英語 index
+├─ README.ja.md      日本語 index
+├─ language.*.md     構文、型、文、式
+├─ projects.*.md     YCPL.json、import、公開範囲
+├─ stdlib.*.md       std/* ソースモジュール
+└─ status.*.md       安定、実験中、予約済み機能
 ```
 
 | 入口 | 内容 |
@@ -25,9 +23,8 @@ flowchart LR
 | [実装状況](status.ja.md) | 安定、実験中、予約済み機能 |
 | [YCPL LSP](../tools/lsp/README.md) | エディタプロトコル対応 |
 
-```mermaid
-flowchart TD
-    Rule["ここに載っている"] --> Supported["現在の examples で対象"]
-    Missing["載っていない"] --> TreatAs["未対応または予約扱い"]
-    Experimental["experimental"] --> MayChange["互換性なしで変わる可能性あり"]
+```text
+ここに載っている      -> 現在の examples で対象
+載っていない          -> 未対応または予約扱い
+experimental          -> 互換性なしで変わる可能性あり
 ```

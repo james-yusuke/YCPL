@@ -2,12 +2,12 @@
 
 [Japanese](language.ja.md) | [Docs index](README.en.md)
 
-```mermaid
-flowchart TD
-    File[".yc file"] --> OptionalModule["optional module/package"]
-    OptionalModule --> Imports["imports"]
-    Imports --> Decls["functions, structs, externs, intrinsics"]
-    Decls --> Main["fn main() entry"]
+```text
+.yc file
+├─ optional module/package declaration
+├─ imports
+├─ functions, structs, externs, intrinsics
+└─ fn main() entry
 ```
 
 ## Source Files
@@ -19,10 +19,9 @@ flowchart TD
 | Comments | `// line`, nested `/* block */` |
 | Top-level runtime code | rejected by codegen |
 
-```mermaid
-flowchart LR
-    Good["fn main() { ... }"] --> OK["runtime code allowed"]
-    Bad["top-level statement"] --> Reject["codegen rejects"]
+```text
+fn main() { ... }       -> runtime code allowed
+top-level statement     -> rejected by codegen
 ```
 
 ## Identifiers And Keywords
@@ -37,12 +36,17 @@ true false none or type importas byte
 
 ## Modules And Imports
 
-```mermaid
-flowchart LR
-    Import["import \"math/basic\" as math"] --> Alias["math"]
-    Alias --> Call["math.square(5)"]
-    Module["module math.basic"] --> Export["pub fn square"]
-    Export --> Call
+```text
+module math.basic
+    |
+    v
+pub fn square
+    |
+    v
+import "math/basic" as math
+    |
+    v
+math.square(5)
 ```
 
 ```YCPL
@@ -61,16 +65,15 @@ fn main() {
 }
 ```
 
-Rules: imported functions must be called through their alias; same-module
-functions may be called directly; `pub fn` and `pub struct` are exported.
+Imported functions must be called through their alias. Same-module functions
+may be called directly. `pub fn` and `pub struct` are exported.
 
 ## Functions
 
-```mermaid
-flowchart LR
-    Name["fn name"] --> Params["(param Type)"]
-    Params --> Return["ReturnType or void"]
-    Return --> Body["{ statements }"]
+```text
+fn name(param Type, other Type) ReturnType {
+    statements
+}
 ```
 
 ```YCPL
@@ -85,13 +88,12 @@ extern fn c_strlen(s string) i64 as "strlen"
 
 ## Types
 
-```mermaid
-flowchart TD
-    Types["Types"] --> Primitive["i32 i64 bool char byte string float double void size_t"]
-    Types --> Pointer["*T"]
-    Types --> Slice["[]T"]
-    Slice --> Nested["[][]T"]
-    String["string"] --> CString["C string pointer"]
+```text
+Types
+├─ primitive: i32 i64 bool char byte string float double void size_t
+├─ pointer:   *T
+├─ slice:     []T
+└─ nested:    [][]T
 ```
 
 Runtime slices use `{ data, len, cap, elem_size }` and are manually managed
@@ -99,12 +101,11 @@ when created by `std/array`.
 
 ## Variables And Literals
 
-```mermaid
-flowchart LR
-    Infer["name := value"] --> Mutable["mutable by default"]
-    Explicit["name: Type := value"] --> Mutable
-    Const["const name := value"] --> Immutable["binding immutable"]
-    Assign["name = value"] --> Existing["existing variable"]
+```text
+name := value          inferred mutable binding
+name: Type := value    explicit mutable binding
+const name := value    immutable binding
+name = value           assignment to existing binding
 ```
 
 ```YCPL
@@ -118,12 +119,13 @@ booleans, `none`, arrays, and byte arrays.
 
 ## Operators And Control Flow
 
-```mermaid
-flowchart TD
-    Expr["Expression"] --> Postfix["call, index, member, ++, --"]
-    Expr --> Unary["!, -, +, ++, --, *, &"]
-    Expr --> Binary["*, /, %, +, -, shifts, comparisons, ==, !="]
-    Expr --> Logical["&&, ||"]
+```text
+high precedence
+  call, index, member, ++, --
+  !, -, +, ++, --, *, &
+  *, /, %, +, -, shifts, comparisons, ==, !=
+  &&, ||
+low precedence
 ```
 
 ```YCPL

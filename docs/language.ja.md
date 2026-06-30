@@ -2,12 +2,12 @@
 
 [English](language.en.md) | [Docs index](README.ja.md)
 
-```mermaid
-flowchart TD
-    File[".yc ファイル"] --> OptionalModule["任意の module/package"]
-    OptionalModule --> Imports["imports"]
-    Imports --> Decls["functions, structs, externs, intrinsics"]
-    Decls --> Main["fn main() entry"]
+```text
+.yc ファイル
+├─ 任意の module/package 宣言
+├─ imports
+├─ functions, structs, externs, intrinsics
+└─ fn main() entry
 ```
 
 ## ソースファイル
@@ -19,10 +19,9 @@ flowchart TD
 | コメント | `// line`、ネスト可能な `/* block */` |
 | トップレベル実行文 | codegen で拒否 |
 
-```mermaid
-flowchart LR
-    Good["fn main() { ... }"] --> OK["実行コードを置ける"]
-    Bad["トップレベル文"] --> Reject["codegen が拒否"]
+```text
+fn main() { ... }       -> 実行コードを置ける
+トップレベル文          -> codegen が拒否
 ```
 
 ## 識別子とキーワード
@@ -37,12 +36,17 @@ true false none or type importas byte
 
 ## モジュールと import
 
-```mermaid
-flowchart LR
-    Import["import \"math/basic\" as math"] --> Alias["math"]
-    Alias --> Call["math.square(5)"]
-    Module["module math.basic"] --> Export["pub fn square"]
-    Export --> Call
+```text
+module math.basic
+    |
+    v
+pub fn square
+    |
+    v
+import "math/basic" as math
+    |
+    v
+math.square(5)
 ```
 
 ```YCPL
@@ -66,11 +70,10 @@ import した関数は alias 経由で呼びます。同じモジュール内の
 
 ## 関数
 
-```mermaid
-flowchart LR
-    Name["fn name"] --> Params["(param Type)"]
-    Params --> Return["ReturnType または void"]
-    Return --> Body["{ statements }"]
+```text
+fn name(param Type, other Type) ReturnType {
+    statements
+}
 ```
 
 ```YCPL
@@ -85,13 +88,12 @@ extern fn c_strlen(s string) i64 as "strlen"
 
 ## 型
 
-```mermaid
-flowchart TD
-    Types["Types"] --> Primitive["i32 i64 bool char byte string float double void size_t"]
-    Types --> Pointer["*T"]
-    Types --> Slice["[]T"]
-    Slice --> Nested["[][]T"]
-    String["string"] --> CString["C string pointer"]
+```text
+Types
+├─ primitive: i32 i64 bool char byte string float double void size_t
+├─ pointer:   *T
+├─ slice:     []T
+└─ nested:    [][]T
 ```
 
 runtime slice は `{ data, len, cap, elem_size }` です。`std/array` で作った
@@ -99,12 +101,11 @@ slice は手動で管理します。
 
 ## 変数とリテラル
 
-```mermaid
-flowchart LR
-    Infer["name := value"] --> Mutable["デフォルト mutable"]
-    Explicit["name: Type := value"] --> Mutable
-    Const["const name := value"] --> Immutable["binding immutable"]
-    Assign["name = value"] --> Existing["既存変数"]
+```text
+name := value          推論された mutable binding
+name: Type := value    明示型の mutable binding
+const name := value    immutable binding
+name = value           既存 binding への代入
 ```
 
 ```YCPL
@@ -118,12 +119,13 @@ const label: string := "stable"
 
 ## 演算子と制御構文
 
-```mermaid
-flowchart TD
-    Expr["Expression"] --> Postfix["call, index, member, ++, --"]
-    Expr --> Unary["!, -, +, ++, --, *, &"]
-    Expr --> Binary["*, /, %, +, -, shifts, comparisons, ==, !="]
-    Expr --> Logical["&&, ||"]
+```text
+高い優先順位
+  call, index, member, ++, --
+  !, -, +, ++, --, *, &
+  *, /, %, +, -, shifts, comparisons, ==, !=
+  &&, ||
+低い優先順位
 ```
 
 ```YCPL

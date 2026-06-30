@@ -3,11 +3,11 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
 PROJECT_DIR="$ROOT_DIR/tools/lsp"
-ECC="$ROOT_DIR/build/ecc"
+YCC="$ROOT_DIR/build/ycc"
 OUT_DIR="$PROJECT_DIR/build"
 
 mkdir -p "$OUT_DIR"
-(cd "$PROJECT_DIR" && "$ECC" build)
+(cd "$PROJECT_DIR" && "$YCC" build)
 
 LL_FILE="$(find "$OUT_DIR" -name '*.ll' | head -1)"
 if [ -z "$LL_FILE" ]; then

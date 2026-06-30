@@ -4,33 +4,34 @@
 
 YCPL compiles either explicit `.yc` files or a project rooted by `YCPL.json`.
 
-```mermaid
-flowchart LR
-    FileMode["File mode"] --> Input["build/ecc examples/01_hello.yc"]
-    ProjectMode["Project mode"] --> Config["YCPL.json"]
-    Config --> Scan["scan src dirs for .yc"]
-    Input --> Resolve["resolve modules"]
-    Scan --> Resolve
-    Resolve --> IR["write .ll"]
+```text
+File mode:
+  build/ycc examples/01_hello.yc
+      |
+      v
+  resolve modules -> write .ll
+
+Project mode:
+  YCPL.json -> scan source dirs for .yc
+      |
+      v
+  resolve modules -> write .ll
 ```
 
 ## Single File
 
 ```sh
-build/ecc examples/01_hello.yc -o /tmp/ycpl_hello
+build/ycc examples/01_hello.yc -o /tmp/ycpl_hello
 ```
 
 ## Project Layout
 
-```mermaid
-flowchart TD
-    Project["my_project/"] --> Config["YCPL.json"]
-    Project --> Src["src/"]
-    Src --> Main["main.yc"]
-    Src --> Math["math.yc"]
-    Config --> Entry["entry: src/main.yc"]
-    Config --> SrcDirs["src: [src/]"]
-    Config --> Output["output: build/"]
+```text
+my_project/
+├─ YCPL.json
+└─ src/
+   ├─ main.yc
+   └─ math.yc
 ```
 
 ```json
@@ -52,29 +53,27 @@ flowchart TD
 | `output` | Directory for generated LLVM IR |
 
 ```sh
-build/ecc build
+build/ycc build
 ```
 
 ## Import Resolution
 
-```mermaid
-flowchart TD
-    Import["import path"] --> Relative["relative import starts with ."]
-    Import --> SourceDirs["project source dirs"]
-    Import --> Std["bundled stl/std"]
-    Relative --> RelFile["path.yc or path/index.yc"]
-    SourceDirs --> SrcFile["path.yc or path/index.yc"]
-    Std --> StdFile["stl/std/path.yc or index.yc"]
+```text
+import path
+├─ relative path starting with .
+│  └─ path.yc or path/index.yc
+├─ project source directories
+│  └─ path.yc or path/index.yc
+└─ bundled standard library
+   └─ stl/std/path.yc or stl/std/path/index.yc
 ```
 
 ## Visibility
 
-```mermaid
-flowchart LR
-    ModuleA["module math"] --> Pub["pub fn add"]
-    ModuleA --> Private["fn helper"]
-    Pub --> Importer["importer can call math.add"]
-    Private --> Hidden["not visible outside module"]
+```text
+module math
+├─ pub fn add     -> importer can call math.add(...)
+└─ fn helper      -> private to module
 ```
 
 ```YCPL

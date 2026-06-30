@@ -4,53 +4,56 @@
 
 YCPL is an experimental systems-programming language with a C++ compiler,
 LLVM backend, bundled YCPL standard library, examples, and a YCPL-written LSP.
-Source files now use the `.yc` extension.
+Source files use the `.yc` extension.
 
-```mermaid
-flowchart LR
-    Source[".yc source"] --> Lexer["Lexer"]
-    Lexer --> Parser["Parser"]
-    Parser --> AST["AST"]
-    AST --> Resolver["Module resolver"]
-    Resolver --> Codegen["LLVM IR codegen"]
-    Codegen --> IR[".ll output"]
-    IR --> Native["llc + clang"]
+```text
+.yc source
+    |
+    v
++--------+   +--------+   +-----+   +-----------------+   +----------+
+| Lexer  |-->| Parser |-->| AST |-->| Module resolver |-->| Codegen  |
++--------+   +--------+   +-----+   +-----------------+   +----------+
+                                                               |
+                                                               v
+                                                         LLVM IR (.ll)
+                                                               |
+                                                               v
+                                                          llc + clang
 ```
 
-```mermaid
-mindmap
-  root((YCPL))
-    Language
-      Static types
-      Slices
-      Structs
-      Modules
-    Compiler
-      C++20
-      LLVM
-      Project builds
-    Standard library
-      std/fmt
-      std/array
-      std/mem
-      std/json
-    Tooling
-      VSCode
-      Native LSP
-      Regression examples
+```text
+YCPL
+├─ Language
+│  ├─ static types
+│  ├─ slices
+│  ├─ structs
+│  └─ modules
+├─ Compiler
+│  ├─ C++20
+│  ├─ LLVM
+│  └─ project builds
+├─ Standard library
+│  ├─ std/fmt
+│  ├─ std/array
+│  ├─ std/mem
+│  └─ std/json
+└─ Tooling
+   ├─ VSCode
+   ├─ native LSP
+   └─ regression examples
 ```
 
 ## Current Shape
 
-```mermaid
-flowchart TB
-    repo["Repository"] --> src["src/: lexer, parser, AST, resolver, codegen"]
-    repo --> cli["cli/ecc/: command-line compiler"]
-    repo --> stl["stl/std/: YCPL std modules"]
-    repo --> examples["examples/: .yc smoke/regression programs"]
-    repo --> lsp["tools/lsp/: LSP written in YCPL"]
-    repo --> vscode["editors/vscode/: language extension"]
-    repo --> docs["docs/: en/ja documentation"]
+```text
+Repository
+├─ src/             lexer, parser, AST, resolver, codegen
+├─ cli/ycc/         command-line compiler
+├─ stl/std/         YCPL standard library modules
+├─ examples/        .yc smoke/regression programs
+├─ tools/lsp/       LSP written in YCPL
+├─ editors/vscode/  language extension
+└─ docs/            English/Japanese documentation
 ```
 
 | Area | Status |
@@ -59,20 +62,20 @@ flowchart TB
 | Source extension | `.yc` |
 | Build output | LLVM IR (`.ll`) |
 | Project config | `YCPL.json` |
-| Main editor path | VSCode Remote Dev Containers |
+| Compiler binary | `ycc` |
 
 ## Build
 
-```mermaid
-sequenceDiagram
-    participant Dev as Developer
-    participant CMake as CMake
-    participant LLVM as LLVM 18+
-    participant ECC as ecc
-    Dev->>CMake: cmake -DLLVM_DIR=/path/to/llvm ..
-    CMake->>LLVM: locate headers and libs
-    Dev->>CMake: make
-    CMake->>ECC: build compiler
+```text
+Developer
+   |
+   | cmake -DLLVM_DIR=/path/to/llvm ..
+   v
+CMake ---- locates ----> LLVM 18+
+   |
+   | make
+   v
+build/ycc
 ```
 
 ```sh
@@ -84,28 +87,30 @@ make
 
 ## Compile
 
-```mermaid
-flowchart LR
-    Single["examples/01_hello.yc"] --> Cmd1["build/ecc examples/01_hello.yc -o /tmp/ycpl_hello"]
-    Project["Project directory"] --> Config["YCPL.json"]
-    Config --> Cmd2["build/ecc build"]
-    Cmd1 --> LL["LLVM IR"]
-    Cmd2 --> LL
+```text
+Single file:
+  examples/01_hello.yc -> build/ycc -> LLVM IR
+
+Project:
+  YCPL.json -> scan src/*.yc -> build/ycc build -> LLVM IR
 ```
 
 ```sh
-build/ecc examples/01_hello.yc -o /tmp/ycpl_hello
-cd examples/04_module_project && ../../build/ecc build
+build/ycc examples/01_hello.yc -o /tmp/ycpl_hello
+cd examples/04_module_project && ../../build/ycc build
 ```
 
 ## Language Snapshot
 
-```mermaid
-flowchart TD
-    Module["module math"] --> Public["pub fn add(...)"]
-    Import["import \"math\" as math"] --> Call["math.add(1, 2)"]
-    Types["i32, i64, bool, string, *T, []T"] --> Values["variables, literals, structs"]
-    Flow["if / for / break / continue"] --> Main["fn main()"]
+```text
+module math        import "math" as math
+    |                       |
+    v                       v
+pub fn add(...)  ---->  math.add(1, 2)
+
+i32 / i64 / bool / string / *T / []T
+if / for / break / continue
+fn main()
 ```
 
 ```YCPL
@@ -118,18 +123,20 @@ fn main() {
 
 ## Docs
 
-```mermaid
-flowchart LR
-    Root["README.md"] --> EN["docs/*.en.md"]
-    RootJA["README-JA.md"] --> JA["docs/*.ja.md"]
-    EN --> LanguageEN["language.en.md"]
-    EN --> ProjectsEN["projects.en.md"]
-    EN --> StdEN["stdlib.en.md"]
-    EN --> StatusEN["status.en.md"]
-    JA --> LanguageJA["language.ja.md"]
-    JA --> ProjectsJA["projects.ja.md"]
-    JA --> StdJA["stdlib.ja.md"]
-    JA --> StatusJA["status.ja.md"]
+```text
+README.md
+└─ docs/*.en.md
+   ├─ language.en.md
+   ├─ projects.en.md
+   ├─ stdlib.en.md
+   └─ status.en.md
+
+README-JA.md
+└─ docs/*.ja.md
+   ├─ language.ja.md
+   ├─ projects.ja.md
+   ├─ stdlib.ja.md
+   └─ status.ja.md
 ```
 
 - [Language syntax](docs/language.en.md)
@@ -140,12 +147,17 @@ flowchart LR
 
 ## Editor And LSP
 
-```mermaid
-flowchart LR
-    VSCode["VSCode"] --> Extension["YCPL extension"]
-    Extension --> Watcher["**/*.yc watcher"]
-    Extension --> Server["tools/lsp/build/YCPL-lsp"]
-    Server --> Features["hover, completion, symbols, semantic tokens, formatting, rename"]
+```text
+VSCode
+  |
+  v
+YCPL extension -- watches --> **/*.yc
+  |
+  v
+tools/lsp/build/YCPL-lsp
+  |
+  v
+hover / completion / symbols / semantic tokens / formatting / rename
 ```
 
 ```sh
@@ -156,14 +168,12 @@ tools/lsp/run_tests.sh
 
 ## Test Map
 
-```mermaid
-flowchart TD
-    Tests["examples/run_tests.sh"] --> Positive["single-file positive tests"]
-    Tests --> Projects["project builds"]
-    Tests --> CompileFail["expected compile failures"]
-    Tests --> RuntimeFail["expected runtime failures"]
-    Positive --> LLVM["LLVM IR checks"]
-    Projects --> Config["YCPL.json"]
+```text
+examples/run_tests.sh
+├─ single-file positive tests
+├─ project builds
+├─ expected compile failures
+└─ expected runtime failures
 ```
 
 ```sh

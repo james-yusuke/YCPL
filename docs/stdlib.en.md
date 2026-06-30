@@ -6,55 +6,26 @@ The standard library is stored as YCPL source under `stl/std`. Some low-level
 APIs are declared as `intrinsic fn` and implemented by compiler/runtime bridge
 code.
 
-```mermaid
-flowchart TD
-    STL["stl/std/*.yc"] --> Source["YCPL source wrappers"]
-    STL --> Intrinsic["intrinsic declarations"]
-    Source --> LLVM["normal module codegen"]
-    Intrinsic --> Bridge["compiler/runtime bridge"]
+```text
+stl/std/*.yc
+├─ YCPL source wrappers  -> normal module codegen
+└─ intrinsic declarations -> compiler/runtime bridge
 ```
 
 ## Module Map
 
-```mermaid
-mindmap
-  root((std))
-    fmt
-      print
-      println
-      printf
-    array
-      new
-      append
-      get/set
-      free
-    mem
-      alloc
-      copy
-      sizeof
-    str
-      len
-      eq
-      cmp
-    math
-      abs
-      sqrt
-      pow
-    io
-      read/write
-      LSP frames
-    fs
-      exists
-      read_file
-    text
-      find
-      offsets
-    json
-      parse
-      get
-      stringify
-    map
-      caller-owned arrays
+```text
+std/
+├─ fmt    print, println, printf
+├─ array  new, append, get, set, free
+├─ mem    alloc, copy, sizeof
+├─ str    len, eq, cmp
+├─ math   abs, sqrt, pow
+├─ io     read/write, LSP frames
+├─ fs     exists, read_file
+├─ text   find, offsets
+├─ json   parse, get, stringify
+└─ map    caller-owned arrays
 ```
 
 | Module | Source |
@@ -72,14 +43,18 @@ mindmap
 
 ## Common Flows
 
-```mermaid
-flowchart LR
-    Print["fmt.println(value)"] --> Out["stdout"]
-    ArrayNew["array.new([]T, cap)"] --> Slice["{data,len,cap,elem_size}"]
-    Slice --> Append["array.append"]
-    Slice --> Free["array.free"]
-    JsonParse["json.parse(text)"] --> View["JsonValue views"]
-    View --> JsonFree["json.free(root)"]
+```text
+fmt.println(value) -> stdout
+
+array.new([]T, cap)
+    -> { data, len, cap, elem_size }
+    -> array.append / array.get / array.set
+    -> array.free
+
+json.parse(text)
+    -> JsonValue root
+    -> json.get / json.at views
+    -> json.free(root)
 ```
 
 ```YCPL
@@ -96,12 +71,13 @@ fn main() {
 
 ## Memory Ownership
 
-```mermaid
-flowchart TD
-    Alloc["array.new / mem.alloc / json.parse"] --> Own["caller owns root value"]
-    Own --> Use["use API"]
-    Use --> Release["array.free / mem.free / json.free"]
-    View["json.get / json.at"] --> Borrow["non-owning view"]
+```text
+array.new / mem.alloc / json.parse
+    -> caller owns root value
+    -> release with array.free / mem.free / json.free
+
+json.get / json.at
+    -> non-owning views
 ```
 
 `extern fn` maps YCPL names to C/LLVM symbols. `intrinsic fn` is reserved for

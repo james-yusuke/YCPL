@@ -1,5 +1,5 @@
 cc_binary(
-    name = "ecc",
+    name = "ycc",
     srcs = [
         "src/main.cpp",
         "src/lexer/lexer.cpp",

@@ -5,16 +5,14 @@
 These docs describe the syntax and toolchain supported by the current compiler.
 YCPL source files use `.yc`.
 
-```mermaid
-flowchart LR
-    Docs["docs"] --> Language["language.en.md"]
-    Docs --> Projects["projects.en.md"]
-    Docs --> Stdlib["stdlib.en.md"]
-    Docs --> Status["status.en.md"]
-    Language --> Examples["examples/*.yc"]
-    Projects --> Config["YCPL.json"]
-    Stdlib --> STL["stl/std/*.yc"]
-    Status --> Tests["examples/run_tests.sh"]
+```text
+docs/
+├─ README.en.md      English index
+├─ README.ja.md      Japanese index
+├─ language.*.md     syntax, types, statements, expressions
+├─ projects.*.md     YCPL.json, imports, visibility
+├─ stdlib.*.md       std/* source modules
+└─ status.*.md       stable, experimental, reserved features
 ```
 
 | Start Here | Covers |
@@ -25,9 +23,8 @@ flowchart LR
 | [Implementation Status](status.en.md) | Stable, experimental, and reserved features |
 | [YCPL LSP](../tools/lsp/README.md) | Editor protocol support |
 
-```mermaid
-flowchart TD
-    Rule["Documented here"] --> Supported["Supported by current examples"]
-    Missing["Not documented"] --> TreatAs["Unsupported or reserved"]
-    Experimental["Marked experimental"] --> MayChange["May change without compatibility"]
+```text
+Documented here        -> supported by current examples
+Not documented here    -> unsupported or reserved
+Marked experimental    -> may change without compatibility
 ```

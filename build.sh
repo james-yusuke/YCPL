@@ -1,1 +1,1 @@
-docker build -t ecc_runtime .
+docker build -t ycc_runtime .

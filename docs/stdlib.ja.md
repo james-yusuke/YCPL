@@ -5,55 +5,26 @@
 標準ライブラリは `stl/std` 配下の YCPL ソースです。一部の低レベル API は
 `intrinsic fn` として宣言され、compiler/runtime bridge で実装されます。
 
-```mermaid
-flowchart TD
-    STL["stl/std/*.yc"] --> Source["YCPL source wrappers"]
-    STL --> Intrinsic["intrinsic declarations"]
-    Source --> LLVM["通常の module codegen"]
-    Intrinsic --> Bridge["compiler/runtime bridge"]
+```text
+stl/std/*.yc
+├─ YCPL source wrappers   -> 通常の module codegen
+└─ intrinsic declarations -> compiler/runtime bridge
 ```
 
 ## モジュール地図
 
-```mermaid
-mindmap
-  root((std))
-    fmt
-      print
-      println
-      printf
-    array
-      new
-      append
-      get/set
-      free
-    mem
-      alloc
-      copy
-      sizeof
-    str
-      len
-      eq
-      cmp
-    math
-      abs
-      sqrt
-      pow
-    io
-      read/write
-      LSP frames
-    fs
-      exists
-      read_file
-    text
-      find
-      offsets
-    json
-      parse
-      get
-      stringify
-    map
-      caller-owned arrays
+```text
+std/
+├─ fmt    print, println, printf
+├─ array  new, append, get, set, free
+├─ mem    alloc, copy, sizeof
+├─ str    len, eq, cmp
+├─ math   abs, sqrt, pow
+├─ io     read/write, LSP frames
+├─ fs     exists, read_file
+├─ text   find, offsets
+├─ json   parse, get, stringify
+└─ map    caller-owned arrays
 ```
 
 | Module | Source |
@@ -71,14 +42,18 @@ mindmap
 
 ## よく使う流れ
 
-```mermaid
-flowchart LR
-    Print["fmt.println(value)"] --> Out["stdout"]
-    ArrayNew["array.new([]T, cap)"] --> Slice["{data,len,cap,elem_size}"]
-    Slice --> Append["array.append"]
-    Slice --> Free["array.free"]
-    JsonParse["json.parse(text)"] --> View["JsonValue views"]
-    View --> JsonFree["json.free(root)"]
+```text
+fmt.println(value) -> stdout
+
+array.new([]T, cap)
+    -> { data, len, cap, elem_size }
+    -> array.append / array.get / array.set
+    -> array.free
+
+json.parse(text)
+    -> JsonValue root
+    -> json.get / json.at views
+    -> json.free(root)
 ```
 
 ```YCPL
@@ -95,12 +70,13 @@ fn main() {
 
 ## メモリ所有
 
-```mermaid
-flowchart TD
-    Alloc["array.new / mem.alloc / json.parse"] --> Own["caller owns root value"]
-    Own --> Use["use API"]
-    Use --> Release["array.free / mem.free / json.free"]
-    View["json.get / json.at"] --> Borrow["non-owning view"]
+```text
+array.new / mem.alloc / json.parse
+    -> caller owns root value
+    -> array.free / mem.free / json.free で解放
+
+json.get / json.at
+    -> non-owning views
 ```
 
 `extern fn` は YCPL 名を C/LLVM symbol に対応させます。`intrinsic fn` は bundled
