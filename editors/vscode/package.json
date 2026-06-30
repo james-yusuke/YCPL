@@ -30,7 +30,7 @@
           "YCPL"
         ],
         "extensions": [
-          ".ec"
+          ".yc"
         ],
         "configuration": "./language-configuration.json"
       }

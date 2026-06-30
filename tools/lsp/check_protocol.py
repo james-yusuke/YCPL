@@ -117,18 +117,18 @@ def main():
     completion = make_msg('{"jsonrpc":"2.0","id":2,"method":"textDocument/completion","params":{}}')
     hover = make_msg('{"jsonrpc":"2.0","id":3,"method":"textDocument/hover","params":{}}')
     shutdown = make_msg('{"jsonrpc":"2.0","id":5,"method":"shutdown","params":null}')
-    did_open = make_msg('{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":"file:///main.ec","text":"fn main(){return 0}"}}}')
-    did_open_multiline = make_msg('{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":"file:///main.ec","text":"fn main() {\\n    return 0\\n}"}}}')
-    document_symbol = make_msg('{"jsonrpc":"2.0","id":4,"method":"textDocument/documentSymbol","params":{"textDocument":{"uri":"file:///main.ec"}}}')
-    semantic_tokens = make_msg('{"jsonrpc":"2.0","id":6,"method":"textDocument/semanticTokens/full","params":{"textDocument":{"uri":"file:///main.ec"}}}')
-    formatting = make_msg('{"jsonrpc":"2.0","id":7,"method":"textDocument/formatting","params":{"textDocument":{"uri":"file:///main.ec"},"options":{"tabSize":4,"insertSpaces":true}}}')
-    range_formatting = make_msg('{"jsonrpc":"2.0","id":8,"method":"textDocument/rangeFormatting","params":{"textDocument":{"uri":"file:///main.ec"},"range":{"start":{"line":0,"character":0},"end":{"line":0,"character":19}},"options":{"tabSize":4,"insertSpaces":true}}}')
-    folding = make_msg('{"jsonrpc":"2.0","id":9,"method":"textDocument/foldingRange","params":{"textDocument":{"uri":"file:///main.ec"}}}')
-    signature = make_msg('{"jsonrpc":"2.0","id":10,"method":"textDocument/signatureHelp","params":{"textDocument":{"uri":"file:///main.ec"},"position":{"line":0,"character":12}}}')
-    bad_open = make_msg('{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":"file:///bad.ec","text":"fn main() { missing_brace"}}}')
-    direct_open = make_msg('{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":"file:///direct.ec","text":"import \\"std/fmt\\"\\nprintln(\\"bad\\")"}}}')
-    bad_import = make_msg('{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":"file:///import.ec","text":"import \\"std/fmt\\" as\\nfn main() {\\n}"}}}')
-    did_close = make_msg('{"jsonrpc":"2.0","method":"textDocument/didClose","params":{"textDocument":{"uri":"file:///bad.ec"}}}')
+    did_open = make_msg('{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":"file:///main.yc","text":"fn main(){return 0}"}}}')
+    did_open_multiline = make_msg('{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":"file:///main.yc","text":"fn main() {\\n    return 0\\n}"}}}')
+    document_symbol = make_msg('{"jsonrpc":"2.0","id":4,"method":"textDocument/documentSymbol","params":{"textDocument":{"uri":"file:///main.yc"}}}')
+    semantic_tokens = make_msg('{"jsonrpc":"2.0","id":6,"method":"textDocument/semanticTokens/full","params":{"textDocument":{"uri":"file:///main.yc"}}}')
+    formatting = make_msg('{"jsonrpc":"2.0","id":7,"method":"textDocument/formatting","params":{"textDocument":{"uri":"file:///main.yc"},"options":{"tabSize":4,"insertSpaces":true}}}')
+    range_formatting = make_msg('{"jsonrpc":"2.0","id":8,"method":"textDocument/rangeFormatting","params":{"textDocument":{"uri":"file:///main.yc"},"range":{"start":{"line":0,"character":0},"end":{"line":0,"character":19}},"options":{"tabSize":4,"insertSpaces":true}}}')
+    folding = make_msg('{"jsonrpc":"2.0","id":9,"method":"textDocument/foldingRange","params":{"textDocument":{"uri":"file:///main.yc"}}}')
+    signature = make_msg('{"jsonrpc":"2.0","id":10,"method":"textDocument/signatureHelp","params":{"textDocument":{"uri":"file:///main.yc"},"position":{"line":0,"character":12}}}')
+    bad_open = make_msg('{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":"file:///bad.yc","text":"fn main() { missing_brace"}}}')
+    direct_open = make_msg('{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":"file:///direct.yc","text":"import \\"std/fmt\\"\\nprintln(\\"bad\\")"}}}')
+    bad_import = make_msg('{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":"file:///import.yc","text":"import \\"std/fmt\\" as\\nfn main() {\\n}"}}}')
+    did_close = make_msg('{"jsonrpc":"2.0","method":"textDocument/didClose","params":{"textDocument":{"uri":"file:///bad.yc"}}}')
     rich_source = "\n".join([
         'import "std/fmt" as fmt',
         "// semantic color sample",
@@ -150,14 +150,14 @@ def main():
     rich_open = make_msg(json.dumps({
         "jsonrpc": "2.0",
         "method": "textDocument/didOpen",
-        "params": {"textDocument": {"uri": "file:///rich.ec", "text": rich_source}},
+        "params": {"textDocument": {"uri": "file:///rich.yc", "text": rich_source}},
     }, separators=(",", ":")))
-    rich_symbols = make_msg('{"jsonrpc":"2.0","id":11,"method":"textDocument/documentSymbol","params":{"textDocument":{"uri":"file:///rich.ec"}}}')
-    rich_semantic_tokens = make_msg('{"jsonrpc":"2.0","id":12,"method":"textDocument/semanticTokens/full","params":{"textDocument":{"uri":"file:///rich.ec"}}}')
-    definition = make_msg('{"jsonrpc":"2.0","id":13,"method":"textDocument/definition","params":{"textDocument":{"uri":"file:///rich.ec"},"position":{"line":10,"character":16}}}')
-    references = make_msg('{"jsonrpc":"2.0","id":14,"method":"textDocument/references","params":{"textDocument":{"uri":"file:///rich.ec"},"position":{"line":13,"character":19},"context":{"includeDeclaration":true}}}')
-    highlights = make_msg('{"jsonrpc":"2.0","id":15,"method":"textDocument/documentHighlight","params":{"textDocument":{"uri":"file:///rich.ec"},"position":{"line":13,"character":19}}}')
-    rename = make_msg('{"jsonrpc":"2.0","id":16,"method":"textDocument/rename","params":{"textDocument":{"uri":"file:///rich.ec"},"position":{"line":13,"character":19},"newName":"sum"}}')
+    rich_symbols = make_msg('{"jsonrpc":"2.0","id":11,"method":"textDocument/documentSymbol","params":{"textDocument":{"uri":"file:///rich.yc"}}}')
+    rich_semantic_tokens = make_msg('{"jsonrpc":"2.0","id":12,"method":"textDocument/semanticTokens/full","params":{"textDocument":{"uri":"file:///rich.yc"}}}')
+    definition = make_msg('{"jsonrpc":"2.0","id":13,"method":"textDocument/definition","params":{"textDocument":{"uri":"file:///rich.yc"},"position":{"line":10,"character":16}}}')
+    references = make_msg('{"jsonrpc":"2.0","id":14,"method":"textDocument/references","params":{"textDocument":{"uri":"file:///rich.yc"},"position":{"line":13,"character":19},"context":{"includeDeclaration":true}}}')
+    highlights = make_msg('{"jsonrpc":"2.0","id":15,"method":"textDocument/documentHighlight","params":{"textDocument":{"uri":"file:///rich.yc"},"position":{"line":13,"character":19}}}')
+    rename = make_msg('{"jsonrpc":"2.0","id":16,"method":"textDocument/rename","params":{"textDocument":{"uri":"file:///rich.yc"},"position":{"line":13,"character":19},"newName":"sum"}}')
     cross_lib_source = "\n".join([
         "module lib",
         "struct Widget {",
@@ -179,22 +179,22 @@ def main():
     cross_lib_open = make_msg(json.dumps({
         "jsonrpc": "2.0",
         "method": "textDocument/didOpen",
-        "params": {"textDocument": {"uri": "file:///lib.ec", "text": cross_lib_source}},
+        "params": {"textDocument": {"uri": "file:///lib.yc", "text": cross_lib_source}},
     }, separators=(",", ":")))
     cross_app_open = make_msg(json.dumps({
         "jsonrpc": "2.0",
         "method": "textDocument/didOpen",
-        "params": {"textDocument": {"uri": "file:///app.ec", "text": cross_app_source}},
+        "params": {"textDocument": {"uri": "file:///app.yc", "text": cross_app_source}},
     }, separators=(",", ":")))
-    cross_definition = make_msg('{"jsonrpc":"2.0","id":17,"method":"textDocument/definition","params":{"textDocument":{"uri":"file:///app.ec"},"position":{"line":3,"character":15}}}')
-    cross_declaration = make_msg('{"jsonrpc":"2.0","id":18,"method":"textDocument/declaration","params":{"textDocument":{"uri":"file:///app.ec"},"position":{"line":3,"character":15}}}')
-    cross_type_definition = make_msg('{"jsonrpc":"2.0","id":19,"method":"textDocument/typeDefinition","params":{"textDocument":{"uri":"file:///app.ec"},"position":{"line":2,"character":7}}}')
-    cross_references = make_msg('{"jsonrpc":"2.0","id":20,"method":"textDocument/references","params":{"textDocument":{"uri":"file:///app.ec"},"position":{"line":3,"character":15},"context":{"includeDeclaration":true}}}')
-    cross_prepare_rename = make_msg('{"jsonrpc":"2.0","id":21,"method":"textDocument/prepareRename","params":{"textDocument":{"uri":"file:///app.ec"},"position":{"line":3,"character":5}}}')
-    cross_rename = make_msg('{"jsonrpc":"2.0","id":22,"method":"textDocument/rename","params":{"textDocument":{"uri":"file:///app.ec"},"position":{"line":3,"character":15},"newName":"calculate"}}')
+    cross_definition = make_msg('{"jsonrpc":"2.0","id":17,"method":"textDocument/definition","params":{"textDocument":{"uri":"file:///app.yc"},"position":{"line":3,"character":15}}}')
+    cross_declaration = make_msg('{"jsonrpc":"2.0","id":18,"method":"textDocument/declaration","params":{"textDocument":{"uri":"file:///app.yc"},"position":{"line":3,"character":15}}}')
+    cross_type_definition = make_msg('{"jsonrpc":"2.0","id":19,"method":"textDocument/typeDefinition","params":{"textDocument":{"uri":"file:///app.yc"},"position":{"line":2,"character":7}}}')
+    cross_references = make_msg('{"jsonrpc":"2.0","id":20,"method":"textDocument/references","params":{"textDocument":{"uri":"file:///app.yc"},"position":{"line":3,"character":15},"context":{"includeDeclaration":true}}}')
+    cross_prepare_rename = make_msg('{"jsonrpc":"2.0","id":21,"method":"textDocument/prepareRename","params":{"textDocument":{"uri":"file:///app.yc"},"position":{"line":3,"character":5}}}')
+    cross_rename = make_msg('{"jsonrpc":"2.0","id":22,"method":"textDocument/rename","params":{"textDocument":{"uri":"file:///app.yc"},"position":{"line":3,"character":15},"newName":"calculate"}}')
     workspace_symbol = make_msg('{"jsonrpc":"2.0","id":23,"method":"workspace/symbol","params":{"query":"comp"}}')
-    selection_range = make_msg('{"jsonrpc":"2.0","id":24,"method":"textDocument/selectionRange","params":{"textDocument":{"uri":"file:///app.ec"},"positions":[{"line":4,"character":4}]}}')
-    contextual_hover = make_msg('{"jsonrpc":"2.0","id":25,"method":"textDocument/hover","params":{"textDocument":{"uri":"file:///app.ec"},"position":{"line":2,"character":7}}}')
+    selection_range = make_msg('{"jsonrpc":"2.0","id":24,"method":"textDocument/selectionRange","params":{"textDocument":{"uri":"file:///app.yc"},"positions":[{"line":4,"character":4}]}}')
+    contextual_hover = make_msg('{"jsonrpc":"2.0","id":25,"method":"textDocument/hover","params":{"textDocument":{"uri":"file:///app.yc"},"position":{"line":2,"character":7}}}')
 
     print("YCPL LSP protocol tests")
     case(binary, "initialize", [initialize], lambda _raw, obj: "semanticTokensProvider" in obj.get("result", {}).get("capabilities", {}) and obj["result"]["capabilities"].get("definitionProvider") is True and obj["result"]["capabilities"].get("declarationProvider") is True and obj["result"]["capabilities"].get("typeDefinitionProvider") is True and obj["result"]["capabilities"].get("workspaceSymbolProvider") is True and obj["result"]["capabilities"].get("renameProvider", {}).get("prepareProvider") is True, "initialize rich capabilities")
@@ -207,14 +207,14 @@ def main():
     case(binary, "definition", [rich_open + definition], lambda _raw, obj: obj.get("result", {}).get("range", {}).get("start", {}).get("line") == 5 and obj["result"]["range"]["start"]["character"] == 3, "definition range for helper")
     case(binary, "references", [rich_open + references], lambda _raw, obj: len(obj.get("result", [])) >= 4, "references for total")
     case(binary, "document_highlight", [rich_open + highlights], lambda _raw, obj: len(obj.get("result", [])) >= 4 and obj["result"][0].get("kind") == 1, "document highlights for total")
-    case(binary, "rename", [rich_open + rename], lambda _raw, obj: len(obj.get("result", {}).get("changes", {}).get("file:///rich.ec", [])) >= 4 and obj["result"]["changes"]["file:///rich.ec"][0].get("newText") == "sum", "rename edits for total")
-    case(binary, "cross_file_definition", [cross_lib_open + cross_app_open + cross_definition], lambda _raw, obj: obj.get("result", {}).get("uri") == "file:///lib.ec" and obj["result"]["range"]["start"]["line"] == 4, "definition across open documents")
-    case(binary, "cross_file_declaration", [cross_lib_open + cross_app_open + cross_declaration], lambda _raw, obj: obj.get("result", {}).get("uri") == "file:///lib.ec" and obj["result"]["range"]["start"]["line"] == 4, "declaration across open documents")
-    case(binary, "type_definition", [cross_lib_open + cross_app_open + cross_type_definition], lambda _raw, obj: obj.get("result", {}).get("uri") == "file:///lib.ec" and obj["result"]["range"]["start"]["line"] == 1, "type definition for inferred struct variable")
-    case(binary, "cross_file_references", [cross_lib_open + cross_app_open + cross_references], lambda _raw, obj: len(obj.get("result", [])) == 3 and any(item.get("uri") == "file:///lib.ec" for item in obj["result"]) and any(item.get("uri") == "file:///app.ec" for item in obj["result"]), "references across open documents")
+    case(binary, "rename", [rich_open + rename], lambda _raw, obj: len(obj.get("result", {}).get("changes", {}).get("file:///rich.yc", [])) >= 4 and obj["result"]["changes"]["file:///rich.yc"][0].get("newText") == "sum", "rename edits for total")
+    case(binary, "cross_file_definition", [cross_lib_open + cross_app_open + cross_definition], lambda _raw, obj: obj.get("result", {}).get("uri") == "file:///lib.yc" and obj["result"]["range"]["start"]["line"] == 4, "definition across open documents")
+    case(binary, "cross_file_declaration", [cross_lib_open + cross_app_open + cross_declaration], lambda _raw, obj: obj.get("result", {}).get("uri") == "file:///lib.yc" and obj["result"]["range"]["start"]["line"] == 4, "declaration across open documents")
+    case(binary, "type_definition", [cross_lib_open + cross_app_open + cross_type_definition], lambda _raw, obj: obj.get("result", {}).get("uri") == "file:///lib.yc" and obj["result"]["range"]["start"]["line"] == 1, "type definition for inferred struct variable")
+    case(binary, "cross_file_references", [cross_lib_open + cross_app_open + cross_references], lambda _raw, obj: len(obj.get("result", [])) == 3 and any(item.get("uri") == "file:///lib.yc" for item in obj["result"]) and any(item.get("uri") == "file:///app.yc" for item in obj["result"]), "references across open documents")
     case(binary, "prepare_rename", [cross_app_open + cross_prepare_rename], lambda _raw, obj: obj.get("result", {}).get("start", {}).get("line") == 3 and obj["result"]["start"]["character"] == 4, "prepare rename word range")
-    case(binary, "cross_file_rename", [cross_lib_open + cross_app_open + cross_rename], lambda _raw, obj: len(obj.get("result", {}).get("changes", {}).get("file:///lib.ec", [])) == 1 and len(obj["result"]["changes"].get("file:///app.ec", [])) == 2 and obj["result"]["changes"]["file:///app.ec"][0]["newText"] == "calculate", "rename across open documents")
-    case(binary, "workspace_symbol", [cross_lib_open + cross_app_open + workspace_symbol], lambda _raw, obj: any(item.get("name") == "compute" and item.get("location", {}).get("uri") == "file:///lib.ec" for item in obj.get("result", [])), "workspace symbol query")
+    case(binary, "cross_file_rename", [cross_lib_open + cross_app_open + cross_rename], lambda _raw, obj: len(obj.get("result", {}).get("changes", {}).get("file:///lib.yc", [])) == 1 and len(obj["result"]["changes"].get("file:///app.yc", [])) == 2 and obj["result"]["changes"]["file:///app.yc"][0]["newText"] == "calculate", "rename across open documents")
+    case(binary, "workspace_symbol", [cross_lib_open + cross_app_open + workspace_symbol], lambda _raw, obj: any(item.get("name") == "compute" and item.get("location", {}).get("uri") == "file:///lib.yc" for item in obj.get("result", [])), "workspace symbol query")
     case(binary, "selection_range", [cross_app_open + selection_range], lambda _raw, obj: len(obj.get("result", [])) == 1 and obj["result"][0]["range"]["start"]["line"] == 4 and obj["result"][0]["range"]["start"]["character"] == 4, "selection range for word")
     case(binary, "contextual_hover", [cross_lib_open + cross_app_open + contextual_hover], lambda raw, _obj: "Widget" in raw and "YCPL variable or field" in raw, "contextual hover")
     case(binary, "formatting", [did_open + formatting], lambda raw, _obj: '"newText":"fn main() {\\n    return 0\\n}\\n"' in raw, "formatted document text")
@@ -224,7 +224,7 @@ def main():
     case(binary, "diagnostics", [bad_open], lambda raw, _obj: '"unbalanced brace"' in raw, "unbalanced brace diagnostic")
     case(binary, "direct_import_diagnostics", [direct_open], lambda raw, _obj: "imported std symbols must be called through their alias" in raw, "direct import diagnostic")
     case(binary, "bad_import_diagnostics", [bad_import], lambda raw, _obj: "malformed import declaration" in raw, "bad import diagnostic")
-    case(binary, "did_close", [bad_open + did_close], lambda raw, _obj: '"uri":"file:///bad.ec","diagnostics":[]' in raw, "empty diagnostics after close")
+    case(binary, "did_close", [bad_open + did_close], lambda raw, _obj: '"uri":"file:///bad.yc","diagnostics":[]' in raw, "empty diagnostics after close")
     case(binary, "partial_header", [initialize[:9], initialize[9:25], initialize[25:]], lambda _raw, obj: "capabilities" in obj.get("result", {}), "partial header initialize")
 
     header_end = initialize.find(b"\r\n\r\n") + 4
@@ -237,7 +237,7 @@ def main():
             "jsonrpc": "2.0",
             "method": "textDocument/didChange",
             "params": {
-                "textDocument": {"uri": "file:///main.ec"},
+                "textDocument": {"uri": "file:///main.yc"},
                 "contentChanges": [{"text": text}],
             },
         }, separators=(",", ":"))

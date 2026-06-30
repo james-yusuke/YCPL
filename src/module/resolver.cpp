@@ -294,7 +294,7 @@ namespace module
         ProjectConfig config;
         config.name = json->value("name", "unnamed");
         config.version = json->value("version", "0.0.0");
-        config.entry = json->value("entry", "main.ec");
+        config.entry = json->value("entry", "main.yc");
         config.output_dir = json->value("output", "build/");
 
         auto src_val = json->get("src");
@@ -513,12 +513,12 @@ namespace module
         if (!import_path.empty() && import_path[0] == '.')
         {
             std::filesystem::path base = from_file.parent_path();
-            std::filesystem::path resolved = base / (import_path + ".ec");
+            std::filesystem::path resolved = base / (import_path + ".yc");
             if (std::filesystem::exists(resolved))
             {
                 return resolved;
             }
-            resolved = base / import_path / "index.ec";
+            resolved = base / import_path / "index.yc";
             if (std::filesystem::exists(resolved))
             {
                 return resolved;
@@ -528,12 +528,12 @@ namespace module
         for (const auto &src_dir : source_dirs_)
         {
             std::filesystem::path full_dir = project_root_ / src_dir;
-            std::filesystem::path resolved = full_dir / (import_path + ".ec");
+            std::filesystem::path resolved = full_dir / (import_path + ".yc");
             if (std::filesystem::exists(resolved))
             {
                 return resolved;
             }
-            resolved = full_dir / import_path / "index.ec";
+            resolved = full_dir / import_path / "index.yc";
             if (std::filesystem::exists(resolved))
             {
                 return resolved;
@@ -544,12 +544,12 @@ namespace module
         for (int i = 0; i < 12; ++i)
         {
             std::filesystem::path std_root = search / "stl";
-            std::filesystem::path resolved = std_root / (import_path + ".ec");
+            std::filesystem::path resolved = std_root / (import_path + ".yc");
             if (std::filesystem::exists(resolved))
             {
                 return resolved;
             }
-            resolved = std_root / import_path / "index.ec";
+            resolved = std_root / import_path / "index.yc";
             if (std::filesystem::exists(resolved))
             {
                 return resolved;

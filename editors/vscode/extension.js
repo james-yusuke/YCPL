@@ -85,7 +85,7 @@ function activate(context) {
     {
       documentSelector: [{ scheme: "file", language: "YCPL" }],
       synchronize: {
-        fileEvents: vscode.workspace.createFileSystemWatcher("**/*.ec")
+        fileEvents: vscode.workspace.createFileSystemWatcher("**/*.yc")
       }
     }
   );

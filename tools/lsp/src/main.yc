@@ -1565,7 +1565,7 @@ fn send_diagnostic(uri string, line i32, ch i32, message string) {
 
 fn publish_diagnostics(uri string, source string) {
     if uri == none {
-        uri = "file:///YCPL-lsp.ec"
+        uri = "file:///YCPL-lsp.yc"
     }
 
     if source == none {

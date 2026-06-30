@@ -21,7 +21,7 @@ int main(int argc, char *argv[])
 
     if (argc < 2)
     {
-        std::cerr << "Usage: " << argv[0] << " <file1.ec> [file2.ec ...] | <dir>\n";
+        std::cerr << "Usage: " << argv[0] << " <file1.yc> [file2.yc ...] | <dir>\n";
         return 1;
     }
 
@@ -30,7 +30,7 @@ int main(int argc, char *argv[])
     {
         for (auto &it : fs::recursive_directory_iterator(argv[1]))
         {
-            if (it.is_regular_file() && it.path().extension() == ".ec")
+            if (it.is_regular_file() && it.path().extension() == ".yc")
                 src_files.push_back(it.path());
         }
     }
@@ -43,7 +43,7 @@ int main(int argc, char *argv[])
             {
                 for (auto &it : fs::recursive_directory_iterator(p))
                 {
-                    if (it.is_regular_file() && it.path().extension() == ".ec")
+                    if (it.is_regular_file() && it.path().extension() == ".yc")
                         src_files.push_back(it.path());
                 }
             }
@@ -60,7 +60,7 @@ int main(int argc, char *argv[])
 
     if (src_files.empty())
     {
-        std::cerr << "No .ec source files found.\n";
+        std::cerr << "No .yc source files found.\n";
         return 1;
     }
 
@@ -82,7 +82,7 @@ int main(int argc, char *argv[])
 
     print_ast(*merged);
 
-    codegen::CodeGen cg("ec");
+    codegen::CodeGen cg("yc");
 
     if (!cg.generate(*merged))
     {

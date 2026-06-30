@@ -1,7 +1,7 @@
 {
-  "name": "private_access_failure",
+  "name": "missing_import_failure",
   "version": "0.1.0",
-  "entry": "src/main.ec",
+  "entry": "src/main.yc",
   "src": ["src"],
   "output": "build"
 }

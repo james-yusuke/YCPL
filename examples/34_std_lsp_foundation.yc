@@ -17,7 +17,7 @@ fn main() {
     fmt.println(text.find("hello YCPL", "YCPL"))
     fmt.println(text.starts_with("Content-Length", "Content"))
     fmt.println(text.line_of_offset("a\nb\nc", 3))
-    fmt.println(fs.exists("examples/01_hello.ec"))
+    fmt.println(fs.exists("examples/01_hello.yc"))
 
     keys := array.new([]string, 2)
     values := array.new([]string, 2)
@@ -25,7 +25,7 @@ fn main() {
     values = array.append(values, none)
     keys = array.append(keys, none)
     values = array.append(values, none)
-    map.put(keys, values, "uri", "file:///main.ec")
+    map.put(keys, values, "uri", "file:///main.yc")
     map.put(keys, values, "text", "fn main() {}")
     fmt.println(map.has(keys, "uri"))
     fmt.println(map.get(keys, values, "text"))

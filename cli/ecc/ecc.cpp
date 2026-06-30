@@ -17,9 +17,9 @@ static void print_help(const char *exec)
 {
     std::cout << "Usage:\n"
                  "  "
-              << exec << " [options] <file.ec | dir>\n"
+              << exec << " [options] <file.yc | dir>\n"
                          "  "
-              << exec << " [options] <file1.ec file2.ec ...>\n"
+              << exec << " [options] <file1.yc file2.yc ...>\n"
                          "\n"
                          "Modes:\n"
                          "  ll                Emit LLVM IR only\n"
@@ -32,13 +32,13 @@ static void print_help(const char *exec)
                          "\n"
                          "Examples:\n"
                          "  "
-              << exec << " main.ec\n"
+              << exec << " main.yc\n"
                          "  "
               << exec << " src/ -o build\n"
                          "  "
               << exec << " build              # Uses YCPL.json\n"
                          "  "
-              << exec << " ll main.ec\n";
+              << exec << " ll main.yc\n";
 }
 
 static std::vector<fs::path> collect_sources(const std::vector<std::string> &inputs)
@@ -51,13 +51,13 @@ static std::vector<fs::path> collect_sources(const std::vector<std::string> &inp
         {
             for (auto &it : fs::recursive_directory_iterator(p))
             {
-                if (it.is_regular_file() && it.path().extension() == ".ec")
+                if (it.is_regular_file() && it.path().extension() == ".yc")
                     result.push_back(it.path());
             }
         }
         else if (fs::is_regular_file(p))
         {
-            if (p.extension() == ".ec")
+            if (p.extension() == ".yc")
                 result.push_back(p);
         }
         else
@@ -220,7 +220,7 @@ int main(int argc, char *argv[])
             {
                 for (auto &it : fs::recursive_directory_iterator(full_dir))
                 {
-                    if (it.is_regular_file() && it.path().extension() == ".ec")
+                    if (it.is_regular_file() && it.path().extension() == ".yc")
                         sources.push_back(it.path());
                 }
             }
@@ -261,7 +261,7 @@ int main(int argc, char *argv[])
         src_files = collect_sources(inputs);
         if (src_files.empty())
         {
-            std::cerr << "No .ec source files found.\n";
+            std::cerr << "No .yc source files found.\n";
             return 1;
         }
 
@@ -271,7 +271,7 @@ int main(int argc, char *argv[])
     if (!program)
         return 1;
 
-    codegen::CodeGen cg("ec");
+    codegen::CodeGen cg("yc");
     if (!cg.generate(*program))
     {
         std::cerr << "codegen failed\n";

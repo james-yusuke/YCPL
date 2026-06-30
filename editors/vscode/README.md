@@ -27,7 +27,7 @@ host-native `YCPL-lsp` binary.
 
 The extension contributes:
 
-- TextMate syntax highlighting for `.ec` files;
+- TextMate syntax highlighting for `.yc` files;
 - semantic token colorization for namespaces, types, functions, variables,
   fields/properties, keywords, strings, numbers, operators, and comments;
 - snippets for `main`, `fn`, `struct`, imports, loops, and common std calls;
@@ -63,7 +63,7 @@ host.
    Development Host from VSCode with this folder as the extension under
    development.
 
-4. Open an `.ec` file and check these editor features:
+4. Open an `.yc` file and check these editor features:
 
    - the bottom-right language mode says `YCPL`;
    - keywords, primitive types, strings, comments, operators, functions, struct
