@@ -78,16 +78,34 @@ bazel-bin/ycc
 ```
 
 ```sh
-scripts/setup-llvm.sh 22
+eval "$(scripts/setup-llvm.sh 22 --print-env)"
 bazel build //:ycc
 bazel test //...
 ```
 
+`scripts/setup-llvm.sh` does not create `/usr` or `/usr/local` symlinks. It
+prints `LLVM_CONFIG`, `LLVM_BINDIR`, `LLVM_DIR`, and a PATH prefix instead.
+This keeps Ubuntu, Docker, and macOS arm/Homebrew installs separate from system
+tooling. The Bazel and CMake builds link against the LLVM library directory
+reported by `llvm-config` and add that directory to the build rpath, so LLVM
+shared libraries do not need to be copied or linked into `/usr`.
+
+This follows the same practical model used by Odin: prefer an explicit
+`LLVM_CONFIG`, detect package-manager LLVM installs, and avoid requiring users
+to mutate global system paths.
+
 CMake is still available when LLVM 22 is installed on the system:
 
 ```sh
-cmake -S . -B build -DLLVM_DIR=/path/to/llvm-22/cmake
+cmake -S . -B build
 cmake --build build
+```
+
+For explicit paths:
+
+```sh
+LLVM_CONFIG=/opt/homebrew/opt/llvm@22/bin/llvm-config bazel build //:ycc
+LLVM_DIR=/opt/homebrew/opt/llvm@22/lib/cmake/llvm cmake -S . -B build
 ```
 
 ## Compile

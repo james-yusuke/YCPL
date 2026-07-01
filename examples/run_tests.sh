@@ -3,9 +3,49 @@
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT_DIR="$(dirname "$SCRIPT_DIR")"
 YCC="${YCC:-$ROOT_DIR/build/ycc}"
+LINKFLAGS="${LINKFLAGS:--no-pie}"
+
+llvm_bindir() {
+    if [ -n "${LLVM_BINDIR:-}" ]; then
+        printf '%s\n' "$LLVM_BINDIR"
+        return 0
+    fi
+    if [ -n "${LLVM_CONFIG:-}" ] && [ -x "$LLVM_CONFIG" ]; then
+        "$LLVM_CONFIG" --bindir
+        return 0
+    fi
+    for candidate in \
+        /opt/homebrew/opt/llvm@22/bin/llvm-config \
+        /opt/homebrew/opt/llvm/bin/llvm-config \
+        /usr/local/opt/llvm@22/bin/llvm-config \
+        /usr/local/opt/llvm/bin/llvm-config \
+        /usr/lib/llvm-22/bin/llvm-config
+    do
+        if [ -x "$candidate" ]; then
+            "$candidate" --bindir
+            return 0
+        fi
+    done
+    if command -v llvm-config-22 >/dev/null 2>&1; then
+        llvm-config-22 --bindir
+        return 0
+    fi
+    if command -v llvm-config22 >/dev/null 2>&1; then
+        llvm-config22 --bindir
+        return 0
+    fi
+    if command -v llvm-config >/dev/null 2>&1; then
+        llvm-config --bindir
+        return 0
+    fi
+    return 1
+}
+
+LLVM_BIN="$(llvm_bindir || true)"
+LLC="${LLC:-${LLVM_BIN:+${LLVM_BIN}/llc}}"
+CLANG="${CLANG:-${LLVM_BIN:+${LLVM_BIN}/clang}}"
 LLC="${LLC:-llc}"
 CLANG="${CLANG:-clang}"
-LINKFLAGS="${LINKFLAGS:--no-pie}"
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
