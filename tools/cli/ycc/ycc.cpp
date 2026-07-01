@@ -41,6 +41,7 @@ static void print_help(const char *exec)
                          "Options:\n"
                          "  -o <dir>          Output directory (default: current directory)\n"
                          "  --keep-obj        Keep the intermediate object file when building native\n"
+                         "  --link-llvm       Link LLVM C API libraries from llvm-config\n"
                          "\n"
                          "Examples:\n"
                          "  "
@@ -156,6 +157,21 @@ static bool executable_exists(const fs::path &path)
     return fs::exists(path) && !fs::is_directory(path);
 }
 
+static std::string capture_command_output(const std::string &command)
+{
+    std::array<char, 256> buffer{};
+    std::string output;
+    FILE *pipe = popen(command.c_str(), "r");
+    if (!pipe)
+        return "";
+
+    while (fgets(buffer.data(), static_cast<int>(buffer.size()), pipe) != nullptr)
+        output += buffer.data();
+    pclose(pipe);
+
+    return output;
+}
+
 static std::string trim_text(const std::string &text)
 {
     const std::string whitespace = " \t\r\n";
@@ -172,17 +188,41 @@ static std::string llvm_config_bindir(const fs::path &llvm_config)
         return "";
 
     std::string command = shell_quote(llvm_config) + " --bindir 2>/dev/null";
-    std::array<char, 256> buffer{};
-    std::string output;
-    FILE *pipe = popen(command.c_str(), "r");
-    if (!pipe)
-        return "";
+    return trim_text(capture_command_output(command));
+}
 
-    while (fgets(buffer.data(), static_cast<int>(buffer.size()), pipe) != nullptr)
-        output += buffer.data();
-    pclose(pipe);
+static std::string find_llvm_config_command()
+{
+    if (const char *llvm_config = std::getenv("LLVM_CONFIG"))
+    {
+        fs::path config_path(llvm_config);
+        if (executable_exists(config_path))
+            return config_path.string();
+    }
 
-    return trim_text(output);
+    std::vector<fs::path> candidates = {
+        "/opt/homebrew/opt/llvm@22/bin/llvm-config",
+        "/opt/homebrew/opt/llvm/bin/llvm-config",
+        "/usr/local/opt/llvm@22/bin/llvm-config",
+        "/usr/local/opt/llvm/bin/llvm-config",
+        "/usr/lib/llvm-22/bin/llvm-config",
+    };
+
+    for (const auto &candidate : candidates)
+    {
+        if (executable_exists(candidate))
+            return candidate.string();
+    }
+
+    for (const std::string &candidate : {"llvm-config-22", "llvm-config22", "llvm-config"})
+    {
+        std::string probe = "command -v " + shell_quote(candidate) + " 2>/dev/null";
+        std::string found = trim_text(capture_command_output(probe));
+        if (!found.empty())
+            return found;
+    }
+
+    return "";
 }
 
 static std::string command_from_env_or_path(const char *env_name, const std::string &tool)
@@ -255,7 +295,49 @@ static std::vector<std::string> split_flags(const char *flags)
     return result;
 }
 
-static bool build_native_executable(const fs::path &ll_file, const fs::path &binary_file, const fs::path &object_file, bool keep_obj)
+static std::vector<std::string> split_flags(const std::string &flags)
+{
+    std::vector<std::string> result;
+    std::istringstream iss(flags);
+    std::string part;
+    while (iss >> part)
+        result.push_back(part);
+    return result;
+}
+
+struct LlvmLinkFlags
+{
+    std::vector<std::string> ldflags;
+    std::vector<std::string> libs;
+};
+
+static LlvmLinkFlags llvm_link_flags()
+{
+    LlvmLinkFlags flags;
+    std::string llvm_config = find_llvm_config_command();
+    if (llvm_config.empty())
+        return flags;
+
+    flags.ldflags = split_flags(capture_command_output(shell_quote(llvm_config) + " --ldflags 2>/dev/null"));
+    flags.libs = split_flags(capture_command_output(shell_quote(llvm_config) + " --libs core --system-libs 2>/dev/null"));
+    return flags;
+}
+
+static bool module_references_llvm_c_api(const llvm::Module *module)
+{
+    if (!module)
+        return false;
+
+    for (const auto &fn : module->functions())
+    {
+        if (fn.isDeclaration() && fn.getName().starts_with("LLVM"))
+            return true;
+    }
+
+    return false;
+}
+
+static bool build_native_executable(const fs::path &ll_file, const fs::path &binary_file, const fs::path &object_file, bool keep_obj, bool link_llvm)
 {
     std::string llc = command_from_env_or_path("LLC", "llc");
     std::string clang = command_from_env_or_path("CLANG", "clang");
@@ -270,7 +352,29 @@ static bool build_native_executable(const fs::path &ll_file, const fs::path &bin
     std::string link_cmd = shell_quote(clang);
     for (const auto &flag : split_flags(std::getenv("LINKFLAGS")))
         link_cmd += " " + shell_quote(flag);
-    link_cmd += " " + shell_quote(object_file) + " -o " + shell_quote(binary_file) + " -lm";
+
+    LlvmLinkFlags llvm_flags;
+    if (link_llvm)
+    {
+        llvm_flags = llvm_link_flags();
+        if (llvm_flags.ldflags.empty() && llvm_flags.libs.empty())
+        {
+            std::cerr << "LLVM C API was referenced, but llvm-config was not found. Set LLVM_CONFIG or LLVM_BINDIR.\n";
+            return false;
+        }
+        for (const auto &flag : llvm_flags.ldflags)
+            link_cmd += " " + shell_quote(flag);
+    }
+
+    link_cmd += " " + shell_quote(object_file) + " -o " + shell_quote(binary_file);
+
+    if (link_llvm)
+    {
+        for (const auto &flag : llvm_flags.libs)
+            link_cmd += " " + shell_quote(flag);
+    }
+
+    link_cmd += " -lm";
 
     if (!run_shell_command(link_cmd))
     {
@@ -302,6 +406,7 @@ int main(int argc, char *argv[])
     bool debug = false;
     bool use_project_mode = false;
     bool keep_obj = false;
+    bool link_llvm = false;
     fs::path output_dir = ".";
 
     std::vector<std::string> inputs;
@@ -340,6 +445,10 @@ int main(int argc, char *argv[])
         else if (arg == "--keep-obj")
         {
             keep_obj = true;
+        }
+        else if (arg == "--link-llvm")
+        {
+            link_llvm = true;
         }
         else
         {
@@ -480,7 +589,8 @@ int main(int argc, char *argv[])
     {
         fs::path object_file = output_dir / (output_base + ".o");
         fs::path binary_file = output_dir / output_base;
-        if (!build_native_executable(out_file, binary_file, object_file, keep_obj))
+        bool should_link_llvm = link_llvm || module_references_llvm_c_api(cg.get_module());
+        if (!build_native_executable(out_file, binary_file, object_file, keep_obj, should_link_llvm))
             return 1;
         std::cout << "Wrote binary to " << binary_file << "\n";
     }

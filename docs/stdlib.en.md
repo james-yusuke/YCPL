@@ -25,7 +25,8 @@ std/
 ├─ fs     exists, read_file
 ├─ text   find, offsets
 ├─ json   parse, get, stringify
-└─ map    caller-owned arrays
+├─ map    caller-owned arrays
+└─ llvm   LLVM C API bridge
 ```
 
 | Module | Source |
@@ -40,6 +41,7 @@ std/
 | `std/text` | `stl/std/text.yc` |
 | `std/json` | `stl/std/json.yc` |
 | `std/map` | `stl/std/map.yc` |
+| `std/llvm` | `stl/std/llvm.yc` |
 
 ## Common Flows
 
@@ -82,3 +84,22 @@ json.get / json.at
 
 `extern fn` maps YCPL names to C/LLVM symbols. `intrinsic fn` is reserved for
 bundled `std` modules and is rejected in user modules.
+
+## LLVM C API
+
+```YCPL
+import "std/llvm" as llvm
+
+fn main() {
+    ctx := llvm.context_create()
+    mod := llvm.module_create_with_name_in_context("demo", ctx)
+    ir := llvm.print_module_to_string(mod)
+    llvm.dispose_message(ir)
+    llvm.dispose_module(mod)
+    llvm.context_dispose(ctx)
+}
+```
+
+`ycc build` auto-links LLVM when the generated IR references `LLVM...` C API
+symbols. Use `LLVM_CONFIG=/path/to/llvm-config` to select the LLVM prefix
+without installing symlinks into `/usr`.

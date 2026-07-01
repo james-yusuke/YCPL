@@ -101,6 +101,37 @@ Value *CodeGen::codegen_assign(const ast::AssignStmt *as)
         return lit && lit->t == lex::TokenType::NONE;
     };
 
+    auto infer_index_store_type = [&](const ast::IndexExpr *ie) -> Type *
+    {
+        if (!ie)
+            return nullptr;
+
+        std::string collectionType;
+        if (auto id = dynamic_cast<const ast::Ident *>(ie->collection.get()))
+        {
+            if (auto *localType = lookup_local_type(id->name))
+                collectionType = *localType;
+        }
+
+        if (collectionType.empty())
+            collectionType = infer_expr_type_name(ie->collection.get());
+        if (collectionType.empty())
+            return nullptr;
+
+        ParsedType pt = parse_type_chain(collectionType);
+        if ((pt.base == "string" || pt.base == "string_params") && pt.array_depth == 0)
+            return Type::getInt8Ty(context);
+
+        if (pt.array_depth > 0 || pt.pointer_depth > 0)
+        {
+            Type *elemTy = getLLVMType(pt.base);
+            if (elemTy)
+                return elemTy;
+        }
+
+        return nullptr;
+    };
+
     if (auto ue = dynamic_cast<const ast::UnaryExpr *>(e))
     {
         if (ue->op == "&")
@@ -357,6 +388,12 @@ Value *CodeGen::codegen_assign(const ast::AssignStmt *as)
     }
 
     Value *storeVal = rhs;
+
+    if (!destElemTy)
+    {
+        if (auto ie = dynamic_cast<const ast::IndexExpr *>(e))
+            destElemTy = infer_index_store_type(ie);
+    }
 
     if (destElemTy)
     {
