@@ -15,10 +15,13 @@ Source files use the `.yc` extension.
 +--------+   +--------+   +-----+   +-----------------+   +----------+
                                                                |
                                                                v
-                                                         LLVM IR (.ll)
+                                                     LLVM IR (.ll)
                                                                |
                                                                v
                                                           llc + clang
+                                                               |
+                                                               v
+                                                        native binary
 ```
 
 ```text
@@ -60,7 +63,7 @@ Repository
 |---|---|
 | Stability | Very early alpha, not production-ready |
 | Source extension | `.yc` |
-| Build output | LLVM IR (`.ll`) |
+| Build output | Native binary via `ycc build`; LLVM IR via `ycc build-ir` |
 | Project config | `YCPL.json` |
 | Compiler binary | `ycc` |
 
@@ -112,14 +115,17 @@ LLVM_DIR=/opt/homebrew/opt/llvm@22/lib/cmake/llvm cmake -S . -B build
 
 ```text
 Single file:
-  examples/01_hello.yc -> ycc -> LLVM IR
+  examples/01_hello.yc -> ycc build -> native binary
+  examples/01_hello.yc -> ycc build-ir -> LLVM IR
 
 Project:
-  YCPL.json -> scan src/*.yc -> ycc build -> LLVM IR
+  YCPL.json -> scan src/*.yc -> ycc build -> native binary
+  YCPL.json -> scan src/*.yc -> ycc build-ir -> LLVM IR
 ```
 
 ```sh
-bazel run //:ycc -- examples/01_hello.yc -o /tmp/ycpl_hello
+bazel run //:ycc -- build examples/01_hello.yc -o /tmp/ycpl_hello
+bazel run //:ycc -- build-ir examples/01_hello.yc -o /tmp/ycpl_hello
 cd examples/04_module_project && ../../bazel-bin/ycc build
 ```
 

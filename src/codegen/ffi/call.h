@@ -77,10 +77,7 @@ Value *CodeGen::codegen_std_intrinsic_call(const std::string &name, const ast::C
 
     auto get_c_function = [&](const std::string &fn_name) -> Function *
     {
-        auto it = function_protos.find(fn_name);
-        if (it != function_protos.end())
-            return it->second;
-        return module->getFunction(fn_name);
+        return get_or_declare_c_function(fn_name);
     };
 
     auto array_ptr_from_value = [&](Value *arr, const std::string &label) -> Value *
@@ -442,7 +439,7 @@ Value *CodeGen::codegen_std_intrinsic_call(const std::string &name, const ast::C
         Function *freeFn = get_c_function("free");
         if (!freeFn)
         {
-            error("free is not registered");
+            error("free is not available");
             return nullptr;
         }
         builder.CreateCall(freeFn, {dataPtr});
@@ -470,7 +467,7 @@ Value *CodeGen::codegen_std_intrinsic_call(const std::string &name, const ast::C
         Function *fn = get_c_function(c_name);
         if (!fn)
         {
-            error(c_name + " is not registered");
+            error(c_name + " is not available");
             return nullptr;
         }
 
@@ -551,7 +548,7 @@ Value *CodeGen::codegen_std_intrinsic_call(const std::string &name, const ast::C
         Function *fn = get_c_function(c_name);
         if (!fn)
         {
-            error(c_name + " is not registered");
+            error(c_name + " is not available");
             return nullptr;
         }
 
@@ -595,6 +592,11 @@ Value *CodeGen::codegen_std_intrinsic_call(const std::string &name, const ast::C
             return builder.CreateSelect(builder.CreateICmpSLT(arg, zero), builder.CreateNeg(arg), arg, "math.abs");
         }
         Function *fabsFn = get_c_function("fabs");
+        if (!fabsFn)
+        {
+            error("fabs is not available");
+            return nullptr;
+        }
         return builder.CreateCall(fabsFn, {to_double(arg, "math.abs.double")}, "call_fabs");
     }
 
@@ -613,7 +615,7 @@ Value *CodeGen::codegen_std_intrinsic_call(const std::string &name, const ast::C
         Function *fn = get_c_function(c_name);
         if (!fn)
         {
-            error(c_name + " is not registered");
+            error(c_name + " is not available");
             return nullptr;
         }
 

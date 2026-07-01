@@ -48,8 +48,6 @@ namespace codegen
         std::vector<llvm::BasicBlock *> break_targets;
         std::vector<llvm::BasicBlock *> continue_targets;
 
-        llvm::FunctionCallee printf_fn;
-
         std::unordered_map<std::string, llvm::StructType *> struct_types;
         std::unordered_map<std::string, const ast::StructDecl *> struct_decls;
 
@@ -134,7 +132,7 @@ namespace codegen
         bool is_local_const(const std::string &name);
 
         void predeclare_functions(const std::vector<const ast::FuncDecl *> &funcs);
-        void register_builtin_ffi();
+        llvm::Function *get_or_declare_c_function(const std::string &name);
 
         void error(const std::string &msg);
         bool failed = false;
