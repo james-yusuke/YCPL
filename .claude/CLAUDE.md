@@ -6,7 +6,10 @@ and editor integrations.
 ## Common commands
 
 ```sh
-cmake -S . -B build -DLLVM_DIR=/usr/lib/llvm-18/cmake
+scripts/setup-llvm.sh 22
+bazel build //:ycc
+bazel test //...
+cmake -S . -B build -DLLVM_DIR=/usr/lib/llvm-22/cmake
 cmake --build build
 examples/run_tests.sh
 npm ci --prefix editors/vscode

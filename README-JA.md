@@ -69,35 +69,40 @@ Repository
 ```text
 開発者
    |
-   | cmake -DLLVM_DIR=/path/to/llvm ..
+   | bazel build //:ycc
    v
-CMake ---- 検出 ----> LLVM 18+
+Bazel ---- 設定 ----> llvm-config 経由の LLVM 22
    |
-   | make
    v
-build/ycc
+bazel-bin/ycc
 ```
 
 ```sh
-mkdir build
-cd build
-cmake -DLLVM_DIR=/your/llvm/path/cmake ..
-make
+scripts/setup-llvm.sh 22
+bazel build //:ycc
+bazel test //...
+```
+
+LLVM 22 を system に入れている場合は CMake も使えます。
+
+```sh
+cmake -S . -B build -DLLVM_DIR=/path/to/llvm-22/cmake
+cmake --build build
 ```
 
 ## コンパイル
 
 ```text
 単一ファイル:
-  examples/01_hello.yc -> build/ycc -> LLVM IR
+  examples/01_hello.yc -> ycc -> LLVM IR
 
 プロジェクト:
-  YCPL.json -> src/*.yc を走査 -> build/ycc build -> LLVM IR
+  YCPL.json -> src/*.yc を走査 -> ycc build -> LLVM IR
 ```
 
 ```sh
-build/ycc examples/01_hello.yc -o /tmp/ycpl_hello
-cd examples/04_module_project && ../../build/ycc build
+bazel run //:ycc -- examples/01_hello.yc -o /tmp/ycpl_hello
+cd examples/04_module_project && ../../bazel-bin/ycc build
 ```
 
 ## 言語スナップショット

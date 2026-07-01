@@ -27,7 +27,7 @@ llvm::Type *CodeGen::resolve_type_from_ast_local(const ast::Type *astType)
         llvm::Type *innerType = resolve_type_from_ast_local(pointerType->base.get());
         if (!innerType)
             innerType = get_int_type();
-        return llvm::PointerType::getUnqual(innerType);
+        return codegen::detail::getPtrTy(context);
     }
 
     if (auto arrayType = dynamic_cast<const ast::ArrayType *>(astType))
@@ -36,7 +36,7 @@ llvm::Type *CodeGen::resolve_type_from_ast_local(const ast::Type *astType)
         if (!elementType)
             elementType = get_int_type();
 
-        return llvm::PointerType::getUnqual(elementType);
+        return codegen::detail::getPtrTy(context);
     }
 
     if (auto funcTypeAst = dynamic_cast<const ast::FuncType *>(astType))
@@ -56,8 +56,7 @@ llvm::Type *CodeGen::resolve_type_from_ast_local(const ast::Type *astType)
         if (!returnType)
             returnType = get_int_type();
 
-        llvm::FunctionType *functionType = llvm::FunctionType::get(returnType, paramTypes, /*isVarArg=*/false);
-        return llvm::PointerType::getUnqual(functionType);
+        return codegen::detail::getPtrTy(context);
     }
 
     return nullptr;
@@ -66,8 +65,6 @@ llvm::Type *CodeGen::resolve_type_from_ast_local(const ast::Type *astType)
 void CodeGen::predeclare_functions(const std::vector<const ast::FuncDecl *> &funcDecls)
 {
     register_builtin_ffi();
-
-    LLVMContext &context = builder.getContext();
 
     for (const ast::FuncDecl *funcDecl : funcDecls)
     {
@@ -178,8 +175,6 @@ Function *CodeGen::codegen_function_decl(const ast::FuncDecl *funcDecl)
     std::string llvmName = funcDecl->link_name.empty() ? funcDecl->name : funcDecl->link_name;
 
     LLVMContext &context = builder.getContext();
-    Module *M = module.get();
-
     bool isVarArg = false;
     if (!funcDecl->params.empty() && funcDecl->params.back().variadic)
         isVarArg = true;
@@ -310,7 +305,7 @@ Function *CodeGen::codegen_function_decl(const ast::FuncDecl *funcDecl)
         if (!elemType)
             elemType = get_int_type();
 
-        llvm::Type *holderType = llvm::PointerType::getUnqual(elemType);
+        llvm::Type *holderType = codegen::detail::getPtrTy(context);
         Value *varAlloca = entryBuilder.CreateAlloca(holderType, nullptr, vparam.name);
 
         entryBuilder.CreateStore(Constant::getNullValue(holderType), varAlloca);

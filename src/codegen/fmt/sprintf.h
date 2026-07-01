@@ -27,8 +27,7 @@ Value *CodeGen::codegen_sprintf_call(const ast::CallExpr *ce)
     if (!fmtArg)
         return nullptr;
 
-    Type *i8Ty = Type::getInt8Ty(context);
-    PointerType *i8PtrTy = PointerType::getUnqual(i8Ty);
+    PointerType *i8PtrTy = detail::getPtrTy(context);
 
     if (destArg->getType() != i8PtrTy)
     {

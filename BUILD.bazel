@@ -1,23 +1,73 @@
-cc_binary(
-    name = "ycc",
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library")
+load("@rules_shell//shell:sh_test.bzl", "sh_test")
+
+package(default_visibility = ["//visibility:public"])
+
+cc_library(
+    name = "ycclib",
     srcs = [
-        "src/main.cpp",
-        "src/lexer/lexer.cpp",
-        "src/parser/parser.cpp",
-        "src/codegen/codegen.cpp",
         "src/ast/ast.cpp",
+        "src/codegen/codegen.cpp",
+        "src/lexer/lexer.cpp",
+        "src/module/json.cpp",
+        "src/module/resolver.cpp",
+        "src/parser/parser.cpp",
     ],
+    hdrs = glob([
+        "src/**/*.h",
+    ]),
     copts = [
         "-std=c++20",
-        "-Iexternal/llvm_homebrew/include",
+        "-I.",
     ],
-    linkopts = [
-        "-Lexternal/llvm_homebrew/lib",
-        "-lLLVMCore",
-        "-lLLVMIRReader",
-        "-lLLVMExecutionEngine",
-        "-lLLVMNative",
-        "-lLLVMOrcJIT",
-        "-lLLVMSupport",
+    deps = [
+        "@llvm_config//:llvm",
     ],
+)
+
+cc_binary(
+    name = "ycc",
+    srcs = ["tools/cli/ycc/ycc.cpp"],
+    copts = [
+        "-std=c++20",
+        "-I.",
+    ],
+    deps = [
+        ":ycclib",
+    ],
+)
+
+cc_binary(
+    name = "ycc_legacy",
+    srcs = ["src/main.cpp"],
+    copts = [
+        "-std=c++20",
+        "-I.",
+    ],
+    deps = [
+        ":ycclib",
+    ],
+)
+
+sh_test(
+    name = "examples_test",
+    srcs = ["//tools/bazel:run_examples_test.sh"],
+    data = [
+        ":ycc",
+    ] + glob([
+        "examples/**",
+        "stl/**",
+    ]),
+)
+
+sh_test(
+    name = "lsp_protocol_test",
+    srcs = ["//tools/bazel:run_lsp_protocol_test.sh"],
+    data = [
+        ":ycc",
+    ] + glob([
+        "stl/**",
+        "tools/lsp/**",
+    ]),
+    tags = ["no-sandbox"],
 )

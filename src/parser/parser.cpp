@@ -1226,7 +1226,7 @@ namespace path
 
             std::unique_ptr<ast::Type> arrType = std::move(base);
 
-            for (char c : ptr_prefix)
+            for (size_t i = 0; i < ptr_prefix.size(); ++i)
             {
                 arrType = std::make_unique<ast::PointerType>(std::move(arrType));
             }
@@ -1246,7 +1246,7 @@ namespace path
             base = std::make_unique<ast::NamedType>(t.lexeme);
         }
 
-        for (char c : ptr_prefix)
+        for (size_t i = 0; i < ptr_prefix.size(); ++i)
         {
             base = std::make_unique<ast::PointerType>(std::move(base));
         }
@@ -1338,7 +1338,7 @@ namespace path
                     {
 
                         std::unique_ptr<ast::Type> base = std::make_unique<ast::NamedType>("int");
-                        for (char c : prefix_before_name)
+                        for (size_t i = 0; i < prefix_before_name.size(); ++i)
                         {
                             base = std::make_unique<ast::PointerType>(std::move(base));
                         }

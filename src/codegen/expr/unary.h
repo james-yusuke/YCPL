@@ -246,7 +246,7 @@ Value *CodeGen::codegen_unary(const ast::UnaryExpr *ue)
         }
 
         Type *targetType = Type::getInt32Ty(builder.getContext());
-        Value *castedPtr = builder.CreateBitCast(ptrVal, targetType->getPointerTo());
+        Value *castedPtr = builder.CreateBitCast(ptrVal, detail::getPtrTy(context));
 
         Value *loaded = builder.CreateLoad(
             targetType,

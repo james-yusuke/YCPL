@@ -45,10 +45,10 @@ Value *CodeGen::codegen_len_call(const ast::CallExpr *ce)
     }
 
     Module *M = module.get();
-    DataLayout dl(M);
+    const DataLayout &dl = M->getDataLayout();
 
     StructType *arrayStruct = detail::getOrCreateArrayStruct(context);
-    Type *arrayPtrTy = arrayStruct->getPointerTo();
+    Type *arrayPtrTy = detail::getPtrTy(context);
 
     Type *arrTy = arr->getType();
 
@@ -58,8 +58,7 @@ Value *CodeGen::codegen_len_call(const ast::CallExpr *ce)
     if (arrTy->isPointerTy() && isStr)
     {
 
-        Type *i8Ty = IntegerType::get(context, 8);
-        Type *i8PtrTy = PointerType::get(i8Ty, arrTy->getPointerAddressSpace());
+        Type *i8PtrTy = detail::getPtrTy(context, arrTy->getPointerAddressSpace());
         Value *strPtr = builder.CreateBitCast(arr, i8PtrTy, "str_cast");
 
         unsigned ptrBits = dl.getPointerSizeInBits();

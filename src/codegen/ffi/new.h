@@ -47,11 +47,11 @@ Value *CodeGen::codegen_new_call(const ast::CallExpr *ce)
 
     LLVMContext &ctx = builder.getContext();
 
-    PointerType *i8ptrTy = Type::getInt8Ty(context)->getPointerTo();
+    PointerType *i8ptrTy = detail::getPtrTy(context);
     Type *i64 = Type::getInt64Ty(ctx);
 
     StructType *sliceTy = StructType::get(ctx, {i8ptrTy, i64, i64, i64});
-    PointerType *slicePtrTy = PointerType::getUnqual(sliceTy);
+    PointerType *slicePtrTy = detail::getPtrTy(context);
 
     const DataLayout &dl = module->getDataLayout();
     uint64_t sliceSizeBytes = dl.getTypeAllocSize(sliceTy);

@@ -12,13 +12,13 @@ Value *CodeGen::codegen_index_addr(const ast::IndexExpr *ie)
 {
     Module *M = module.get();
 
-    DataLayout dl(M);
+    const DataLayout &dl = M->getDataLayout();
     unsigned ptrSizeBits = dl.getPointerSizeInBits();
     uint64_t ptrSizeBytes = ptrSizeBits / 8;
     Type *ptrIntTy = IntegerType::get(context, ptrSizeBits);
 
     StructType *arrayStruct = detail::getOrCreateArrayStruct(context);
-    PointerType *arrayPtrTy = PointerType::getUnqual(arrayStruct);
+    PointerType *arrayPtrTy = detail::getPtrTy(context);
 
     Value *colVal = this->codegen_expr(ie->collection.get());
     if (!colVal)
@@ -51,7 +51,6 @@ Value *CodeGen::codegen_index_addr(const ast::IndexExpr *ie)
             if (pt.base == "string_params" && pt.array_depth == 0)
             {
                 Type *i8Ty = Type::getInt8Ty(context);
-                PointerType *i8PtrTy = PointerType::getUnqual(i8Ty);
                 Value *v = lookup_local(id->name);
 
                 Type *i64Ty = detail::getI64Ty(context);
@@ -135,7 +134,7 @@ Value *CodeGen::codegen_index_addr(const ast::IndexExpr *ie)
         }
     }
 
-    Value *lenFieldPtr = builder.CreateStructGEP(arrayStruct, arrPtr, /*fieldNo=*/1, "len_ptr");
+    Value *lenFieldPtr = detail::createStructFieldGEP(builder, arrayStruct, arrPtr, /*fieldNo=*/1, "len_ptr");
     Value *lenVal = builder.CreateLoad(i64Ty, lenFieldPtr, "len");
     Value *inRange = builder.CreateICmpULT(idxVal, lenVal, "idx_in_range");
 
@@ -156,12 +155,12 @@ Value *CodeGen::codegen_index_addr(const ast::IndexExpr *ie)
     builder.SetInsertPoint(okBB);
 
     Type *i8Ty = Type::getInt8Ty(context);
-    PointerType *i8PtrTy = PointerType::getUnqual(i8Ty);
+    PointerType *i8PtrTy = detail::getPtrTy(context);
 
-    Value *dataFieldPtr = builder.CreateStructGEP(arrayStruct, arrPtr, /*fieldNo=*/0, "data_field_ptr");
+    Value *dataFieldPtr = detail::createStructFieldGEP(builder, arrayStruct, arrPtr, /*fieldNo=*/0, "data_field_ptr");
     Value *dataPtr = builder.CreateLoad(i8PtrTy, dataFieldPtr, "data_ptr");
 
-    Value *elemSizePtr = builder.CreateStructGEP(arrayStruct, arrPtr, /*fieldNo=*/3, "elem_size_ptr");
+    Value *elemSizePtr = detail::createStructFieldGEP(builder, arrayStruct, arrPtr, /*fieldNo=*/3, "elem_size_ptr");
     Value *elemSizeVal = builder.CreateLoad(i64Ty, elemSizePtr, "elem_size");
 
     Value *offsetBytes = builder.CreateMul(idxVal, elemSizeVal, "offset_bytes");
@@ -194,7 +193,7 @@ Value *CodeGen::codegen_index_addr(const ast::IndexExpr *ie)
 
     if (staticElemIsArrayPtr)
     {
-        PointerType *arrayPtrPtrTy = PointerType::getUnqual(arrayPtrTy);
+        PointerType *arrayPtrPtrTy = detail::getPtrTy(context);
         Value *typedPtr = builder.CreateBitCast(elemPtrI8, arrayPtrPtrTy, "elem_ptr_to_arrptr_addr");
         return typedPtr;
     }
@@ -211,7 +210,7 @@ Value *CodeGen::codegen_index_addr(const ast::IndexExpr *ie)
             uint64_t stSize = dl.getTypeAllocSize(st);
             if (stSize == esz)
             {
-                PointerType *structPtrTy = PointerType::getUnqual(st);
+                PointerType *structPtrTy = detail::getPtrTy(context);
                 Value *structPtr = builder.CreateBitCast(elemPtrI8, structPtrTy, "elem_struct_ptr_addr");
                 return structPtr;
             }
@@ -219,29 +218,29 @@ Value *CodeGen::codegen_index_addr(const ast::IndexExpr *ie)
 
         if (esz == ptrSizeBytes)
         {
-            PointerType *i8PtrPtrTy = PointerType::getUnqual(i8PtrTy);
+            PointerType *i8PtrPtrTy = detail::getPtrTy(context);
             Value *typedPtr = builder.CreateBitCast(elemPtrI8, i8PtrPtrTy, "elem_ptr_to_i8ptrptr_addr");
             return typedPtr;
         }
 
         if (esz == 8)
         {
-            PointerType *i64PtrTy = PointerType::getUnqual(IntegerType::get(context, 64));
+            PointerType *i64PtrTy = detail::getPtrTy(context);
             return builder.CreateBitCast(elemPtrI8, i64PtrTy, "elem_ptr_i64_addr");
         }
         else if (esz == 4)
         {
-            PointerType *i32PtrTy = PointerType::getUnqual(IntegerType::get(context, 32));
+            PointerType *i32PtrTy = detail::getPtrTy(context);
             return builder.CreateBitCast(elemPtrI8, i32PtrTy, "elem_ptr_i32_addr");
         }
         else if (esz == 2)
         {
-            PointerType *i16PtrTy = PointerType::getUnqual(IntegerType::get(context, 16));
+            PointerType *i16PtrTy = detail::getPtrTy(context);
             return builder.CreateBitCast(elemPtrI8, i16PtrTy, "elem_ptr_i16_addr");
         }
         else if (esz == 1)
         {
-            PointerType *i8PtrSingleTy = PointerType::getUnqual(IntegerType::get(context, 8));
+            PointerType *i8PtrSingleTy = detail::getPtrTy(context);
             return builder.CreateBitCast(elemPtrI8, i8PtrSingleTy, "elem_ptr_i8_addr");
         }
 
@@ -257,14 +256,14 @@ Value *CodeGen::codegen_index_addr(const ast::IndexExpr *ie)
 
             if (pt.base == "struct")
             {
-                PointerType *i8PtrPtrTy = PointerType::getUnqual(i8PtrTy);
+                PointerType *i8PtrPtrTy = detail::getPtrTy(context);
                 Value *typedPtr = builder.CreateBitCast(elemPtrI8, i8PtrPtrTy, "elem_ptr_to_i8ptrptr_dyn");
                 return typedPtr;
             }
 
             if (pt.base == "string" && pt.array_depth != 0)
             {
-                PointerType *i8PtrPtrTy = PointerType::getUnqual(i8PtrTy);
+                PointerType *i8PtrPtrTy = detail::getPtrTy(context);
                 Value *typedPtr = builder.CreateBitCast(elemPtrI8, i8PtrPtrTy, "elem_ptr_to_i8ptrptr_dyn_str");
                 return typedPtr;
             }

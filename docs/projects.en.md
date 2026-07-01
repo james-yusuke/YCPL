@@ -6,7 +6,7 @@ YCPL compiles either explicit `.yc` files or a project rooted by `YCPL.json`.
 
 ```text
 File mode:
-  build/ycc examples/01_hello.yc
+  bazel run //:ycc -- examples/01_hello.yc
       |
       v
   resolve modules -> write .ll
@@ -21,7 +21,7 @@ Project mode:
 ## Single File
 
 ```sh
-build/ycc examples/01_hello.yc -o /tmp/ycpl_hello
+bazel run //:ycc -- examples/01_hello.yc -o /tmp/ycpl_hello
 ```
 
 ## Project Layout
@@ -53,7 +53,7 @@ my_project/
 | `output` | Directory for generated LLVM IR |
 
 ```sh
-build/ycc build
+../../bazel-bin/ycc build
 ```
 
 ## Import Resolution

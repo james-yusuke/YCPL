@@ -1,0 +1,5 @@
+exports_files([
+    "llvm_configure.bzl",
+    "run_examples_test.sh",
+    "run_lsp_protocol_test.sh",
+])

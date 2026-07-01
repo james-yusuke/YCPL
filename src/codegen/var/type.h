@@ -60,12 +60,12 @@ llvm::Type *CodeGen::getLLVMType(const std::string &typeName)
 
     for (int i = 0; i < pt.array_depth; ++i)
     {
-        ty = codegen::detail::getOrCreateArrayStruct(context)->getPointerTo();
+        ty = detail::getPtrTy(context);
     }
 
     for (int i = 0; i < pt.pointer_depth; ++i)
     {
-        ty = llvm::PointerType::getUnqual(ty);
+        ty = codegen::detail::getPtrTy(context);
     }
 
     return ty;

@@ -2,7 +2,10 @@
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT_DIR="$(dirname "$SCRIPT_DIR")"
-YCC="$ROOT_DIR/build/ycc"
+YCC="${YCC:-$ROOT_DIR/build/ycc}"
+LLC="${LLC:-llc}"
+CLANG="${CLANG:-clang}"
+LINKFLAGS="${LINKFLAGS:--no-pie}"
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -88,7 +91,7 @@ compile_run_and_verify() {
         return 1
     fi
 
-    llc -filetype=obj "$ll_file" -o "$obj_file" 2>"$out_dir/llc.log"
+    "$LLC" -filetype=obj "$ll_file" -o "$obj_file" 2>"$out_dir/llc.log"
     if [ $? -ne 0 ]; then
         printf "${RED}FAIL${NC} (llc error)\n"
         cat "$out_dir/llc.log"
@@ -96,7 +99,7 @@ compile_run_and_verify() {
         return 1
     fi
 
-    clang "$obj_file" -o "$exe_file" -lm 2>"$out_dir/link.log"
+    "$CLANG" $LINKFLAGS "$obj_file" -o "$exe_file" -lm 2>"$out_dir/link.log"
     if [ $? -ne 0 ]; then
         printf "${RED}FAIL${NC} (link error)\n"
         cat "$out_dir/link.log"
@@ -163,7 +166,7 @@ compile_run_with_input_and_verify() {
         return 1
     fi
 
-    llc -filetype=obj "$ll_file" -o "$obj_file" 2>"$out_dir/llc.log"
+    "$LLC" -filetype=obj "$ll_file" -o "$obj_file" 2>"$out_dir/llc.log"
     if [ $? -ne 0 ]; then
         printf "${RED}FAIL${NC} (llc error)\n"
         cat "$out_dir/llc.log"
@@ -171,7 +174,7 @@ compile_run_with_input_and_verify() {
         return 1
     fi
 
-    clang "$obj_file" -o "$exe_file" -lm 2>"$out_dir/link.log"
+    "$CLANG" $LINKFLAGS "$obj_file" -o "$exe_file" -lm 2>"$out_dir/link.log"
     if [ $? -ne 0 ]; then
         printf "${RED}FAIL${NC} (link error)\n"
         cat "$out_dir/link.log"
@@ -230,7 +233,7 @@ test_project() {
     local obj_file="$out_dir/program.o"
     local exe_file="$out_dir/program"
 
-    llc -filetype=obj "$ll_file" -o "$obj_file" 2>"$out_dir/llc.log"
+    "$LLC" -filetype=obj "$ll_file" -o "$obj_file" 2>"$out_dir/llc.log"
     if [ $? -ne 0 ]; then
         printf "${RED}FAIL${NC} (llc error)\n"
         cat "$out_dir/llc.log"
@@ -238,7 +241,7 @@ test_project() {
         return 1
     fi
 
-    clang "$obj_file" -o "$exe_file" -lm 2>"$out_dir/link.log"
+    "$CLANG" $LINKFLAGS "$obj_file" -o "$exe_file" -lm 2>"$out_dir/link.log"
     if [ $? -ne 0 ]; then
         printf "${RED}FAIL${NC} (link error)\n"
         cat "$out_dir/link.log"
@@ -377,7 +380,7 @@ compile_run_expect_failure() {
         return 1
     fi
 
-    llc -filetype=obj "$ll_file" -o "$obj_file" 2>"$out_dir/llc.log"
+    "$LLC" -filetype=obj "$ll_file" -o "$obj_file" 2>"$out_dir/llc.log"
     if [ $? -ne 0 ]; then
         printf "${RED}FAIL${NC} (llc error)\n"
         cat "$out_dir/llc.log"
@@ -385,7 +388,7 @@ compile_run_expect_failure() {
         return 1
     fi
 
-    clang "$obj_file" -o "$exe_file" -lm 2>"$out_dir/link.log"
+    "$CLANG" $LINKFLAGS "$obj_file" -o "$exe_file" -lm 2>"$out_dir/link.log"
     if [ $? -ne 0 ]; then
         printf "${RED}FAIL${NC} (link error)\n"
         cat "$out_dir/link.log"

@@ -88,9 +88,8 @@ Value *CodeGen::codegen_std_intrinsic_call(const std::string &name, const ast::C
         if (!arr)
             return nullptr;
         Module *M = module.get();
-        DataLayout dl(M);
-        StructType *arrayStruct = detail::getOrCreateArrayStruct(context);
-        Type *arrayPtrTy = arrayStruct->getPointerTo();
+        const DataLayout &dl = M->getDataLayout();
+        Type *arrayPtrTy = detail::getPtrTy(context);
 
         if (arr->getType()->isPointerTy())
             return builder.CreatePointerCast(arr, arrayPtrTy, label);
@@ -124,7 +123,7 @@ Value *CodeGen::codegen_std_intrinsic_call(const std::string &name, const ast::C
     auto array_field = [&](Value *arrPtr, unsigned fieldNo, const std::string &label) -> Value *
     {
         StructType *arrayStruct = detail::getOrCreateArrayStruct(context);
-        return builder.CreateStructGEP(arrayStruct, arrPtr, fieldNo, label);
+        return detail::createStructFieldGEP(builder, arrayStruct, arrPtr, fieldNo, label);
     };
 
     auto checked_array_elem_i8 = [&](const ast::Expr *arrExpr, const ast::Expr *idxExpr, Value **elemSizeOut) -> Value *
@@ -147,7 +146,7 @@ Value *CodeGen::codegen_std_intrinsic_call(const std::string &name, const ast::C
         if (!idxVal)
             return nullptr;
 
-        Value *lenPtr = builder.CreateStructGEP(arrayStruct, arrPtr, 1, "array.len.ptr");
+        Value *lenPtr = detail::createStructFieldGEP(builder, arrayStruct, arrPtr, 1, "array.len.ptr");
         Value *lenVal = builder.CreateLoad(i64Ty, lenPtr, "array.len");
         Value *inRange = builder.CreateICmpULT(idxVal, lenVal, "array.idx.in_range");
 
@@ -163,9 +162,9 @@ Value *CodeGen::codegen_std_intrinsic_call(const std::string &name, const ast::C
         builder.CreateUnreachable();
 
         builder.SetInsertPoint(okBB);
-        Value *dataPtrPtr = builder.CreateStructGEP(arrayStruct, arrPtr, 0, "array.data.ptr.ptr");
+        Value *dataPtrPtr = detail::createStructFieldGEP(builder, arrayStruct, arrPtr, 0, "array.data.ptr.ptr");
         Value *dataPtr = builder.CreateLoad(i8ptrTy, dataPtrPtr, "array.data.ptr");
-        Value *elemSizePtr = builder.CreateStructGEP(arrayStruct, arrPtr, 3, "array.elem_size.ptr");
+        Value *elemSizePtr = detail::createStructFieldGEP(builder, arrayStruct, arrPtr, 3, "array.elem_size.ptr");
         Value *elemSize = builder.CreateLoad(i64Ty, elemSizePtr, "array.elem_size");
         if (elemSizeOut)
             *elemSizeOut = elemSize;
@@ -264,9 +263,9 @@ Value *CodeGen::codegen_std_intrinsic_call(const std::string &name, const ast::C
         }
 
         Module *M = module.get();
-        DataLayout dl(M);
+        const DataLayout &dl = M->getDataLayout();
         StructType *arrayStruct = detail::getOrCreateArrayStruct(context);
-        Type *arrayPtrTy = arrayStruct->getPointerTo();
+        Type *arrayPtrTy = detail::getPtrTy(context);
         Type *i64Ty = get_i64_type();
         Type *i8ptrTy = get_i8ptr_type();
 
@@ -338,11 +337,11 @@ Value *CodeGen::codegen_std_intrinsic_call(const std::string &name, const ast::C
                         elemTypeName += "*";
 
                     Type *elemTy = parsed.array_depth > 1
-                                       ? detail::getOrCreateArrayStruct(context)->getPointerTo()
+                                       ? detail::getPtrTy(context)
                                        : getLLVMType(elemTypeName);
                     if (elemTy)
                     {
-                        Value *typedPtr = builder.CreatePointerCast(elemPtrI8, PointerType::getUnqual(elemTy), "array.get.typed.ptr");
+                        Value *typedPtr = builder.CreatePointerCast(elemPtrI8, detail::getPtrTy(context), "array.get.typed.ptr");
                         return builder.CreateLoad(elemTy, typedPtr, "array.get.typed");
                     }
                 }
@@ -362,14 +361,14 @@ Value *CodeGen::codegen_std_intrinsic_call(const std::string &name, const ast::C
         builder.CreateCondBr(builder.CreateICmpEQ(elemSize, ConstantInt::get(i64Ty, 8)), case8BB, check4BB);
 
         builder.SetInsertPoint(case8BB);
-        Value *v8 = builder.CreateLoad(i64Ty, builder.CreatePointerCast(elemPtrI8, PointerType::getUnqual(i64Ty)), "array.get.i64");
+        Value *v8 = builder.CreateLoad(i64Ty, builder.CreatePointerCast(elemPtrI8, detail::getPtrTy(context)), "array.get.i64");
         builder.CreateBr(afterBB);
 
         builder.SetInsertPoint(check4BB);
         builder.CreateCondBr(builder.CreateICmpEQ(elemSize, ConstantInt::get(i64Ty, 4)), case4BB, check2BB);
 
         builder.SetInsertPoint(case4BB);
-        Value *v4raw = builder.CreateLoad(get_int_type(), builder.CreatePointerCast(elemPtrI8, PointerType::getUnqual(get_int_type())), "array.get.i32");
+        Value *v4raw = builder.CreateLoad(get_int_type(), builder.CreatePointerCast(elemPtrI8, detail::getPtrTy(context)), "array.get.i32");
         Value *v4 = builder.CreateSExt(v4raw, i64Ty, "array.get.i32.to_i64");
         builder.CreateBr(afterBB);
 
@@ -378,13 +377,13 @@ Value *CodeGen::codegen_std_intrinsic_call(const std::string &name, const ast::C
 
         builder.SetInsertPoint(case2BB);
         Type *i16Ty = Type::getInt16Ty(context);
-        Value *v2raw = builder.CreateLoad(i16Ty, builder.CreatePointerCast(elemPtrI8, PointerType::getUnqual(i16Ty)), "array.get.i16");
+        Value *v2raw = builder.CreateLoad(i16Ty, builder.CreatePointerCast(elemPtrI8, detail::getPtrTy(context)), "array.get.i16");
         Value *v2 = builder.CreateSExt(v2raw, i64Ty, "array.get.i16.to_i64");
         builder.CreateBr(afterBB);
 
         builder.SetInsertPoint(case1BB);
         Type *i8Ty = Type::getInt8Ty(context);
-        Value *v1raw = builder.CreateLoad(i8Ty, builder.CreatePointerCast(elemPtrI8, PointerType::getUnqual(i8Ty)), "array.get.i8");
+        Value *v1raw = builder.CreateLoad(i8Ty, builder.CreatePointerCast(elemPtrI8, detail::getPtrTy(context)), "array.get.i8");
         Value *v1 = builder.CreateSExt(v1raw, i64Ty, "array.get.i8.to_i64");
         builder.CreateBr(afterBB);
 
@@ -533,7 +532,7 @@ Value *CodeGen::codegen_std_intrinsic_call(const std::string &name, const ast::C
         }
 
         Type *llvmTy = nullptr;
-        if (auto arrayTy = dynamic_cast<const ast::ArrayType *>(typeExpr->type.get()))
+        if (dynamic_cast<const ast::ArrayType *>(typeExpr->type.get()))
             llvmTy = detail::getOrCreateArrayStruct(context);
         else
             llvmTy = resolve_type_from_ast(typeExpr->type.get());
@@ -542,7 +541,7 @@ Value *CodeGen::codegen_std_intrinsic_call(const std::string &name, const ast::C
             error("mem.sizeof cannot resolve type");
             return nullptr;
         }
-        DataLayout dl(module.get());
+        const DataLayout &dl = module->getDataLayout();
         return ConstantInt::get(get_i64_type(), dl.getTypeAllocSize(llvmTy));
     }
 

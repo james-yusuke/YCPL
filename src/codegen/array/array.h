@@ -11,7 +11,7 @@ using namespace codegen;
 Value *CodeGen::codegen_array(const ast::ArrayLiteral *alit)
 {
     Module *M = module.get();
-    DataLayout dl(M);
+    const DataLayout &dl = M->getDataLayout();
 
     std::vector<Value *> elemVals;
     elemVals.reserve(alit->elements.size());
@@ -34,12 +34,11 @@ Value *CodeGen::codegen_array(const ast::ArrayLiteral *alit)
     }
 
     StructType *arrayStruct = detail::getOrCreateArrayStruct(context);
-    PointerType *arrayPtrTy = PointerType::getUnqual(arrayStruct);
-    Type *i64Ty = IntegerType::get(context, 64);
+    PointerType *arrayPtrTy = detail::getPtrTy(context);
     Type *i32Ty = IntegerType::get(context, 32);
     Type *i8ptrTy = detail::getI8PtrTy(context);
 
-    DataLayout &dataLayout = dl;
+    const DataLayout &dataLayout = dl;
     uint64_t elemSizeBytes = (uint64_t)dataLayout.getTypeAllocSize(elemTy);
     Value *elemSizeConst = detail::constInt64(builder, elemSizeBytes);
 
@@ -79,7 +78,7 @@ Value *CodeGen::codegen_array(const ast::ArrayLiteral *alit)
 
     if (len > 0)
     {
-        PointerType *elemPtrTy = PointerType::getUnqual(elemTy);
+        PointerType *elemPtrTy = detail::getPtrTy(context);
         Value *typedDataPtr = builder.CreatePointerCast(rawDataPtr, elemPtrTy, "typed_data");
         for (uint64_t i = 0; i < len; ++i)
         {
@@ -113,7 +112,7 @@ Value *CodeGen::codegen_array(const ast::ArrayLiteral *alit)
     else
     {
 
-        PointerType *elemPtrTy = PointerType::getUnqual(elemTy);
+        PointerType *elemPtrTy = detail::getPtrTy(context);
         Value *typedDataPtr = builder.CreatePointerCast(rawDataPtr, elemPtrTy, "typed_data_for_init");
         Value *index0 = detail::constInt64(builder, 0);
         Value *slot0 = builder.CreateInBoundsGEP(elemTy, typedDataPtr, index0, "slot0");

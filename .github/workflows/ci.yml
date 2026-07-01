@@ -25,17 +25,21 @@ jobs:
             build-essential \
             clang \
             cmake \
+            curl \
+            gnupg \
             libcurl4-openssl-dev \
             libedit-dev \
             libffi-dev \
             libxml2-dev \
             libzstd-dev \
-            llvm-18 \
-            llvm-18-dev \
-            llvm-18-tools \
             nodejs \
             npm \
+            python3 \
+            wget \
             zlib1g-dev
+
+      - name: Install LLVM 22 for CMake fallback
+        run: scripts/setup-llvm.sh 22
 
       - name: Summarize pull request changes
         if: github.event_name == 'pull_request'
@@ -55,10 +59,27 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Configure compiler
-        run: cmake -S . -B build -DLLVM_DIR=/usr/lib/llvm-18/cmake
+        run: cmake -S . -B build -DLLVM_DIR=/usr/lib/llvm-22/cmake
 
       - name: Build compiler
         run: cmake --build build
+
+      - name: Set up Bazelisk
+        uses: bazelbuild/setup-bazelisk@v3
+
+      - name: Mount Bazel cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/bazel
+          key: bazel-${{ runner.os }}-${{ hashFiles('MODULE.bazel', 'MODULE.bazel.lock', 'BUILD.bazel', 'tools/bazel/**') }}
+          restore-keys: |
+            bazel-${{ runner.os }}-
+
+      - name: Build with Bazel
+        run: bazel build //...
+
+      - name: Test with Bazel
+        run: bazel test //...
 
       - name: Run compiler regression examples
         run: examples/run_tests.sh
@@ -80,8 +101,10 @@ jobs:
             echo
             echo "| Check | Command |"
             echo "|---|---|"
-            echo "| Compiler configure | \`cmake -S . -B build -DLLVM_DIR=/usr/lib/llvm-18/cmake\` |"
+            echo "| Compiler configure | \`cmake -S . -B build -DLLVM_DIR=/usr/lib/llvm-22/cmake\` |"
             echo "| Compiler build | \`cmake --build build\` |"
+            echo "| Bazel build | \`bazel build //...\` |"
+            echo "| Bazel test | \`bazel test //...\` |"
             echo "| Compiler examples | \`examples/run_tests.sh\` |"
             echo "| VSCode extension | \`npm ci --prefix editors/vscode && npm run check --prefix editors/vscode\` |"
             echo "| LSP protocol | \`tools/lsp/run_tests.sh\` |"

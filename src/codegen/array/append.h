@@ -18,19 +18,17 @@ Value *CodeGen::codegen_append_call(const ast::CallExpr *ce)
 
     Module *M = module.get();
     StructType *arrayStruct = detail::getOrCreateArrayStruct(context);
-    PointerType *arrayPtrTy = PointerType::getUnqual(arrayStruct);
+    PointerType *arrayPtrTy = detail::getPtrTy(context);
     Type *i64Ty = IntegerType::get(context, 64);
     Type *i32Ty = IntegerType::get(context, 32);
     Type *i8Ty = IntegerType::get(context, 8);
     Type *i8ptrTy = detail::getI8PtrTy(context);
-    DataLayout dl(M);
+    const DataLayout &dl = M->getDataLayout();
     unsigned ptrSizeBits = dl.getPointerSizeInBits();
     uint64_t ptrSizeBytes = ptrSizeBits / 8;
 
     Value *arr_lvalue_or_ptr = nullptr;
     const ast::IndexExpr *idxExpr = nullptr;
-
-    bool original_should_return_struct = false;
 
     auto e = ce->args[0].get();
     if (!e)
@@ -42,7 +40,6 @@ Value *CodeGen::codegen_append_call(const ast::CallExpr *ce)
         if (!arr_lvalue_or_ptr)
             return nullptr;
 
-        original_should_return_struct = (llvm::isa<AllocaInst>(arr_lvalue_or_ptr) || llvm::isa<GlobalVariable>(arr_lvalue_or_ptr));
     }
     else if (auto ie = dynamic_cast<const ast::IndexExpr *>(e))
     {
@@ -190,7 +187,7 @@ Value *CodeGen::codegen_append_call(const ast::CallExpr *ce)
         builder.CreateCondBr(isPtrSize, bbPtr, bbFb);
 
         builder.SetInsertPoint(bbPtr);
-        Value *asArrayPtrPtr = builder.CreatePointerCast(elem_slot_i8, PointerType::getUnqual(arrayPtrTy), "elem_as_arrayptr_ptr");
+        Value *asArrayPtrPtr = builder.CreatePointerCast(elem_slot_i8, detail::getPtrTy(context), "elem_as_arrayptr_ptr");
         Value *loadedArrPtr = builder.CreateLoad(arrayPtrTy, asArrayPtrPtr, "elem_loaded_arrayptr");
         builder.CreateBr(bbCont);
 
