@@ -480,7 +480,7 @@ namespace ast
             os << "Expr: MemberExpr (member = \"" << p->member << "\")\n";
             return;
         }
-        if (auto p = dynamic_cast<const IndexExpr *>(e))
+        if (dynamic_cast<const IndexExpr *>(e))
         {
             os << "Expr: IndexExpr\n";
             return;

@@ -140,13 +140,17 @@ For project-based examples:
 
 ```bash
 cd examples/04_module_project
-../../build/ycc build
+../../bazel-bin/ycc build
 ```
 
 Requirements:
-- YCPL compiler built (`cd build && make`)
-- LLVM tools (`llc`)
-- Clang (`-lm` is used when linking examples because `std/math` uses C math)
+- YCPL compiler built (`bazel build //:ycc` or `cmake --build build`)
+- LLVM tools (`llc`, or set `LLC=/path/to/llc`)
+- Clang (`clang`, or set `CLANG=/path/to/clang`; `-lm` is used when linking
+  examples because `std/math` uses C math)
+
+When using Bazel-provided tools, run through `bazel test //:examples_test` so
+the wrapper points the test runner at Bazel's `ycc`, `llc`, and `clang`.
 
 The YCPL LSP has its own fixture runner:
 

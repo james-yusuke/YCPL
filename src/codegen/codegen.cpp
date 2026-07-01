@@ -49,7 +49,7 @@ namespace codegen
         InitializeNativeTargetAsmPrinter();
         InitializeNativeTargetAsmParser();
 
-        Type *i8ptr = PointerType::get(Type::getInt8Ty(context), 0);
+        Type *i8ptr = detail::getPtrTy(context);
         FunctionType *printfType = FunctionType::get(IntegerType::getInt32Ty(context), {i8ptr}, true);
         printf_fn = module->getOrInsertFunction("printf", printfType);
     }
@@ -74,7 +74,7 @@ namespace codegen
     Type *CodeGen::get_double_type() { return Type::getDoubleTy(context); }
     Type *CodeGen::get_void_type() { return Type::getVoidTy(context); }
 
-    Type *CodeGen::get_i8ptr_type() { return PointerType::get(Type::getInt8Ty(context), 0); }
+    Type *CodeGen::get_i8ptr_type() { return detail::getPtrTy(context); }
 
     FunctionCallee CodeGen::get_printf()
     {
@@ -83,7 +83,10 @@ namespace codegen
 
     Value *CodeGen::make_global_string(const std::string &str, const std::string &name)
     {
-        return builder.CreateGlobalStringPtr(str, name.empty() ? ".str" : name);
+        GlobalVariable *gv = builder.CreateGlobalString(str, name.empty() ? ".str" : name);
+        Constant *zero = ConstantInt::get(Type::getInt32Ty(context), 0);
+        Constant *indices[] = {zero, zero};
+        return ConstantExpr::getInBoundsGetElementPtr(gv->getValueType(), gv, indices);
     }
 
     Value *CodeGen::create_entry_alloca(Function *func, Type *type, const std::string &name)
@@ -317,7 +320,7 @@ namespace codegen
             return codegen_ifstmt(ifs);
         }
 
-        if (auto bs = dynamic_cast<const ast::BreakStmt *>(s))
+        if (dynamic_cast<const ast::BreakStmt *>(s))
         {
             if (break_targets.empty())
             {
@@ -332,7 +335,7 @@ namespace codegen
             return nullptr;
         }
 
-        if (auto cs = dynamic_cast<const ast::ContinueStmt *>(s))
+        if (dynamic_cast<const ast::ContinueStmt *>(s))
         {
             if (continue_targets.empty())
             {
@@ -392,7 +395,7 @@ namespace codegen
 
         for (const auto &d : prog.decls)
         {
-            if (auto sd = dynamic_cast<const ast::StmtDecl *>(d.get()))
+            if (dynamic_cast<const ast::StmtDecl *>(d.get()))
             {
                 error("top-level statements are not supported in codegen (please define fn main)");
             }

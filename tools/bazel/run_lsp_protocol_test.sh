@@ -1,0 +1,67 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+RUNFILES_ROOT="${TEST_SRCDIR}/${TEST_WORKSPACE}"
+
+llvm_bindir() {
+  if [ -n "${LLVM_BINDIR:-}" ]; then
+    printf '%s\n' "$LLVM_BINDIR"
+    return 0
+  fi
+  if command -v llvm-config-22 >/dev/null 2>&1; then
+    llvm-config-22 --bindir
+    return 0
+  fi
+  if command -v llvm-config >/dev/null 2>&1; then
+    llvm-config --bindir
+    return 0
+  fi
+  return 1
+}
+
+LLVM_BIN="$(llvm_bindir || true)"
+
+export YCC="${RUNFILES_ROOT}/ycc"
+export LLC="${LLC:-${LLVM_BIN:+${LLVM_BIN}/llc}}"
+export CLANG="${CLANG:-${LLVM_BIN:+${LLVM_BIN}/clang}}"
+LINKFLAGS="${LINKFLAGS:--no-pie}"
+WORK_DIR="$(mktemp -d "${TMPDIR:-/tmp}/ycpl-lsp.XXXXXX")"
+export YCPL_LSP_PROJECT_DIR="${WORK_DIR}/tools-lsp"
+export YCPL_LSP_OUT_DIR="${YCPL_LSP_PROJECT_DIR}/build"
+
+if [ ! -x "$YCC" ]; then
+  printf 'Missing Bazel-built ycc: %s\n' "$YCC" >&2
+  exit 1
+fi
+if [ -z "$LLC" ]; then
+  LLC=llc
+fi
+if [ -z "$CLANG" ]; then
+  CLANG=clang
+fi
+if ! command -v "$LLC" >/dev/null 2>&1; then
+  printf 'Missing llc command: %s\n' "$LLC" >&2
+  exit 1
+fi
+if ! command -v "$CLANG" >/dev/null 2>&1; then
+  printf 'Missing clang command: %s\n' "$CLANG" >&2
+  exit 1
+fi
+
+rm -rf "$YCPL_LSP_PROJECT_DIR"
+cp -R "$RUNFILES_ROOT/tools/lsp" "$YCPL_LSP_PROJECT_DIR"
+ln -s "$RUNFILES_ROOT/stl" "$WORK_DIR/stl"
+
+(cd "$YCPL_LSP_PROJECT_DIR" && "$YCC" build)
+
+LL_FILE="$(find "$YCPL_LSP_OUT_DIR" -name '*.ll' | head -1)"
+if [ -z "$LL_FILE" ]; then
+  printf 'No LLVM IR generated in %s\n' "$YCPL_LSP_OUT_DIR" >&2
+  exit 1
+fi
+
+cd "$WORK_DIR"
+"$LLC" -filetype=obj "$LL_FILE" -o "$YCPL_LSP_OUT_DIR/YCPL-lsp.o"
+"$CLANG" $LINKFLAGS "$YCPL_LSP_OUT_DIR/YCPL-lsp.o" -o "$YCPL_LSP_OUT_DIR/YCPL-lsp" -lm
+
+exec python3 "$RUNFILES_ROOT/tools/lsp/check_protocol.py" "$YCPL_LSP_OUT_DIR/YCPL-lsp"

@@ -69,35 +69,40 @@ Repository
 ```text
 Developer
    |
-   | cmake -DLLVM_DIR=/path/to/llvm ..
+   | bazel build //:ycc
    v
-CMake ---- locates ----> LLVM 18+
+Bazel ---- configures ----> LLVM 22 via llvm-config
    |
-   | make
    v
-build/ycc
+bazel-bin/ycc
 ```
 
 ```sh
-mkdir build
-cd build
-cmake -DLLVM_DIR=/your/llvm/path/cmake ..
-make
+scripts/setup-llvm.sh 22
+bazel build //:ycc
+bazel test //...
+```
+
+CMake is still available when LLVM 22 is installed on the system:
+
+```sh
+cmake -S . -B build -DLLVM_DIR=/path/to/llvm-22/cmake
+cmake --build build
 ```
 
 ## Compile
 
 ```text
 Single file:
-  examples/01_hello.yc -> build/ycc -> LLVM IR
+  examples/01_hello.yc -> ycc -> LLVM IR
 
 Project:
-  YCPL.json -> scan src/*.yc -> build/ycc build -> LLVM IR
+  YCPL.json -> scan src/*.yc -> ycc build -> LLVM IR
 ```
 
 ```sh
-build/ycc examples/01_hello.yc -o /tmp/ycpl_hello
-cd examples/04_module_project && ../../build/ycc build
+bazel run //:ycc -- examples/01_hello.yc -o /tmp/ycpl_hello
+cd examples/04_module_project && ../../bazel-bin/ycc build
 ```
 
 ## Language Snapshot

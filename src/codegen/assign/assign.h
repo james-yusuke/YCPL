@@ -251,7 +251,6 @@ Value *CodeGen::codegen_assign(const ast::AssignStmt *as)
             else if (rv->getType()->isPointerTy() && elemTy->isStructTy())
             {
 
-                llvm::Type *pElem = rv->getType();
                 rv = builder.CreateLoad(elemTy, rv, "load_struct_for_store");
             }
             else
@@ -447,7 +446,7 @@ Value *CodeGen::codegen_assign(const ast::AssignStmt *as)
     if (pointeePtr)
     {
 
-        PointerType *targetPtrTy = PointerType::getUnqual(storeVal->getType());
+        PointerType *targetPtrTy = detail::getPtrTy(context);
         Value *lhsCast = pointeePtr;
         if (pointeePtr->getType() != targetPtrTy)
             lhsCast = builder.CreateBitCast(pointeePtr, targetPtrTy, "deref_ptr_bitcast");
@@ -461,7 +460,7 @@ Value *CodeGen::codegen_assign(const ast::AssignStmt *as)
         {
             Type *loadTy = storeVal->getType();
             Value *loadPtr = storePtr;
-            PointerType *targetPtrTy = PointerType::getUnqual(loadTy);
+            PointerType *targetPtrTy = detail::getPtrTy(context);
             if (loadPtr->getType() != targetPtrTy)
                 loadPtr = builder.CreateBitCast(loadPtr, targetPtrTy, "compound.ptr.bitcast");
             Value *current = builder.CreateLoad(loadTy, loadPtr, "compound.ptr.current");
@@ -477,7 +476,7 @@ Value *CodeGen::codegen_assign(const ast::AssignStmt *as)
             return nullptr;
         }
 
-        PointerType *targetPtrTy = PointerType::getUnqual(storeVal->getType());
+        PointerType *targetPtrTy = detail::getPtrTy(context);
         Value *lhsCast = storePtr;
         if (storePtr->getType() != targetPtrTy)
             lhsCast = builder.CreateBitCast(storePtr, targetPtrTy, "assign_ptr_bitcast");

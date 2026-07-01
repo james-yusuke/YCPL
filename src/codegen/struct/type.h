@@ -26,16 +26,6 @@ llvm::StructType *CodeGen::get_struct_type_from_value(Value *v, const std::strin
             return st;
     }
 
-    if (v->getType()->isPointerTy())
-    {
-        auto *pt = llvm::dyn_cast<llvm::PointerType>(v->getType());
-        if (pt)
-        {
-            if (auto *st = llvm::dyn_cast<llvm::StructType>(pt->getNonOpaquePointerElementType()))
-                return st;
-        }
-    }
-
     if (!varname.empty())
     {
         return lookup_struct_type(varname);
@@ -164,7 +154,7 @@ std::pair<llvm::StructType *, llvm::Value *> CodeGen::resolve_struct_and_ptr(llv
 
                     Value *loadedOpaque = builder.CreateLoad(pt, ai, ai->getName() + ".loaded_opaque");
 
-                    Type *expectedPtrTy = st->getPointerTo();
+                    Type *expectedPtrTy = detail::getPtrTy(context);
                     Value *casted = builder.CreateBitCast(loadedOpaque, expectedPtrTy, ai->getName() + ".bitcast_to_structptr");
 
                     return {st, casted};
@@ -198,7 +188,7 @@ std::pair<llvm::StructType *, llvm::Value *> CodeGen::resolve_struct_and_ptr(llv
                 {
                     StructType *st = it->second;
                     Value *loadedOpaque = builder.CreateLoad(pt, gv, gv->getName() + ".loaded_opaque");
-                    Value *casted = builder.CreateBitCast(loadedOpaque, st->getPointerTo(), gv->getName() + ".bitcast_to_structptr");
+                    Value *casted = builder.CreateBitCast(loadedOpaque, detail::getPtrTy(context), gv->getName() + ".bitcast_to_structptr");
                     return {st, casted};
                 }
             }
@@ -233,7 +223,7 @@ std::pair<llvm::StructType *, llvm::Value *> CodeGen::resolve_struct_and_ptr(llv
                 {
                     StructType *st = it->second;
 
-                    Value *casted = builder.CreateBitCast(arg, st->getPointerTo(), arg->getName() + ".bitcast_to_structptr");
+                    Value *casted = builder.CreateBitCast(arg, detail::getPtrTy(context), arg->getName() + ".bitcast_to_structptr");
 
                     return {st, casted};
                 }
@@ -264,7 +254,7 @@ std::pair<llvm::StructType *, llvm::Value *> CodeGen::resolve_struct_and_ptr(llv
             if (it != struct_types.end())
             {
                 StructType *st = it->second;
-                Value *casted = builder.CreateBitCast(v, st->getPointerTo(), "opaque_bitcast_to_structptr");
+                Value *casted = builder.CreateBitCast(v, detail::getPtrTy(context), "opaque_bitcast_to_structptr");
 
                 return {st, casted};
             }

@@ -28,7 +28,7 @@ Type *CodeGen::resolve_type_from_ast(const ast::Type *at)
         Type *inner = resolve_type_from_ast(ptr->base.get());
         if (!inner)
             inner = get_int_type();
-        return llvm::PointerType::getUnqual(inner);
+        return codegen::detail::getPtrTy(context);
     }
 
     if (auto arr = dynamic_cast<const ast::ArrayType *>(at))
@@ -37,7 +37,7 @@ Type *CodeGen::resolve_type_from_ast(const ast::Type *at)
         if (!elem)
             elem = get_int_type();
 
-        return llvm::PointerType::getUnqual(elem);
+        return codegen::detail::getPtrTy(context);
     }
 
     if (auto f = dynamic_cast<const ast::FuncType *>(at))
@@ -56,8 +56,7 @@ Type *CodeGen::resolve_type_from_ast(const ast::Type *at)
             ret = resolve_type_from_ast(f->ret.get());
         if (!ret)
             ret = get_int_type();
-        llvm::FunctionType *fty = llvm::FunctionType::get(ret, params, /*isVarArg=*/false);
-        return llvm::PointerType::getUnqual(fty);
+        return codegen::detail::getPtrTy(context);
     }
 
     return nullptr;
@@ -172,7 +171,7 @@ llvm::Type *CodeGen::resolve_type_by_name(const std::string &typeName)
         return nullptr;
 
     if (typeName == "string")
-        return llvm::PointerType::getUnqual(Type::getInt8Ty(context));
+        return codegen::detail::getPtrTy(context);
 
     if (typeName == "bool")
         return Type::getInt1Ty(context);
@@ -192,7 +191,7 @@ llvm::Type *CodeGen::resolve_type_by_name(const std::string &typeName)
         llvm::Type *t = resolve_type_by_name(inner);
         if (!t)
             t = get_int_type();
-        return llvm::PointerType::getUnqual(t);
+        return codegen::detail::getPtrTy(context);
     }
 
     if (typeName.rfind("[]", 0) == 0)
@@ -201,7 +200,7 @@ llvm::Type *CodeGen::resolve_type_by_name(const std::string &typeName)
         llvm::Type *et = resolve_type_by_name(inner);
         if (!et)
             et = get_int_type();
-        return llvm::PointerType::getUnqual(et);
+        return codegen::detail::getPtrTy(context);
     }
 
     if (typeName == "i32")
@@ -213,7 +212,7 @@ llvm::Type *CodeGen::resolve_type_by_name(const std::string &typeName)
     if (typeName == "void")
         return get_void_type();
     if (typeName == "string")
-        return llvm::PointerType::getUnqual(Type::getInt8Ty(context));
+        return codegen::detail::getPtrTy(context);
 
     auto it = struct_types.find(typeName);
     if (it != struct_types.end())
@@ -357,7 +356,7 @@ llvm::Value *CodeGen::codegen_struct_literal(const ast::StructLiteral *sl)
 
             if (srcElem != fieldTy)
             {
-                v = builder.CreateBitCast(v, PointerType::getUnqual(fieldTy), (typeName + ".field" + std::to_string(i) + ".cast_ptr").c_str());
+                v = builder.CreateBitCast(v, detail::getPtrTy(context), (typeName + ".field" + std::to_string(i) + ".cast_ptr").c_str());
             }
 
             Value *loadedStruct = builder.CreateLoad(fieldTy, v, (typeName + ".field" + std::to_string(i) + ".load").c_str());
@@ -571,7 +570,7 @@ Value *CodeGen::codegen_member_addr(const ast::MemberExpr *me)
     }
 
     {
-        PointerType *desiredPtrTy = PointerType::getUnqual(curStructTy);
+        PointerType *desiredPtrTy = detail::getPtrTy(context);
 
         if (basePtr->getType()->isIntegerTy())
         {

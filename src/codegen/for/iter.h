@@ -25,7 +25,7 @@ Value *CodeGen::codegen_forinstmt(const ast::ForInStmt *fs)
             if (parsed.array_depth > 0)
             {
                 StructType *arrayStruct = detail::getOrCreateArrayStruct(context);
-                Type *arrayPtrTy = arrayStruct->getPointerTo();
+                Type *arrayPtrTy = detail::getPtrTy(context);
                 Type *i64Ty = get_i64_type();
                 Type *i8Ty = Type::getInt8Ty(context);
                 Type *i8ptrTy = get_i8ptr_type();
@@ -34,11 +34,11 @@ Value *CodeGen::codegen_forinstmt(const ast::ForInStmt *fs)
                 if (arrPtr->getType() != arrayPtrTy)
                     arrPtr = builder.CreatePointerCast(arrPtr, arrayPtrTy, "forin.array.ptr");
 
-                Value *lenPtr = builder.CreateStructGEP(arrayStruct, arrPtr, 1, "forin.array.len.ptr");
+                Value *lenPtr = detail::createStructFieldGEP(builder, arrayStruct, arrPtr, 1, "forin.array.len.ptr");
                 Value *lenVal = builder.CreateLoad(i64Ty, lenPtr, "forin.array.len");
-                Value *dataPtrPtr = builder.CreateStructGEP(arrayStruct, arrPtr, 0, "forin.array.data.ptr.ptr");
+                Value *dataPtrPtr = detail::createStructFieldGEP(builder, arrayStruct, arrPtr, 0, "forin.array.data.ptr.ptr");
                 Value *dataPtr = builder.CreateLoad(i8ptrTy, dataPtrPtr, "forin.array.data");
-                Value *elemSizePtr = builder.CreateStructGEP(arrayStruct, arrPtr, 3, "forin.array.elem_size.ptr");
+                Value *elemSizePtr = detail::createStructFieldGEP(builder, arrayStruct, arrPtr, 3, "forin.array.elem_size.ptr");
                 Value *elemSize = builder.CreateLoad(i64Ty, elemSizePtr, "forin.array.elem_size");
 
                 Value *idxAlloca = create_entry_alloca(F, i64Ty, ".forin.array.idx");
@@ -83,7 +83,7 @@ Value *CodeGen::codegen_forinstmt(const ast::ForInStmt *fs)
                 Value *idxInBody = builder.CreateLoad(i64Ty, idxAlloca, ".forin.array.idx.load2");
                 Value *offset = builder.CreateMul(idxInBody, elemSize, "forin.array.offset");
                 Value *slotI8 = builder.CreateInBoundsGEP(i8Ty, dataPtr, {offset}, "forin.array.slot.i8");
-                Value *slot = builder.CreatePointerCast(slotI8, PointerType::getUnqual(elemTy), "forin.array.slot");
+                Value *slot = builder.CreatePointerCast(slotI8, detail::getPtrTy(context), "forin.array.slot");
                 Value *elemVal = builder.CreateLoad(elemTy, slot, "forin.array.elem");
                 builder.CreateStore(elemVal, varAlloca);
 
@@ -114,7 +114,7 @@ Value *CodeGen::codegen_forinstmt(const ast::ForInStmt *fs)
     if (iterV->getType()->isPointerTy())
     {
         Type *i8Ty = Type::getInt8Ty(context);
-        Type *i8ptr = PointerType::get(i8Ty, 0);
+        Type *i8ptr = detail::getPtrTy(context);
         Value *strPtr = iterV;
         if (iterV->getType() != i8ptr)
             strPtr = builder.CreateBitCast(iterV, i8ptr, "strptr_cast");
