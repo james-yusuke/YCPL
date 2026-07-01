@@ -8,6 +8,7 @@ find_package(LLVM REQUIRED CONFIG PATHS /opt/homebrew/opt/llvm@18/lib/cmake/llvm
 
 include_directories(${LLVM_INCLUDE_DIRS})
 add_definitions(${LLVM_DEFINITIONS})
+include_directories(${CMAKE_CURRENT_SOURCE_DIR})
 
 llvm_map_components_to_libnames(LLVM_LIBS
     core
@@ -31,7 +32,7 @@ add_library(ycclib
 target_link_libraries(ycclib ${LLVM_LIBS})
 
 add_executable(ycc
-    cli/ycc/ycc.cpp
+    tools/cli/ycc/ycc.cpp
 )
 
 target_link_libraries(ycc ycclib ${LLVM_LIBS})
