@@ -50,7 +50,7 @@ LLC="${LLC:-llc}"
 CLANG="${CLANG:-clang}"
 
 mkdir -p "$OUT_DIR"
-(cd "$PROJECT_DIR" && "$YCC" build)
+(cd "$PROJECT_DIR" && "$YCC" build-ir)
 
 LL_FILE="$(find "$OUT_DIR" -name '*.ll' | head -1)"
 if [ -z "$LL_FILE" ]; then

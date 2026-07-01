@@ -64,8 +64,6 @@ llvm::Type *CodeGen::resolve_type_from_ast_local(const ast::Type *astType)
 
 void CodeGen::predeclare_functions(const std::vector<const ast::FuncDecl *> &funcDecls)
 {
-    register_builtin_ffi();
-
     for (const ast::FuncDecl *funcDecl : funcDecls)
     {
         if (!funcDecl)
@@ -75,6 +73,7 @@ void CodeGen::predeclare_functions(const std::vector<const ast::FuncDecl *> &fun
             continue;
 
         std::string llvmName = funcDecl->link_name.empty() ? funcDecl->name : funcDecl->link_name;
+        bool is_main = (llvmName == "main");
 
         if (function_protos.find(llvmName) != function_protos.end())
             continue;
@@ -118,6 +117,10 @@ void CodeGen::predeclare_functions(const std::vector<const ast::FuncDecl *> &fun
             else
                 returnType = get_int_type();
         }
+        else if (is_main)
+        {
+            returnType = get_int_type();
+        }
 
         FunctionType *functionType = FunctionType::get(returnType, argTypes, isVarArg);
 
@@ -128,7 +131,6 @@ void CodeGen::predeclare_functions(const std::vector<const ast::FuncDecl *> &fun
             continue;
         }
 
-        bool is_main = (llvmName == "main");
         auto linkage = (funcDecl->is_extern || funcDecl->is_pub || is_main) ? Function::ExternalLinkage : Function::InternalLinkage;
         Function *fn = Function::Create(functionType, linkage, llvmName, module.get());
 
@@ -173,6 +175,8 @@ Function *CodeGen::codegen_function_decl(const ast::FuncDecl *funcDecl)
     }
 
     std::string llvmName = funcDecl->link_name.empty() ? funcDecl->name : funcDecl->link_name;
+    bool is_main = (llvmName == "main");
+    bool main_implicit_i32 = is_main && !funcDecl->ret_type;
 
     LLVMContext &context = builder.getContext();
     bool isVarArg = false;
@@ -212,13 +216,16 @@ Function *CodeGen::codegen_function_decl(const ast::FuncDecl *funcDecl)
         else
             returnType = get_int_type();
     }
+    else if (is_main)
+    {
+        returnType = get_int_type();
+    }
 
     FunctionType *functionType = FunctionType::get(returnType, argTypes, isVarArg);
 
     Function *functionValue = module->getFunction(llvmName);
     if (!functionValue)
     {
-        bool is_main = (llvmName == "main");
         auto linkage = (funcDecl->is_extern || funcDecl->is_pub || is_main) ? Function::ExternalLinkage : Function::InternalLinkage;
         functionValue = Function::Create(functionType, linkage, llvmName, module.get());
         function_protos[llvmName] = functionValue;
@@ -323,6 +330,8 @@ Function *CodeGen::codegen_function_decl(const ast::FuncDecl *funcDecl)
         {
             if (returnType->isVoidTy())
                 builder.CreateRetVoid();
+            else if (main_implicit_i32)
+                builder.CreateRet(ConstantInt::get(returnType, 0));
             else
             {
                 error("non-void function is missing an explicit return");

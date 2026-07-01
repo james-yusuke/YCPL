@@ -141,12 +141,13 @@ For project-based examples:
 ```bash
 cd examples/04_module_project
 ../../bazel-bin/ycc build
+../../bazel-bin/ycc build-ir
 ```
 
 Requirements:
 - YCPL compiler built (`bazel build //:ycc` or `cmake --build build`)
-- LLVM tools (`llc`, or set `LLC=/path/to/llc`)
-- Clang (`clang`, or set `CLANG=/path/to/clang`; `-lm` is used when linking
+- LLVM tools (`llc`, or set `LLC=/path/to/llc`; `build-ir` does not need `llc`)
+- Clang (`clang`, or set `CLANG=/path/to/clang`; `ycc build` uses `-lm` when linking
   examples because `std/math` uses C math)
 
 When using Bazel-provided tools, run through `bazel test //:examples_test` so

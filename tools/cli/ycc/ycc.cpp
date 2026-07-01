@@ -10,31 +10,43 @@
 #include <filesystem>
 #include <vector>
 #include <memory>
+#include <cstdlib>
+#include <cstdio>
+#include <array>
 
 namespace fs = std::filesystem;
+
+enum class OutputMode
+{
+    BuildNative,
+    EmitIR,
+    Debug
+};
 
 static void print_help(const char *exec)
 {
     std::cout << "Usage:\n"
                  "  "
-              << exec << " [options] <file.yc | dir>\n"
+              << exec << " build [options] <file.yc | dir>\n"
                          "  "
-              << exec << " [options] <file1.yc file2.yc ...>\n"
+              << exec << " build-ir [options] <file1.yc file2.yc ...>\n"
                          "\n"
                          "Modes:\n"
-                         "  ll                Emit LLVM IR only\n"
+                         "  build             Build a native executable (default)\n"
+                         "  build-ir          Emit LLVM IR only\n"
+                         "  ll                Alias for build-ir\n"
                          "  debug             Show tokens, AST, and LLVM IR\n"
-                         "  build             Build project from YCPL.json\n"
                          "  help              Show this help\n"
                          "\n"
                          "Options:\n"
                          "  -o <dir>          Output directory (default: current directory)\n"
+                         "  --keep-obj        Keep the intermediate object file when building native\n"
                          "\n"
                          "Examples:\n"
                          "  "
-              << exec << " main.yc\n"
+              << exec << " build main.yc -o build\n"
                          "  "
-              << exec << " src/ -o build\n"
+              << exec << " build-ir src/ -o build\n"
                          "  "
               << exec << " build              # Uses YCPL.json\n"
                          "  "
@@ -119,6 +131,162 @@ static fs::path find_YCPL_json()
     return {};
 }
 
+static std::string shell_quote(const fs::path &path)
+{
+    std::string text = path.string();
+    std::string quoted = "'";
+    for (char ch : text)
+    {
+        if (ch == '\'')
+            quoted += "'\\''";
+        else
+            quoted += ch;
+    }
+    quoted += "'";
+    return quoted;
+}
+
+static std::string shell_quote(const std::string &text)
+{
+    return shell_quote(fs::path(text));
+}
+
+static bool executable_exists(const fs::path &path)
+{
+    return fs::exists(path) && !fs::is_directory(path);
+}
+
+static std::string trim_text(const std::string &text)
+{
+    const std::string whitespace = " \t\r\n";
+    size_t start = text.find_first_not_of(whitespace);
+    if (start == std::string::npos)
+        return "";
+    size_t end = text.find_last_not_of(whitespace);
+    return text.substr(start, end - start + 1);
+}
+
+static std::string llvm_config_bindir(const fs::path &llvm_config)
+{
+    if (!executable_exists(llvm_config))
+        return "";
+
+    std::string command = shell_quote(llvm_config) + " --bindir 2>/dev/null";
+    std::array<char, 256> buffer{};
+    std::string output;
+    FILE *pipe = popen(command.c_str(), "r");
+    if (!pipe)
+        return "";
+
+    while (fgets(buffer.data(), static_cast<int>(buffer.size()), pipe) != nullptr)
+        output += buffer.data();
+    pclose(pipe);
+
+    return trim_text(output);
+}
+
+static std::string command_from_env_or_path(const char *env_name, const std::string &tool)
+{
+    if (const char *explicit_tool = std::getenv(env_name))
+    {
+        if (explicit_tool[0] != '\0')
+            return explicit_tool;
+    }
+
+    if (const char *llvm_bindir = std::getenv("LLVM_BINDIR"))
+    {
+        fs::path candidate = fs::path(llvm_bindir) / tool;
+        if (executable_exists(candidate))
+            return candidate.string();
+    }
+
+    if (const char *llvm_config = std::getenv("LLVM_CONFIG"))
+    {
+        fs::path config_path(llvm_config);
+        if (executable_exists(config_path))
+        {
+            std::string bindir = llvm_config_bindir(config_path);
+            if (!bindir.empty())
+            {
+                fs::path candidate = fs::path(bindir) / tool;
+                if (executable_exists(candidate))
+                    return candidate.string();
+            }
+
+            fs::path candidate = config_path.parent_path() / tool;
+            if (executable_exists(candidate))
+                return candidate.string();
+        }
+    }
+
+    std::vector<fs::path> candidates = {
+        fs::path("/opt/homebrew/opt/llvm@22/bin") / tool,
+        fs::path("/opt/homebrew/opt/llvm/bin") / tool,
+        fs::path("/usr/local/opt/llvm@22/bin") / tool,
+        fs::path("/usr/local/opt/llvm/bin") / tool,
+        fs::path("/usr/lib/llvm-22/bin") / tool,
+    };
+
+    for (const auto &candidate : candidates)
+    {
+        if (executable_exists(candidate))
+            return candidate.string();
+    }
+
+    return tool;
+}
+
+static bool run_shell_command(const std::string &command)
+{
+    int rc = std::system(command.c_str());
+    return rc == 0;
+}
+
+static std::vector<std::string> split_flags(const char *flags)
+{
+    std::vector<std::string> result;
+    if (!flags)
+        return result;
+
+    std::istringstream iss(flags);
+    std::string part;
+    while (iss >> part)
+        result.push_back(part);
+    return result;
+}
+
+static bool build_native_executable(const fs::path &ll_file, const fs::path &binary_file, const fs::path &object_file, bool keep_obj)
+{
+    std::string llc = command_from_env_or_path("LLC", "llc");
+    std::string clang = command_from_env_or_path("CLANG", "clang");
+
+    std::string llc_cmd = shell_quote(llc) + " -filetype=obj " + shell_quote(ll_file) + " -o " + shell_quote(object_file);
+    if (!run_shell_command(llc_cmd))
+    {
+        std::cerr << "llc failed: " << llc_cmd << "\n";
+        return false;
+    }
+
+    std::string link_cmd = shell_quote(clang);
+    for (const auto &flag : split_flags(std::getenv("LINKFLAGS")))
+        link_cmd += " " + shell_quote(flag);
+    link_cmd += " " + shell_quote(object_file) + " -o " + shell_quote(binary_file) + " -lm";
+
+    if (!run_shell_command(link_cmd))
+    {
+        std::cerr << "clang link failed: " << link_cmd << "\n";
+        return false;
+    }
+
+    if (!keep_obj)
+    {
+        std::error_code ec;
+        fs::remove(object_file, ec);
+    }
+
+    return true;
+}
+
 int main(int argc, char *argv[])
 {
     using namespace lex;
@@ -130,10 +298,10 @@ int main(int argc, char *argv[])
         return 1;
     }
 
-    std::string mode = argv[1];
-    bool emit_ir_only = false;
+    OutputMode output_mode = OutputMode::BuildNative;
     bool debug = false;
     bool use_project_mode = false;
+    bool keep_obj = false;
     fs::path output_dir = ".";
 
     std::vector<std::string> inputs;
@@ -156,23 +324,33 @@ int main(int argc, char *argv[])
             print_help(argv[0]);
             return 0;
         }
-        else if (arg == "ll")
+        else if (arg == "ll" || arg == "build-ir" || arg == "ir")
         {
-            emit_ir_only = true;
+            output_mode = OutputMode::EmitIR;
         }
         else if (arg == "debug")
         {
             debug = true;
+            output_mode = OutputMode::Debug;
         }
         else if (arg == "build")
         {
-            use_project_mode = true;
+            output_mode = OutputMode::BuildNative;
+        }
+        else if (arg == "--keep-obj")
+        {
+            keep_obj = true;
         }
         else
         {
             inputs.push_back(arg);
         }
     }
+
+    if (inputs.empty() && output_mode == OutputMode::BuildNative)
+        use_project_mode = true;
+    if (inputs.empty() && output_mode == OutputMode::EmitIR)
+        use_project_mode = true;
 
     if (!fs::exists(output_dir))
     {
@@ -181,6 +359,7 @@ int main(int argc, char *argv[])
 
     std::unique_ptr<ast::Program> program;
     std::vector<fs::path> src_files;
+    std::string output_base = "merged";
 
     if (use_project_mode)
     {
@@ -201,6 +380,8 @@ int main(int argc, char *argv[])
         }
 
         std::cout << "Project: " << config->name << " v" << config->version << "\n";
+        if (!config->name.empty())
+            output_base = config->name;
 
         fs::path project_root = config_path.parent_path();
         
@@ -266,6 +447,8 @@ int main(int argc, char *argv[])
         }
 
         program = compile_frontend_simple(src_files, debug);
+        if (src_files.size() == 1)
+            output_base = src_files[0].stem().string();
     }
 
     if (!program)
@@ -278,17 +461,29 @@ int main(int argc, char *argv[])
         return 1;
     }
 
-    if (emit_ir_only || debug)
+    if (output_mode == OutputMode::Debug)
     {
         std::cout << "--- LLVM IR ---\n";
         cg.dump_llvm_ir();
     }
 
-    fs::path base = src_files.size() == 1 ? src_files[0] : fs::path("merged");
-    fs::path out_file = output_dir / (base.stem().string() + ".ll");
+    fs::path out_file = output_dir / (output_base + ".ll");
 
-    cg.write_ir_to_file(out_file.string());
+    if (!cg.write_ir_to_file(out_file.string()))
+    {
+        std::cerr << "failed to write IR: " << out_file << "\n";
+        return 1;
+    }
     std::cout << "Wrote IR to " << out_file << "\n";
+
+    if (output_mode == OutputMode::BuildNative)
+    {
+        fs::path object_file = output_dir / (output_base + ".o");
+        fs::path binary_file = output_dir / output_base;
+        if (!build_native_executable(out_file, binary_file, object_file, keep_obj))
+            return 1;
+        std::cout << "Wrote binary to " << binary_file << "\n";
+    }
 
     return 0;
 }

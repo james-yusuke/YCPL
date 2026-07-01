@@ -6,22 +6,24 @@ YCPL compiles either explicit `.yc` files or a project rooted by `YCPL.json`.
 
 ```text
 File mode:
-  bazel run //:ycc -- examples/01_hello.yc
+  bazel run //:ycc -- build examples/01_hello.yc
       |
       v
-  resolve modules -> write .ll
+  resolve modules -> write .ll -> llc -> clang -> binary
 
 Project mode:
   YCPL.json -> scan source dirs for .yc
       |
       v
-  resolve modules -> write .ll
+  ycc build     -> write .ll -> llc -> clang -> binary
+  ycc build-ir  -> write .ll only
 ```
 
 ## Single File
 
 ```sh
-bazel run //:ycc -- examples/01_hello.yc -o /tmp/ycpl_hello
+bazel run //:ycc -- build examples/01_hello.yc -o /tmp/ycpl_hello
+bazel run //:ycc -- build-ir examples/01_hello.yc -o /tmp/ycpl_hello
 ```
 
 ## LLVM Toolchain Paths
@@ -71,10 +73,11 @@ my_project/
 | `version` | Project version string |
 | `entry` | Intended entry source |
 | `src` | Source directories scanned recursively for `.yc` |
-| `output` | Directory for generated LLVM IR |
+| `output` | Directory for generated LLVM IR, object files, and native binaries |
 
 ```sh
 ../../bazel-bin/ycc build
+../../bazel-bin/ycc build-ir
 ```
 
 ## Import Resolution

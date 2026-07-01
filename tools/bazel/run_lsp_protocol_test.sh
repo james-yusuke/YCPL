@@ -72,7 +72,7 @@ rm -rf "$YCPL_LSP_PROJECT_DIR"
 cp -R "$RUNFILES_ROOT/tools/lsp" "$YCPL_LSP_PROJECT_DIR"
 ln -s "$RUNFILES_ROOT/stl" "$WORK_DIR/stl"
 
-(cd "$YCPL_LSP_PROJECT_DIR" && "$YCC" build)
+(cd "$YCPL_LSP_PROJECT_DIR" && "$YCC" build-ir)
 
 LL_FILE="$(find "$YCPL_LSP_OUT_DIR" -name '*.ll' | head -1)"
 if [ -z "$LL_FILE" ]; then

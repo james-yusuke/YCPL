@@ -48,10 +48,6 @@ namespace codegen
         InitializeNativeTarget();
         InitializeNativeTargetAsmPrinter();
         InitializeNativeTargetAsmParser();
-
-        Type *i8ptr = detail::getPtrTy(context);
-        FunctionType *printfType = FunctionType::get(IntegerType::getInt32Ty(context), {i8ptr}, true);
-        printf_fn = module->getOrInsertFunction("printf", printfType);
     }
 
     CodeGen::~CodeGen() = default;
@@ -78,7 +74,12 @@ namespace codegen
 
     FunctionCallee CodeGen::get_printf()
     {
-        return printf_fn;
+        Type *i8ptr = detail::getPtrTy(context);
+        FunctionType *printfType = FunctionType::get(IntegerType::getInt32Ty(context), {i8ptr}, true);
+        FunctionCallee callee = module->getOrInsertFunction("printf", printfType);
+        if (auto *fn = dyn_cast<Function>(callee.getCallee()))
+            function_protos["printf"] = fn;
+        return callee;
     }
 
     Value *CodeGen::make_global_string(const std::string &str, const std::string &name)

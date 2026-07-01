@@ -106,7 +106,7 @@ compile_run_and_verify() {
     ((TOTAL++))
     printf "  ${BLUE}$basename${NC}... "
 
-    $YCC "$yc_file" -o "$out_dir" > "$out_dir/compile.log" 2>&1
+    $YCC build-ir "$yc_file" -o "$out_dir" > "$out_dir/compile.log" 2>&1
 
     if grep -q "codegen error\|codegen failed" "$out_dir/compile.log"; then
         printf "${RED}FAIL${NC} (codegen error)\n"
@@ -198,7 +198,7 @@ compile_run_with_input_and_verify() {
     ((TOTAL++))
     printf "  ${BLUE}$basename${NC}... "
 
-    $YCC "$yc_file" -o "$out_dir" > "$out_dir/compile.log" 2>&1
+    $YCC build-ir "$yc_file" -o "$out_dir" > "$out_dir/compile.log" 2>&1
     if [ $? -ne 0 ] || [ ! -f "$ll_file" ]; then
         printf "${RED}FAIL${NC} (compile failed)\n"
         cat "$out_dir/compile.log"
@@ -254,7 +254,7 @@ test_project() {
     cp -R "$project_dir" "$work_project"
     rm -rf "$work_project/build"
 
-    (cd "$work_project" && $YCC build) > "$out_dir/compile.log" 2>&1
+    (cd "$work_project" && $YCC build-ir) > "$out_dir/compile.log" 2>&1
 
     if grep -q "codegen error\|codegen failed\|error\|failed" "$out_dir/compile.log"; then
         printf "${RED}FAIL${NC} (build error)\n"
@@ -340,7 +340,7 @@ test_project_expect_failure() {
     cp -R "$project_dir" "$work_project"
     rm -rf "$work_project/build"
 
-    (cd "$work_project" && $YCC build) > "$out_dir/compile.log" 2>&1
+    (cd "$work_project" && $YCC build-ir) > "$out_dir/compile.log" 2>&1
     local exit_code=$?
 
     if [ $exit_code -eq 0 ]; then
@@ -375,7 +375,7 @@ compile_expect_failure() {
     ((TOTAL++))
     printf "  ${BLUE}$basename (expected compile failure)${NC}... "
 
-    $YCC "$yc_file" -o "$out_dir" > "$out_dir/compile.log" 2>&1
+    $YCC build-ir "$yc_file" -o "$out_dir" > "$out_dir/compile.log" 2>&1
     local exit_code=$?
 
     if [ $exit_code -eq 0 ]; then
@@ -412,7 +412,7 @@ compile_run_expect_failure() {
     ((TOTAL++))
     printf "  ${BLUE}$basename (expected runtime failure)${NC}... "
 
-    $YCC "$yc_file" -o "$out_dir" > "$out_dir/compile.log" 2>&1
+    $YCC build-ir "$yc_file" -o "$out_dir" > "$out_dir/compile.log" 2>&1
     if [ $? -ne 0 ] || [ ! -f "$ll_file" ]; then
         printf "${RED}FAIL${NC} (compile failed)\n"
         cat "$out_dir/compile.log"
