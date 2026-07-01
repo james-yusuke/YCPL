@@ -1,8 +1,8 @@
-#include "../../src/lexer/lexer.h"
-#include "../../src/parser/parser.h"
-#include "../../src/ast/printer.h"
-#include "../../src/codegen/codegen.h"
-#include "../../src/module/resolver.h"
+#include "src/lexer/lexer.h"
+#include "src/parser/parser.h"
+#include "src/ast/printer.h"
+#include "src/codegen/codegen.h"
+#include "src/module/resolver.h"
 
 #include <iostream>
 #include <fstream>

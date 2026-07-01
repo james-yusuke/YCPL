@@ -1,0 +1,88 @@
+name: CI
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Build and test
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            clang \
+            cmake \
+            libcurl4-openssl-dev \
+            libedit-dev \
+            libffi-dev \
+            libxml2-dev \
+            libzstd-dev \
+            llvm-18 \
+            llvm-18-dev \
+            llvm-18-tools \
+            nodejs \
+            npm \
+            zlib1g-dev
+
+      - name: Summarize pull request changes
+        if: github.event_name == 'pull_request'
+        run: |
+          {
+            echo "## Pull request changes"
+            echo
+            echo '```text'
+            git diff --name-status "${{ github.event.pull_request.base.sha }}" "${{ github.event.pull_request.head.sha }}"
+            echo '```'
+            echo
+            echo "## Diff stat"
+            echo
+            echo '```text'
+            git diff --stat "${{ github.event.pull_request.base.sha }}" "${{ github.event.pull_request.head.sha }}"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Configure compiler
+        run: cmake -S . -B build -DLLVM_DIR=/usr/lib/llvm-18/cmake
+
+      - name: Build compiler
+        run: cmake --build build
+
+      - name: Run compiler regression examples
+        run: examples/run_tests.sh
+
+      - name: Install VSCode extension dependencies
+        run: npm ci --prefix editors/vscode
+
+      - name: Check VSCode extension
+        run: npm run check --prefix editors/vscode
+
+      - name: Run LSP protocol tests
+        run: tools/lsp/run_tests.sh
+
+      - name: Summarize verification
+        if: always()
+        run: |
+          {
+            echo "## Verification"
+            echo
+            echo "| Check | Command |"
+            echo "|---|---|"
+            echo "| Compiler configure | \`cmake -S . -B build -DLLVM_DIR=/usr/lib/llvm-18/cmake\` |"
+            echo "| Compiler build | \`cmake --build build\` |"
+            echo "| Compiler examples | \`examples/run_tests.sh\` |"
+            echo "| VSCode extension | \`npm ci --prefix editors/vscode && npm run check --prefix editors/vscode\` |"
+            echo "| LSP protocol | \`tools/lsp/run_tests.sh\` |"
+          } >> "$GITHUB_STEP_SUMMARY"
