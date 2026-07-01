@@ -129,6 +129,24 @@ bazel run //:ycc -- build-ir examples/01_hello.yc -o /tmp/ycpl_hello
 cd examples/04_module_project && ../../bazel-bin/ycc build
 ```
 
+## YCPL から LLVM C API を呼ぶ
+
+```text
+YCPL source -> extern fn ... as "LLVM..." -> ycc build
+                                                |
+                                                v
+                                      llvm-config link flags
+```
+
+```sh
+LLVM_CONFIG=/opt/homebrew/opt/llvm@22/bin/llvm-config \
+  bazel-bin/ycc build examples/50_llvm_c_api.yc -o /tmp/ycpl_llvm
+```
+
+`std/llvm` を import したプログラムは LLVM の C API を直接呼べます。
+生成 IR が `LLVM...` symbol を参照している場合、`ycc build` は LLVM を自動 link
+します。明示したい場合は `--link-llvm` も使えます。
+
 ## 言語スナップショット
 
 ```text

@@ -129,6 +129,24 @@ bazel run //:ycc -- build-ir examples/01_hello.yc -o /tmp/ycpl_hello
 cd examples/04_module_project && ../../bazel-bin/ycc build
 ```
 
+## LLVM C API From YCPL
+
+```text
+YCPL source -> extern fn ... as "LLVM..." -> ycc build
+                                                |
+                                                v
+                                      llvm-config link flags
+```
+
+```sh
+LLVM_CONFIG=/opt/homebrew/opt/llvm@22/bin/llvm-config \
+  bazel-bin/ycc build examples/50_llvm_c_api.yc -o /tmp/ycpl_llvm
+```
+
+Programs importing `std/llvm` can call LLVM's C API directly. `ycc build`
+auto-links LLVM when generated IR references `LLVM...` symbols; `--link-llvm`
+is available when you want to force that path.
+
 ## Language Snapshot
 
 ```text
