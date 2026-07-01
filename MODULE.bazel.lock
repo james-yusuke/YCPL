@@ -190,7 +190,7 @@
   "moduleExtensions": {
     "//tools/bazel:llvm_configure.bzl%llvm_config_extension": {
       "general": {
-        "bzlTransitiveDigest": "VGckdP5cCtD8TCzcNY+4qguT35x4kFFt0QXOjwzhzOI=",
+        "bzlTransitiveDigest": "MNMQBpsgnIUqhvASNlE9cItv0XYWYgCAB0Mgf1sW4lU=",
         "usagesDigest": "pxrj7ktK+SYpnPj+CH8/+aIgHB9BvpiaVHkFM2C7Prs=",
         "recordedInputs": [],
         "generatedRepoSpecs": {

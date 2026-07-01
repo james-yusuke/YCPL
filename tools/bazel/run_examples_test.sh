@@ -8,8 +8,28 @@ llvm_bindir() {
     printf '%s\n' "$LLVM_BINDIR"
     return 0
   fi
+  if [ -n "${LLVM_CONFIG:-}" ] && [ -x "$LLVM_CONFIG" ]; then
+    "$LLVM_CONFIG" --bindir
+    return 0
+  fi
+  for candidate in \
+    /opt/homebrew/opt/llvm@22/bin/llvm-config \
+    /opt/homebrew/opt/llvm/bin/llvm-config \
+    /usr/local/opt/llvm@22/bin/llvm-config \
+    /usr/local/opt/llvm/bin/llvm-config \
+    /usr/lib/llvm-22/bin/llvm-config
+  do
+    if [ -x "$candidate" ]; then
+      "$candidate" --bindir
+      return 0
+    fi
+  done
   if command -v llvm-config-22 >/dev/null 2>&1; then
     llvm-config-22 --bindir
+    return 0
+  fi
+  if command -v llvm-config22 >/dev/null 2>&1; then
+    llvm-config22 --bindir
     return 0
   fi
   if command -v llvm-config >/dev/null 2>&1; then

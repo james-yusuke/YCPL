@@ -78,16 +78,34 @@ bazel-bin/ycc
 ```
 
 ```sh
-scripts/setup-llvm.sh 22
+eval "$(scripts/setup-llvm.sh 22 --print-env)"
 bazel build //:ycc
 bazel test //...
 ```
 
+`scripts/setup-llvm.sh` は `/usr` や `/usr/local` に LLVM の symlink を作りません。
+代わりに `LLVM_CONFIG`、`LLVM_BINDIR`、`LLVM_DIR`、PATH prefix を出力します。
+Ubuntu、Docker、macOS arm/Homebrew の LLVM を system tooling から分離して扱えます。
+Bazel と CMake は `llvm-config` が返す LLVM library directory に link し、その
+directory を build rpath に入れるため、LLVM shared library を `/usr` にコピーしたり
+link したりする必要はありません。
+
+この方針は Odin と同じ実用モデルです。明示的な `LLVM_CONFIG` を優先し、
+package manager が入れた LLVM を検出し、利用者に global system path の変更を
+要求しません。
+
 LLVM 22 を system に入れている場合は CMake も使えます。
 
 ```sh
-cmake -S . -B build -DLLVM_DIR=/path/to/llvm-22/cmake
+cmake -S . -B build
 cmake --build build
+```
+
+明示的に指定する場合:
+
+```sh
+LLVM_CONFIG=/opt/homebrew/opt/llvm@22/bin/llvm-config bazel build //:ycc
+LLVM_DIR=/opt/homebrew/opt/llvm@22/lib/cmake/llvm cmake -S . -B build
 ```
 
 ## コンパイル
