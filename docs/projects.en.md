@@ -6,23 +6,46 @@ YCPL compiles either explicit `.yc` files or a project rooted by `YCPL.json`.
 
 ```text
 File mode:
-  build/ycc examples/01_hello.yc
+  bazel run //:ycc -- build examples/01_hello.yc
       |
       v
-  resolve modules -> write .ll
+  resolve modules -> write .ll -> llc -> clang -> binary
 
 Project mode:
   YCPL.json -> scan source dirs for .yc
       |
       v
-  resolve modules -> write .ll
+  ycc build     -> write .ll -> llc -> clang -> binary
+  ycc build-ir  -> write .ll only
 ```
 
 ## Single File
 
 ```sh
-build/ycc examples/01_hello.yc -o /tmp/ycpl_hello
+bazel run //:ycc -- build examples/01_hello.yc -o /tmp/ycpl_hello
+bazel run //:ycc -- build-ir examples/01_hello.yc -o /tmp/ycpl_hello
 ```
+
+## LLVM Toolchain Paths
+
+```text
+Preferred:
+  LLVM_CONFIG=/path/to/llvm-config bazel build //:ycc
+  LLVM_DIR=/path/to/lib/cmake/llvm cmake -S . -B build
+
+Supported common prefixes:
+  Ubuntu:     /usr/lib/llvm-22
+  macOS arm:  /opt/homebrew/opt/llvm@22
+  macOS x86:  /usr/local/opt/llvm@22
+```
+
+YCPL does not require linking LLVM tools into `/usr` or `/usr/local/bin`.
+Use `eval "$(scripts/setup-llvm.sh 22 --print-env)"` when you want the helper
+script to export paths for the current shell. Build rules also add the LLVM
+library directory from `llvm-config --libdir` to rpath, so Homebrew or
+`/usr/lib/llvm-22` shared libraries can stay in their package-managed location.
+This mirrors Odin's development setup: `LLVM_CONFIG` is the override point,
+package-manager installs are detected, and global symlinks are not required.
 
 ## Project Layout
 
@@ -50,10 +73,11 @@ my_project/
 | `version` | Project version string |
 | `entry` | Intended entry source |
 | `src` | Source directories scanned recursively for `.yc` |
-| `output` | Directory for generated LLVM IR |
+| `output` | Directory for generated LLVM IR, object files, and native binaries |
 
 ```sh
-build/ycc build
+../../bazel-bin/ycc build
+../../bazel-bin/ycc build-ir
 ```
 
 ## Import Resolution

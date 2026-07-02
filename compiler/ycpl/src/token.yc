@@ -1,0 +1,119 @@
+module compiler.ycpl.token
+
+pub fn illegal() i32 { return 0 }
+pub fn eof() i32 { return 1 }
+pub fn ident() i32 { return 2 }
+pub fn int_lit() i32 { return 3 }
+pub fn float_lit() i32 { return 4 }
+pub fn char_lit() i32 { return 5 }
+pub fn string_lit() i32 { return 6 }
+pub fn bool_lit() i32 { return 7 }
+pub fn none_lit() i32 { return 8 }
+
+pub fn kw_module() i32 { return 9 }
+pub fn kw_package() i32 { return 10 }
+pub fn kw_import() i32 { return 11 }
+pub fn kw_pub() i32 { return 12 }
+pub fn kw_extern() i32 { return 13 }
+pub fn kw_intrinsic() i32 { return 14 }
+pub fn kw_fn() i32 { return 15 }
+pub fn kw_struct() i32 { return 16 }
+pub fn kw_enum() i32 { return 17 }
+pub fn kw_interface() i32 { return 18 }
+pub fn kw_const() i32 { return 19 }
+pub fn kw_mut() i32 { return 20 }
+pub fn kw_if() i32 { return 21 }
+pub fn kw_else() i32 { return 22 }
+pub fn kw_match() i32 { return 23 }
+pub fn kw_for() i32 { return 24 }
+pub fn kw_in() i32 { return 25 }
+pub fn kw_return() i32 { return 26 }
+pub fn kw_break() i32 { return 27 }
+pub fn kw_continue() i32 { return 28 }
+pub fn kw_as() i32 { return 29 }
+pub fn kw_is() i32 { return 30 }
+pub fn kw_go() i32 { return 31 }
+pub fn kw_defer() i32 { return 32 }
+pub fn kw_select() i32 { return 33 }
+pub fn kw_switch() i32 { return 34 }
+pub fn kw_type() i32 { return 35 }
+pub fn kw_byte() i32 { return 36 }
+
+pub fn lparen() i32 { return 40 }
+pub fn rparen() i32 { return 41 }
+pub fn lbrace() i32 { return 42 }
+pub fn rbrace() i32 { return 43 }
+pub fn lbrack() i32 { return 44 }
+pub fn rbrack() i32 { return 45 }
+pub fn comma() i32 { return 46 }
+pub fn dot() i32 { return 47 }
+pub fn colon() i32 { return 48 }
+pub fn semicolon() i32 { return 49 }
+pub fn question() i32 { return 50 }
+
+pub fn plus() i32 { return 60 }
+pub fn minus() i32 { return 61 }
+pub fn star() i32 { return 62 }
+pub fn slash() i32 { return 63 }
+pub fn percent() i32 { return 64 }
+pub fn caret() i32 { return 65 }
+pub fn amp() i32 { return 66 }
+pub fn pipe() i32 { return 67 }
+pub fn bang() i32 { return 68 }
+pub fn tilde() i32 { return 69 }
+pub fn assign() i32 { return 70 }
+pub fn eq() i32 { return 71 }
+pub fn neq() i32 { return 72 }
+pub fn lt() i32 { return 73 }
+pub fn gt() i32 { return 74 }
+pub fn le() i32 { return 75 }
+pub fn ge() i32 { return 76 }
+pub fn and_and() i32 { return 77 }
+pub fn or_or() i32 { return 78 }
+pub fn shl() i32 { return 79 }
+pub fn shr() i32 { return 80 }
+pub fn plus_assign() i32 { return 81 }
+pub fn minus_assign() i32 { return 82 }
+pub fn mul_assign() i32 { return 83 }
+pub fn div_assign() i32 { return 84 }
+pub fn mod_assign() i32 { return 85 }
+pub fn plusplus() i32 { return 86 }
+pub fn minusminus() i32 { return 87 }
+pub fn arrow() i32 { return 88 }
+pub fn arrow_r() i32 { return 89 }
+pub fn ellipsis() i32 { return 90 }
+pub fn newline() i32 { return 91 }
+
+pub fn name(kind i32) string {
+    if kind == illegal() { return "ILLEGAL" }
+    if kind == eof() { return "EOF" }
+    if kind == ident() { return "IDENT" }
+    if kind == int_lit() { return "INT" }
+    if kind == float_lit() { return "FLOAT" }
+    if kind == char_lit() { return "CHAR" }
+    if kind == string_lit() { return "STRING" }
+    if kind == bool_lit() { return "BOOL" }
+    if kind == none_lit() { return "NONE" }
+    if kind == kw_module() { return "module" }
+    if kind == kw_package() { return "package" }
+    if kind == kw_import() { return "import" }
+    if kind == kw_pub() { return "pub" }
+    if kind == kw_extern() { return "extern" }
+    if kind == kw_intrinsic() { return "intrinsic" }
+    if kind == kw_fn() { return "fn" }
+    if kind == kw_struct() { return "struct" }
+    if kind == kw_const() { return "const" }
+    if kind == kw_mut() { return "mut" }
+    if kind == kw_if() { return "if" }
+    if kind == kw_else() { return "else" }
+    if kind == kw_for() { return "for" }
+    if kind == kw_return() { return "return" }
+    if kind == lparen() { return "(" }
+    if kind == rparen() { return ")" }
+    if kind == lbrace() { return "{" }
+    if kind == rbrace() { return "}" }
+    if kind == lbrack() { return "[" }
+    if kind == rbrack() { return "]" }
+    if kind == newline() { return "NEWLINE" }
+    return "TOKEN"
+}

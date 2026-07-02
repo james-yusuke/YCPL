@@ -15,7 +15,7 @@ fn main() {
         fmt.println("safe")
     }
 
-    if label.text[0] == 'E' || str.eq(missing, "boom") {
+    if label.text[0] == 'Y' || str.eq(missing, "boom") {
         fmt.println(label.text[1])
     }
 }

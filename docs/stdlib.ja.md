@@ -21,10 +21,12 @@ std/
 ├─ str    len, eq, cmp
 ├─ math   abs, sqrt, pow
 ├─ io     read/write, LSP frames
-├─ fs     exists, read_file
+├─ fs     exists, read_file, write_file
+├─ os     getenv, system
 ├─ text   find, offsets
 ├─ json   parse, get, stringify
-└─ map    caller-owned arrays
+├─ map    caller-owned arrays
+└─ llvm   LLVM C API bridge
 ```
 
 | Module | Source |
@@ -36,9 +38,11 @@ std/
 | `std/math` | `stl/std/math.yc` |
 | `std/io` | `stl/std/io.yc` |
 | `std/fs` | `stl/std/fs.yc` |
+| `std/os` | `stl/std/os.yc` |
 | `std/text` | `stl/std/text.yc` |
 | `std/json` | `stl/std/json.yc` |
 | `std/map` | `stl/std/map.yc` |
+| `std/llvm` | `stl/std/llvm.yc` |
 
 ## よく使う流れ
 
@@ -81,3 +85,26 @@ json.get / json.at
 
 `extern fn` は YCPL 名を C/LLVM symbol に対応させます。`intrinsic fn` は bundled
 `std` 専用で、user module では拒否されます。
+
+`std/os` は compiler tooling に必要な最小限の process hook です。
+`YCPL_BOOTSTRAP_YCC` のような明示的な tool path を読む `getenv` と、移行中の
+`ycc-ycpl build` stage driver が使う `system` を提供します。
+
+## LLVM C API
+
+```YCPL
+import "std/llvm" as llvm
+
+fn main() {
+    ctx := llvm.context_create()
+    mod := llvm.module_create_with_name_in_context("demo", ctx)
+    ir := llvm.print_module_to_string(mod)
+    llvm.dispose_message(ir)
+    llvm.dispose_module(mod)
+    llvm.context_dispose(ctx)
+}
+```
+
+生成 IR が `LLVM...` の C API symbol を参照する場合、`ycc build` は LLVM を自動 link
+します。LLVM prefix を選ぶ場合は `/usr` に symlink を作らず
+`LLVM_CONFIG=/path/to/llvm-config` を指定します。

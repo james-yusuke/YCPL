@@ -1,23 +1,114 @@
-cc_binary(
-    name = "ycc",
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library")
+load("@rules_shell//shell:sh_test.bzl", "sh_test")
+
+package(default_visibility = ["//visibility:public"])
+
+cc_library(
+    name = "ycclib",
     srcs = [
-        "src/main.cpp",
-        "src/lexer/lexer.cpp",
-        "src/parser/parser.cpp",
-        "src/codegen/codegen.cpp",
-        "src/ast/ast.cpp",
+        "bootstrap/cpp/src/ast/ast.cpp",
+        "bootstrap/cpp/src/codegen/codegen.cpp",
+        "bootstrap/cpp/src/lexer/lexer.cpp",
+        "bootstrap/cpp/src/module/json.cpp",
+        "bootstrap/cpp/src/module/resolver.cpp",
+        "bootstrap/cpp/src/parser/parser.cpp",
     ],
+    hdrs = glob([
+        "bootstrap/cpp/src/**/*.h",
+    ]),
     copts = [
         "-std=c++20",
-        "-Iexternal/llvm_homebrew/include",
+        "-Ibootstrap/cpp",
+        "-I.",
     ],
-    linkopts = [
-        "-Lexternal/llvm_homebrew/lib",
-        "-lLLVMCore",
-        "-lLLVMIRReader",
-        "-lLLVMExecutionEngine",
-        "-lLLVMNative",
-        "-lLLVMOrcJIT",
-        "-lLLVMSupport",
+    deps = [
+        "@llvm_config//:llvm",
     ],
+)
+
+cc_binary(
+    name = "ycc",
+    srcs = ["bootstrap/cpp/tools/cli/ycc/ycc.cpp"],
+    copts = [
+        "-std=c++20",
+        "-Ibootstrap/cpp",
+        "-I.",
+    ],
+    deps = [
+        ":ycclib",
+    ],
+)
+
+cc_binary(
+    name = "ycc_legacy",
+    srcs = ["bootstrap/cpp/src/main.cpp"],
+    copts = [
+        "-std=c++20",
+        "-Ibootstrap/cpp",
+        "-I.",
+    ],
+    deps = [
+        ":ycclib",
+    ],
+)
+
+genrule(
+    name = "ycc_ycpl_bin",
+    srcs = glob([
+        "compiler/ycpl/**",
+        "stl/**",
+    ]),
+    outs = ["ycc-ycpl"],
+    cmd = "YCC=$$(pwd)/$(location :ycc) && OUT_FILE=$$(pwd)/$@ && OUT_DIR=$$(pwd)/$(@D)/ycpl-selfhost && mkdir -p $$OUT_DIR && cd compiler/ycpl && $$YCC build -o $$OUT_DIR >/tmp/ycc-ycpl-build.log 2>&1 && cp $$OUT_DIR/ycc-ycpl $$OUT_FILE",
+    executable = True,
+    tools = [":ycc"],
+)
+
+sh_test(
+    name = "ycc_ycpl_test",
+    srcs = ["//tools/bazel:run_ycc_ycpl_test.sh"],
+    data = [
+        ":ycc",
+        ":ycc-ycpl",
+    ] + glob([
+        "compiler/ycpl/**",
+        "examples/**",
+        "stl/**",
+    ]),
+)
+
+sh_test(
+    name = "self_host_stage_test",
+    srcs = ["//tools/bazel:run_self_host_stage_test.sh"],
+    data = [
+        ":ycc",
+        ":ycc-ycpl",
+    ] + glob([
+        "compiler/ycpl/**",
+        "examples/**",
+        "stl/**",
+    ]),
+)
+
+sh_test(
+    name = "examples_test",
+    srcs = ["//tools/bazel:run_examples_test.sh"],
+    data = [
+        ":ycc",
+    ] + glob([
+        "examples/**",
+        "stl/**",
+    ]),
+)
+
+sh_test(
+    name = "lsp_protocol_test",
+    srcs = ["//tools/bazel:run_lsp_protocol_test.sh"],
+    data = [
+        ":ycc",
+    ] + glob([
+        "stl/**",
+        "tools/lsp/**",
+    ]),
+    tags = ["no-sandbox"],
 )
