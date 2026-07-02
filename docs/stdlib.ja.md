@@ -21,7 +21,8 @@ std/
 ├─ str    len, eq, cmp
 ├─ math   abs, sqrt, pow
 ├─ io     read/write, LSP frames
-├─ fs     exists, read_file
+├─ fs     exists, read_file, write_file
+├─ os     getenv, system
 ├─ text   find, offsets
 ├─ json   parse, get, stringify
 ├─ map    caller-owned arrays
@@ -37,6 +38,7 @@ std/
 | `std/math` | `stl/std/math.yc` |
 | `std/io` | `stl/std/io.yc` |
 | `std/fs` | `stl/std/fs.yc` |
+| `std/os` | `stl/std/os.yc` |
 | `std/text` | `stl/std/text.yc` |
 | `std/json` | `stl/std/json.yc` |
 | `std/map` | `stl/std/map.yc` |
@@ -83,6 +85,10 @@ json.get / json.at
 
 `extern fn` は YCPL 名を C/LLVM symbol に対応させます。`intrinsic fn` は bundled
 `std` 専用で、user module では拒否されます。
+
+`std/os` は compiler tooling に必要な最小限の process hook です。
+`YCPL_BOOTSTRAP_YCC` のような明示的な tool path を読む `getenv` と、移行中の
+`ycc-ycpl build` stage driver が使う `system` を提供します。
 
 ## LLVM C API
 

@@ -1,0 +1,19 @@
+module compiler.ycpl.source
+
+import "std/fs" as fs
+import "std/str" as str
+
+pub struct SourceFile {
+    path string
+    text string
+    len i32
+    ok bool
+}
+
+pub fn load(path string) SourceFile {
+    text := fs.read_file(path)
+    if text == none {
+        return SourceFile{path: path, text: none, len: 0, ok: false}
+    }
+    return SourceFile{path: path, text: text, len: str.len(text), ok: true}
+}

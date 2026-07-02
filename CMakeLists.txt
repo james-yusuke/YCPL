@@ -71,6 +71,7 @@ if(LLVM_PACKAGE_VERSION VERSION_LESS "${YCPL_LLVM_MIN_VERSION}.0")
 endif()
 
 include_directories(${CMAKE_CURRENT_SOURCE_DIR})
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/bootstrap/cpp)
 
 message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}: ${LLVM_DIR}")
 message(STATUS "LLVM include dirs: ${LLVM_INCLUDE_DIRS}")
@@ -87,12 +88,12 @@ llvm_map_components_to_libnames(LLVM_LIBS
 )
 
 add_library(ycclib
-    src/lexer/lexer.cpp
-    src/parser/parser.cpp
-    src/codegen/codegen.cpp
-    src/ast/ast.cpp
-    src/module/json.cpp
-    src/module/resolver.cpp
+    bootstrap/cpp/src/lexer/lexer.cpp
+    bootstrap/cpp/src/parser/parser.cpp
+    bootstrap/cpp/src/codegen/codegen.cpp
+    bootstrap/cpp/src/ast/ast.cpp
+    bootstrap/cpp/src/module/json.cpp
+    bootstrap/cpp/src/module/resolver.cpp
 )
 
 target_include_directories(ycclib SYSTEM PUBLIC ${LLVM_INCLUDE_DIRS})
@@ -106,7 +107,7 @@ if(LLVM_LIBRARY_DIRS)
 endif()
 
 add_executable(ycc
-    tools/cli/ycc/ycc.cpp
+    bootstrap/cpp/tools/cli/ycc/ycc.cpp
 )
 
 target_link_libraries(ycc PRIVATE ycclib)
@@ -115,7 +116,7 @@ if(LLVM_LIBRARY_DIRS)
 endif()
 
 add_executable(ycc_legacy
-    src/main.cpp
+    bootstrap/cpp/src/main.cpp
 )
 
 target_link_libraries(ycc_legacy PRIVATE ycclib)

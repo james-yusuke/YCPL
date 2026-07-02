@@ -22,7 +22,8 @@ std/
 ├─ str    len, eq, cmp
 ├─ math   abs, sqrt, pow
 ├─ io     read/write, LSP frames
-├─ fs     exists, read_file
+├─ fs     exists, read_file, write_file
+├─ os     getenv, system
 ├─ text   find, offsets
 ├─ json   parse, get, stringify
 ├─ map    caller-owned arrays
@@ -38,6 +39,7 @@ std/
 | `std/math` | `stl/std/math.yc` |
 | `std/io` | `stl/std/io.yc` |
 | `std/fs` | `stl/std/fs.yc` |
+| `std/os` | `stl/std/os.yc` |
 | `std/text` | `stl/std/text.yc` |
 | `std/json` | `stl/std/json.yc` |
 | `std/map` | `stl/std/map.yc` |
@@ -84,6 +86,10 @@ json.get / json.at
 
 `extern fn` maps YCPL names to C/LLVM symbols. `intrinsic fn` is reserved for
 bundled `std` modules and is rejected in user modules.
+
+`std/os` exposes the narrow process hooks currently needed by compiler tooling:
+`getenv` for explicit tool paths such as `YCPL_BOOTSTRAP_YCC`, and `system` for
+the transitional `ycc-ycpl build` stage driver.
 
 ## LLVM C API
 

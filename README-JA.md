@@ -50,8 +50,8 @@ YCPL
 
 ```text
 Repository
-├─ src/             lexer, parser, AST, resolver, codegen
-├─ cli/ycc/         コマンドラインコンパイラ
+├─ bootstrap/cpp/   C++ bootstrap compiler 実装
+├─ compiler/ycpl/   YCPL 製 compiler、lex/parse milestone
 ├─ stl/std/         YCPL 標準ライブラリ
 ├─ examples/        .yc サンプルと回帰テスト
 ├─ tools/lsp/       YCPL 製 LSP
@@ -65,24 +65,25 @@ Repository
 | ソース拡張子 | `.yc` |
 | ビルド出力 | `ycc build` は native binary、`ycc build-ir` は LLVM IR (`.ll`) |
 | プロジェクト設定 | `YCPL.json` |
-| コンパイラバイナリ | `ycc` |
+| コンパイラバイナリ | `ycc` bootstrap、`ycc-ycpl` self-hosting compiler 作業中 |
 
 ## ビルド
 
 ```text
 開発者
    |
-   | bazel build //:ycc
+   | bazel build //:ycc //:ycc-ycpl
    v
 Bazel ---- 設定 ----> llvm-config 経由の LLVM 22
    |
-   v
-bazel-bin/ycc
+   +----> bazel-bin/ycc       C++ bootstrap compiler
+   |
+   +----> bazel-bin/ycc-ycpl  YCPL compiler scaffold
 ```
 
 ```sh
 eval "$(scripts/setup-llvm.sh 22 --print-env)"
-bazel build //:ycc
+bazel build //:ycc //:ycc-ycpl
 bazel test //...
 ```
 
@@ -127,6 +128,62 @@ LLVM_DIR=/opt/homebrew/opt/llvm@22/lib/cmake/llvm cmake -S . -B build
 bazel run //:ycc -- build examples/01_hello.yc -o /tmp/ycpl_hello
 bazel run //:ycc -- build-ir examples/01_hello.yc -o /tmp/ycpl_hello
 cd examples/04_module_project && ../../bazel-bin/ycc build
+```
+
+## セルフホスト
+
+```text
+移行段階
+├─ ycc
+│  ├─ C++ bootstrap compiler
+│  ├─ native binary と LLVM IR を生成
+│  └─ まだ default compiler のまま
+└─ ycc-ycpl
+   ├─ YCPL で実装
+   ├─ YCPL source を lex/parse
+   ├─ 小さな self-codegen subset を型検査
+   ├─ i32 main、local、assignment、arithmetic は LLVM IR を直接生成
+   ├─ その subset は bootstrap ycc なしで native binary まで生成
+   ├─ compiler/ycpl を明示 project source set として parse/check
+   ├─ YCPL_NO_BOOTSTRAP=1 で compiler/ycpl の project LLVM IR を生成
+   ├─ project AST IR を bootstrap ycc なしで native smoke binary に変換
+   └─ 未対応の build/build-ir input は bootstrap ycc に委譲
+```
+
+```text
+compiler/ycpl
+├─ source  bounded file loading
+├─ diag    file/line/column diagnostics
+├─ lexer   token stream、nested comments、string/char checks
+├─ ast     kind i32 の tagged structs
+├─ parser  current grammar surface と recovery diagnostics
+├─ checker tiny i32 typed subset gate と project AST gate
+├─ irgen   LLVM C API IR emission と project AST IR emission
+├─ driver  self-native build と bootstrap stage driver
+└─ cli     ycc-ycpl lex / parse / check / build-ir-self / build
+```
+
+```sh
+bazel-bin/ycc-ycpl lex examples/01_hello.yc
+bazel-bin/ycc-ycpl parse examples/01_hello.yc
+bazel-bin/ycc-ycpl check examples/53_self_codegen_main.yc
+bazel-bin/ycc-ycpl build-ir-self examples/53_self_codegen_main.yc -o /tmp/ycpl-self-tiny
+bazel-bin/ycc-ycpl build examples/54_self_codegen_arithmetic.yc -o /tmp/ycpl-self-native
+bazel-bin/ycc-ycpl parse compiler/ycpl
+bazel-bin/ycc-ycpl check compiler/ycpl
+bazel-bin/ycc-ycpl build-ir compiler/ycpl -o /tmp/ycpl-self-ir
+bazel-bin/ycc-ycpl build compiler/ycpl -o /tmp/ycpl-self-native
+YCPL_NO_BOOTSTRAP=1 bazel-bin/ycc-ycpl build-ir compiler/ycpl -o /tmp/ycpl-strict
+YCPL_NO_BOOTSTRAP=1 bazel-bin/ycc-ycpl build compiler/ycpl -o /tmp/ycpl-strict-native
+```
+
+```text
+stage-2 gate
+├─ compiler/ycpl project parse/check は ycc-ycpl 側で処理
+├─ tiny arithmetic build は YCPL_NO_BOOTSTRAP=1 で実行可能
+├─ project build-ir は bootstrap fallback なしで実行
+├─ project AST IR は native smoke binary まで変換可能
+└─ compiler として等価な native ycc-ycpl は次段で対応
 ```
 
 ## YCPL から LLVM C API を呼ぶ
@@ -221,8 +278,13 @@ examples/run_tests.sh
 ├─ プロジェクトビルド
 ├─ コンパイル失敗期待
 └─ 実行時失敗期待
+
+bazel test //:ycc_ycpl_test
+├─ ycc-ycpl lex smoke test
+├─ failure ではない examples 全件の parse
+└─ 壊れた入力に対する lexer/parser 診断の固定
 ```
 
 ```sh
-examples/run_tests.sh
+bazel test //:examples_test //:lsp_protocol_test //:ycc_ycpl_test
 ```

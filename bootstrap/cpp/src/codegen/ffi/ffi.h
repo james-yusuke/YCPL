@@ -197,6 +197,14 @@ Function *CodeGen::get_or_declare_c_function(const std::string &name)
         return declareFunc(i8ptr, {i8ptr, i8ptr, iTy});
     if (name == "fchmod")
         return declareFunc(iTy, {iTy, iTy});
+    if (name == "fopen")
+        return declareFunc(i8ptr, {i8ptr, i8ptr});
+    if (name == "fputs")
+        return declareFunc(iTy, {i8ptr, i8ptr});
+    if (name == "fclose")
+        return declareFunc(iTy, {i8ptr});
+    if (name == "mkdir")
+        return declareFunc(iTy, {i8ptr, iTy});
 
     return nullptr;
 }

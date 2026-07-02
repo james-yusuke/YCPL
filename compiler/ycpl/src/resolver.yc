@@ -1,0 +1,161 @@
+module compiler.ycpl.resolver
+
+import "parser" as parser
+import "source" as source
+import "std/mem" as mem
+import "std/str" as str
+
+pub struct ProjectResult {
+    ok bool
+    supported bool
+    message string
+    file string
+    line i32
+    col i32
+    files i32
+    tokens i32
+    decls i32
+    functions i32
+    structs i32
+    imports i32
+    digest i32
+    nodes i32
+    externs i32
+    intrinsics i32
+    statements i32
+    expressions i32
+    locals i32
+    returns i32
+    calls i32
+    branches i32
+    loops i32
+    strings i32
+    members i32
+    indexes i32
+    assignments i32
+}
+
+fn result_ok(files i32, tokens i32, decls i32, functions i32, structs i32, imports i32, digest i32, nodes i32, externs i32, intrinsics i32, statements i32, expressions i32, locals i32, returns i32, calls i32, branches i32, loops i32, strings i32, members i32, indexes i32, assignments i32) ProjectResult {
+    return ProjectResult{ok: true, supported: true, message: "", file: "", line: 1, col: 1, files: files, tokens: tokens, decls: decls, functions: functions, structs: structs, imports: imports, digest: digest, nodes: nodes, externs: externs, intrinsics: intrinsics, statements: statements, expressions: expressions, locals: locals, returns: returns, calls: calls, branches: branches, loops: loops, strings: strings, members: members, indexes: indexes, assignments: assignments}
+}
+
+fn result_fail(file string, line i32, col i32, message string) ProjectResult {
+    return ProjectResult{ok: false, supported: true, message: message, file: file, line: line, col: col, files: 0, tokens: 0, decls: 0, functions: 0, structs: 0, imports: 0, digest: 0, nodes: 0, externs: 0, intrinsics: 0, statements: 0, expressions: 0, locals: 0, returns: 0, calls: 0, branches: 0, loops: 0, strings: 0, members: 0, indexes: 0, assignments: 0}
+}
+
+pub fn is_compiler_project(path string) bool {
+    return str.eq(path, "compiler/ycpl") || str.eq(path, "compiler/ycpl/")
+}
+
+pub fn file_count() i32 {
+    return 11
+}
+
+fn file_suffix(index i32) string {
+    if index == 0 { return "/src/ast.yc" }
+    if index == 1 { return "/src/checker.yc" }
+    if index == 2 { return "/src/diag.yc" }
+    if index == 3 { return "/src/driver.yc" }
+    if index == 4 { return "/src/irgen.yc" }
+    if index == 5 { return "/src/lexer.yc" }
+    if index == 6 { return "/src/main.yc" }
+    if index == 7 { return "/src/parser.yc" }
+    if index == 8 { return "/src/resolver.yc" }
+    if index == 9 { return "/src/source.yc" }
+    return "/src/token.yc"
+}
+
+pub fn file_path(root string, index i32) string {
+    suffix := file_suffix(index)
+    left := str.len(root)
+    right := str.len(suffix)
+    out: string := mem.calloc(left + right + 1, 1)
+    mem.copy(out, root, left)
+    mem.copy(out + left, suffix, right)
+    return out
+}
+
+pub fn parse_project(root string) ProjectResult {
+    files := 0
+    tokens := 0
+    decls := 0
+    functions := 0
+    structs := 0
+    imports := 0
+    nodes := 0
+    externs := 0
+    intrinsics := 0
+    statements := 0
+    expressions := 0
+    locals := 0
+    returns := 0
+    calls := 0
+    branches := 0
+    loops := 0
+    strings := 0
+    members := 0
+    indexes := 0
+    assignments := 0
+    digest := 17
+
+    i: i32 := 0
+    n := file_count()
+    for (; i < n; i++) {
+        path := file_path(root, i)
+        src := source.load(path)
+        if !src.ok {
+            return result_fail(path, 1, 1, "could not read project source")
+        }
+
+        parsed := parser.parse(path, src.text)
+        if !parsed.ok {
+            return result_fail(path, parsed.line, parsed.col, parsed.message)
+        }
+
+        files += 1
+        tokens += parsed.tokens
+        decls += parsed.decls
+        functions += parsed.functions
+        structs += parsed.structs
+        imports += parsed.imports
+        nodes += parsed.program.arena.nodes
+        externs += parsed.program.externs
+        intrinsics += parsed.program.intrinsics
+        statements += parsed.program.statements
+        expressions += parsed.program.expressions
+        locals += parsed.program.locals
+        returns += parsed.program.returns
+        calls += parsed.program.calls
+        branches += parsed.program.branches
+        loops += parsed.program.loops
+        strings += parsed.program.strings
+        members += parsed.program.members
+        indexes += parsed.program.indexes
+        assignments += parsed.program.assignments
+        digest = digest * 31 + parsed.tokens
+        digest = digest * 31 + parsed.decls
+        digest = digest * 31 + parsed.functions
+        digest = digest * 31 + parsed.structs
+        digest = digest * 31 + parsed.imports
+        digest = digest * 31 + parsed.program.arena.nodes
+    }
+
+    return result_ok(files, tokens, decls, functions, structs, imports, digest, nodes, externs, intrinsics, statements, expressions, locals, returns, calls, branches, loops, strings, members, indexes, assignments)
+}
+
+pub fn check_project(root string) ProjectResult {
+    result := parse_project(root)
+    if !result.ok {
+        return result
+    }
+    if result.functions <= 0 {
+        return result_fail(root, 1, 1, "project has no functions")
+    }
+    if result.imports <= 0 {
+        return result_fail(root, 1, 1, "project has no imports")
+    }
+    if result.returns <= 0 {
+        return result_fail(root, 1, 1, "project has no return statements")
+    }
+    return result
+}

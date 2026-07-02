@@ -40,7 +40,7 @@ Value *CodeGen::codegen_index_addr(const ast::IndexExpr *ie)
         if (ll)
         {
             ParsedType pt = parse_type_chain(*ll);
-            if (pt.base == "string" && pt.array_depth == 0)
+            if (pt.base == "string" && pt.array_depth == 0 && pt.pointer_depth == 0)
             {
                 Type *i8Ty = Type::getInt8Ty(context);
 
@@ -48,7 +48,7 @@ Value *CodeGen::codegen_index_addr(const ast::IndexExpr *ie)
                 return charPtr;
             }
 
-            if (pt.base == "string_params" && pt.array_depth == 0)
+            if (pt.base == "string_params" && pt.array_depth == 0 && pt.pointer_depth == 0)
             {
                 Type *i8Ty = Type::getInt8Ty(context);
                 Value *v = lookup_local(id->name);
@@ -74,7 +74,7 @@ Value *CodeGen::codegen_index_addr(const ast::IndexExpr *ie)
     {
         std::string collectionType = infer_expr_type_name(ie->collection.get());
         ParsedType pt = parse_type_chain(collectionType);
-        if ((pt.base == "string" || pt.base == "string_params") && pt.array_depth == 0)
+        if ((pt.base == "string" || pt.base == "string_params") && pt.array_depth == 0 && pt.pointer_depth == 0)
         {
             if (!colVal->getType()->isPointerTy())
             {
