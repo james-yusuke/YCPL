@@ -407,6 +407,7 @@ int main(int argc, char *argv[])
     bool use_project_mode = false;
     bool keep_obj = false;
     bool link_llvm = false;
+    bool output_dir_explicit = false;
     fs::path output_dir = ".";
 
     std::vector<std::string> inputs;
@@ -422,6 +423,7 @@ int main(int argc, char *argv[])
                 return 1;
             }
             output_dir = argv[i + 1];
+            output_dir_explicit = true;
             i++;
         }
         else if (arg == "help")
@@ -532,7 +534,8 @@ int main(int argc, char *argv[])
 
         program = resolver.link_program();
         
-        output_dir = project_root / config->output_dir;
+        if (!output_dir_explicit)
+            output_dir = project_root / config->output_dir;
         if (!fs::exists(output_dir))
         {
             fs::create_directories(output_dir);

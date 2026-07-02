@@ -1,0 +1,353 @@
+module compiler.ycpl.lexer
+
+import "token" as tok
+import "std/str" as str
+import "std/text" as text
+
+pub struct Lexer {
+    path string
+    source string
+    len i32
+    pos i32
+    line i32
+    col i32
+    kind i32
+    lexeme string
+    tok_line i32
+    tok_col i32
+    ok bool
+    message string
+}
+
+pub fn new(path string, source string) Lexer {
+    return Lexer{path: path, source: source, len: str.len(source), pos: 0, line: 1, col: 1, kind: tok.eof(), lexeme: "", tok_line: 1, tok_col: 1, ok: true, message: ""}
+}
+
+fn is_alpha(ch i32) bool {
+    return (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || ch == '_'
+}
+
+fn is_digit(ch i32) bool {
+    return ch >= '0' && ch <= '9'
+}
+
+fn peek(lx Lexer, off i32) i32 {
+    at := lx.pos + off
+    if at < 0 || at >= lx.len {
+        return 0
+    }
+    return lx.source[at]
+}
+
+fn advance(lx Lexer) Lexer {
+    if lx.pos >= lx.len {
+        return lx
+    }
+    ch := lx.source[lx.pos]
+    lx.pos += 1
+    if ch == 10 {
+        lx.line += 1
+        lx.col = 1
+    } else {
+        lx.col += 1
+    }
+    return lx
+}
+
+fn make_token(lx Lexer, kind i32, start i32, line i32, col i32) Lexer {
+    count := lx.pos - start
+    lx.kind = kind
+    lx.lexeme = text.slice(lx.source, start, count)
+    lx.tok_line = line
+    lx.tok_col = col
+    return lx
+}
+
+fn fail(lx Lexer, message string) Lexer {
+    lx.ok = false
+    lx.kind = tok.illegal()
+    lx.message = message
+    lx.lexeme = ""
+    lx.tok_line = lx.line
+    lx.tok_col = lx.col
+    return lx
+}
+
+fn keyword_kind(word string) i32 {
+    if str.eq(word, "module") { return tok.kw_module() }
+    if str.eq(word, "package") { return tok.kw_package() }
+    if str.eq(word, "import") { return tok.kw_import() }
+    if str.eq(word, "pub") { return tok.kw_pub() }
+    if str.eq(word, "extern") { return tok.kw_extern() }
+    if str.eq(word, "intrinsic") { return tok.kw_intrinsic() }
+    if str.eq(word, "fn") { return tok.kw_fn() }
+    if str.eq(word, "struct") { return tok.kw_struct() }
+    if str.eq(word, "enum") { return tok.kw_enum() }
+    if str.eq(word, "interface") { return tok.kw_interface() }
+    if str.eq(word, "const") { return tok.kw_const() }
+    if str.eq(word, "mut") { return tok.kw_mut() }
+    if str.eq(word, "if") { return tok.kw_if() }
+    if str.eq(word, "else") { return tok.kw_else() }
+    if str.eq(word, "match") { return tok.kw_match() }
+    if str.eq(word, "for") { return tok.kw_for() }
+    if str.eq(word, "in") { return tok.kw_in() }
+    if str.eq(word, "return") { return tok.kw_return() }
+    if str.eq(word, "break") { return tok.kw_break() }
+    if str.eq(word, "continue") { return tok.kw_continue() }
+    if str.eq(word, "as") { return tok.kw_as() }
+    if str.eq(word, "is") { return tok.kw_is() }
+    if str.eq(word, "go") { return tok.kw_go() }
+    if str.eq(word, "defer") { return tok.kw_defer() }
+    if str.eq(word, "select") { return tok.kw_select() }
+    if str.eq(word, "switch") { return tok.kw_switch() }
+    if str.eq(word, "true") { return tok.bool_lit() }
+    if str.eq(word, "false") { return tok.bool_lit() }
+    if str.eq(word, "none") { return tok.none_lit() }
+    if str.eq(word, "type") { return tok.kw_type() }
+    if str.eq(word, "byte") { return tok.kw_byte() }
+    return tok.ident()
+}
+
+fn skip_ws_and_comments(lx Lexer) Lexer {
+    running := true
+    for (; running; ) {
+        running = false
+        for (; lx.pos < lx.len; ) {
+            ch := peek(lx, 0)
+            if ch == ' ' || ch == 9 || ch == 13 {
+                lx = advance(lx)
+            } else {
+                break
+            }
+        }
+
+        if peek(lx, 0) == '/' && peek(lx, 1) == '/' {
+            for (; lx.pos < lx.len && peek(lx, 0) != 10; ) {
+                lx = advance(lx)
+            }
+            running = true
+        } else if peek(lx, 0) == '/' && peek(lx, 1) == '*' {
+            lx = advance(advance(lx))
+            depth := 1
+            for (; lx.pos < lx.len && depth > 0; ) {
+                if peek(lx, 0) == '/' && peek(lx, 1) == '*' {
+                    depth += 1
+                    lx = advance(advance(lx))
+                } else if peek(lx, 0) == '*' && peek(lx, 1) == '/' {
+                    depth -= 1
+                    lx = advance(advance(lx))
+                } else {
+                    lx = advance(lx)
+                }
+            }
+            if depth > 0 {
+                return fail(lx, "unclosed block comment")
+            }
+            running = true
+        }
+    }
+    return lx
+}
+
+pub fn next(lx Lexer) Lexer {
+    if !lx.ok {
+        return lx
+    }
+
+    lx = skip_ws_and_comments(lx)
+    if !lx.ok {
+        return lx
+    }
+
+    start := lx.pos
+    line := lx.line
+    col := lx.col
+
+    if lx.pos >= lx.len {
+        return make_token(lx, tok.eof(), start, line, col)
+    }
+
+    ch := peek(lx, 0)
+
+    if ch == 10 {
+        lx = advance(lx)
+        return make_token(lx, tok.newline(), start, line, col)
+    }
+
+    if is_alpha(ch) {
+        for (; is_alpha(peek(lx, 0)) || is_digit(peek(lx, 0)); ) {
+            lx = advance(lx)
+        }
+        word := text.slice(lx.source, start, lx.pos - start)
+        lx.kind = keyword_kind(word)
+        lx.lexeme = word
+        lx.tok_line = line
+        lx.tok_col = col
+        return lx
+    }
+
+    if is_digit(ch) {
+        is_float := false
+        for (; is_digit(peek(lx, 0)); ) {
+            lx = advance(lx)
+        }
+        if peek(lx, 0) == '.' && is_digit(peek(lx, 1)) {
+            is_float = true
+            lx = advance(lx)
+            for (; is_digit(peek(lx, 0)); ) {
+                lx = advance(lx)
+            }
+        }
+        if is_float {
+            return make_token(lx, tok.float_lit(), start, line, col)
+        }
+        return make_token(lx, tok.int_lit(), start, line, col)
+    }
+
+    if ch == '"' || ch == '`' {
+        quote := ch
+        lx = advance(lx)
+        escape := false
+        for (; lx.pos < lx.len; ) {
+            cur := peek(lx, 0)
+            if quote != '`' && escape {
+                escape = false
+                lx = advance(lx)
+            } else if quote != '`' && cur == '\\' {
+                escape = true
+                lx = advance(lx)
+            } else if cur == quote {
+                lx = advance(lx)
+                return make_token(lx, tok.string_lit(), start, line, col)
+            } else {
+                lx = advance(lx)
+            }
+        }
+        return fail(lx, "unterminated string literal")
+    }
+
+    if ch == '\'' {
+        lx = advance(lx)
+        if lx.pos >= lx.len {
+            return fail(lx, "unterminated/invalid char literal")
+        }
+        if peek(lx, 0) == '\\' {
+            lx = advance(lx)
+            if lx.pos >= lx.len {
+                return fail(lx, "unterminated/invalid char literal")
+            }
+            lx = advance(lx)
+        } else {
+            lx = advance(lx)
+        }
+        if peek(lx, 0) != '\'' {
+            return fail(lx, "unterminated/invalid char literal")
+        }
+        lx = advance(lx)
+        return make_token(lx, tok.char_lit(), start, line, col)
+    }
+
+    if ch == '.' && peek(lx, 1) == '.' && peek(lx, 2) == '.' {
+        lx = advance(advance(advance(lx)))
+        return make_token(lx, tok.ellipsis(), start, line, col)
+    }
+
+    lx = advance(lx)
+
+    if ch == '(' { return make_token(lx, tok.lparen(), start, line, col) }
+    if ch == ')' { return make_token(lx, tok.rparen(), start, line, col) }
+    if ch == '{' { return make_token(lx, tok.lbrace(), start, line, col) }
+    if ch == '}' { return make_token(lx, tok.rbrace(), start, line, col) }
+    if ch == '[' { return make_token(lx, tok.lbrack(), start, line, col) }
+    if ch == ']' { return make_token(lx, tok.rbrack(), start, line, col) }
+    if ch == ',' { return make_token(lx, tok.comma(), start, line, col) }
+    if ch == '.' { return make_token(lx, tok.dot(), start, line, col) }
+    if ch == ':' { return make_token(lx, tok.colon(), start, line, col) }
+    if ch == ';' { return make_token(lx, tok.semicolon(), start, line, col) }
+    if ch == '?' { return make_token(lx, tok.question(), start, line, col) }
+    if ch == '~' { return make_token(lx, tok.tilde(), start, line, col) }
+
+    if ch == '+' && peek(lx, 0) == '+' {
+        lx = advance(lx)
+        return make_token(lx, tok.plusplus(), start, line, col)
+    }
+    if ch == '-' && peek(lx, 0) == '-' {
+        lx = advance(lx)
+        return make_token(lx, tok.minusminus(), start, line, col)
+    }
+    if ch == '+' && peek(lx, 0) == '=' {
+        lx = advance(lx)
+        return make_token(lx, tok.plus_assign(), start, line, col)
+    }
+    if ch == '-' && peek(lx, 0) == '=' {
+        lx = advance(lx)
+        return make_token(lx, tok.minus_assign(), start, line, col)
+    }
+    if ch == '*' && peek(lx, 0) == '=' {
+        lx = advance(lx)
+        return make_token(lx, tok.mul_assign(), start, line, col)
+    }
+    if ch == '/' && peek(lx, 0) == '=' {
+        lx = advance(lx)
+        return make_token(lx, tok.div_assign(), start, line, col)
+    }
+    if ch == '%' && peek(lx, 0) == '=' {
+        lx = advance(lx)
+        return make_token(lx, tok.mod_assign(), start, line, col)
+    }
+    if ch == '=' && peek(lx, 0) == '=' {
+        lx = advance(lx)
+        return make_token(lx, tok.eq(), start, line, col)
+    }
+    if ch == '!' && peek(lx, 0) == '=' {
+        lx = advance(lx)
+        return make_token(lx, tok.neq(), start, line, col)
+    }
+    if ch == '<' && peek(lx, 0) == '=' {
+        lx = advance(lx)
+        return make_token(lx, tok.le(), start, line, col)
+    }
+    if ch == '>' && peek(lx, 0) == '=' {
+        lx = advance(lx)
+        return make_token(lx, tok.ge(), start, line, col)
+    }
+    if ch == '&' && peek(lx, 0) == '&' {
+        lx = advance(lx)
+        return make_token(lx, tok.and_and(), start, line, col)
+    }
+    if ch == '|' && peek(lx, 0) == '|' {
+        lx = advance(lx)
+        return make_token(lx, tok.or_or(), start, line, col)
+    }
+    if ch == '<' && peek(lx, 0) == '<' {
+        lx = advance(lx)
+        return make_token(lx, tok.shl(), start, line, col)
+    }
+    if ch == '>' && peek(lx, 0) == '>' {
+        lx = advance(lx)
+        return make_token(lx, tok.shr(), start, line, col)
+    }
+    if ch == '-' && peek(lx, 0) == '>' {
+        lx = advance(lx)
+        return make_token(lx, tok.arrow(), start, line, col)
+    }
+    if ch == '=' && peek(lx, 0) == '>' {
+        lx = advance(lx)
+        return make_token(lx, tok.arrow_r(), start, line, col)
+    }
+
+    if ch == '+' { return make_token(lx, tok.plus(), start, line, col) }
+    if ch == '-' { return make_token(lx, tok.minus(), start, line, col) }
+    if ch == '*' { return make_token(lx, tok.star(), start, line, col) }
+    if ch == '/' { return make_token(lx, tok.slash(), start, line, col) }
+    if ch == '%' { return make_token(lx, tok.percent(), start, line, col) }
+    if ch == '^' { return make_token(lx, tok.caret(), start, line, col) }
+    if ch == '&' { return make_token(lx, tok.amp(), start, line, col) }
+    if ch == '|' { return make_token(lx, tok.pipe(), start, line, col) }
+    if ch == '!' { return make_token(lx, tok.bang(), start, line, col) }
+    if ch == '=' { return make_token(lx, tok.assign(), start, line, col) }
+    if ch == '<' { return make_token(lx, tok.lt(), start, line, col) }
+    if ch == '>' { return make_token(lx, tok.gt(), start, line, col) }
+
+    return fail(lx, "illegal character")
+}

@@ -1,0 +1,270 @@
+module compiler.ycpl.driver
+
+import "std/fs" as fs
+import "std/mem" as mem
+import "std/os" as os
+import "std/str" as str
+
+pub struct DriverResult {
+    ok bool
+    code i32
+    message string
+    command string
+}
+
+struct Command {
+    data string
+    len i32
+    cap i32
+    ok bool
+}
+
+fn command_new(cap i32) Command {
+    data: string := mem.calloc(cap + 1, 1)
+    return Command{data: data, len: 0, cap: cap, ok: true}
+}
+
+fn append_char(cmd Command, ch i32) Command {
+    if !cmd.ok {
+        return cmd
+    }
+    if cmd.len + 1 >= cmd.cap {
+        cmd.ok = false
+        return cmd
+    }
+    cmd.data[cmd.len] = ch
+    cmd.len += 1
+    cmd.data[cmd.len] = 0
+    return cmd
+}
+
+fn append_text(cmd Command, text string) Command {
+    if !cmd.ok {
+        return cmd
+    }
+    n := str.len(text)
+    if cmd.len + n >= cmd.cap {
+        cmd.ok = false
+        return cmd
+    }
+    mem.copy(cmd.data + cmd.len, text, n)
+    cmd.len += n
+    cmd.data[cmd.len] = 0
+    return cmd
+}
+
+fn append_space(cmd Command) Command {
+    return append_char(cmd, ' ')
+}
+
+fn append_shell_quoted(cmd Command, text string) Command {
+    cmd = append_char(cmd, 39)
+    i: i32 := 0
+    n := str.len(text)
+    for (; i < n; i++) {
+        ch := text[i]
+        if ch == 39 {
+            cmd = append_text(cmd, "'\\''")
+        } else {
+            cmd = append_char(cmd, ch)
+        }
+    }
+    return append_char(cmd, 39)
+}
+
+fn is_empty(text string) bool {
+    return text == none || str.len(text) == 0
+}
+
+fn env_or_empty(name string) string {
+    value := os.getenv(name)
+    if value == none {
+        return ""
+    }
+    return value
+}
+
+pub fn bootstrap_fallback_disabled() bool {
+    no_bootstrap := env_or_empty("YCPL_NO_BOOTSTRAP")
+    if !is_empty(no_bootstrap) && !str.eq(no_bootstrap, "0") {
+        return true
+    }
+
+    strict := env_or_empty("YCPL_SELFHOST_STRICT")
+    if !is_empty(strict) && !str.eq(strict, "0") {
+        return true
+    }
+
+    return false
+}
+
+fn join_path(left string, right string) string {
+    left_len := str.len(left)
+    right_len := str.len(right)
+    needs_slash := true
+    if left_len > 0 && left[left_len - 1] == '/' {
+        needs_slash = false
+    }
+
+    extra := 1
+    if !needs_slash {
+        extra = 0
+    }
+
+    out: string := mem.calloc(left_len + right_len + extra + 1, 1)
+    mem.copy(out, left, left_len)
+    at := left_len
+    if needs_slash {
+        out[at] = '/'
+        at += 1
+    }
+    mem.copy(out + at, right, right_len)
+    return out
+}
+
+fn find_tool(env_name string, tool string) string {
+    explicit := env_or_empty(env_name)
+    if !is_empty(explicit) {
+        return explicit
+    }
+
+    bindir := env_or_empty("LLVM_BINDIR")
+    if !is_empty(bindir) {
+        candidate := join_path(bindir, tool)
+        if fs.exists(candidate) {
+            return candidate
+        }
+    }
+
+    candidate := join_path("/opt/homebrew/opt/llvm/bin", tool)
+    if fs.exists(candidate) {
+        return candidate
+    }
+    candidate = join_path("/opt/homebrew/opt/llvm@22/bin", tool)
+    if fs.exists(candidate) {
+        return candidate
+    }
+    candidate = join_path("/usr/local/opt/llvm/bin", tool)
+    if fs.exists(candidate) {
+        return candidate
+    }
+    candidate = join_path("/usr/lib/llvm-22/bin", tool)
+    if fs.exists(candidate) {
+        return candidate
+    }
+
+    return tool
+}
+
+fn run_command(cmd Command, message string) DriverResult {
+    if !cmd.ok {
+        return DriverResult{ok: false, code: 1, message: "compiler command is too long", command: cmd.data}
+    }
+
+    code := os.system(cmd.data)
+    if code != 0 {
+        return DriverResult{ok: false, code: code, message: message, command: cmd.data}
+    }
+
+    return DriverResult{ok: true, code: 0, message: "", command: cmd.data}
+}
+
+pub fn find_bootstrap_ycc() string {
+    explicit := env_or_empty("YCPL_BOOTSTRAP_YCC")
+    if !is_empty(explicit) {
+        return explicit
+    }
+
+    ycc := env_or_empty("YCC")
+    if !is_empty(ycc) {
+        return ycc
+    }
+
+    if fs.exists("bazel-bin/ycc") {
+        return "bazel-bin/ycc"
+    }
+    if fs.exists("../../bazel-bin/ycc") {
+        return "../../bazel-bin/ycc"
+    }
+    if fs.exists("./ycc") {
+        return "./ycc"
+    }
+
+    return "ycc"
+}
+
+pub fn run_bootstrap(mode string, argc i32, argv *string) DriverResult {
+    bootstrap := ""
+    i: i32 := 2
+    for (; i < argc; i++) {
+        arg := argv[i]
+        if str.eq(arg, "--bootstrap") {
+            if i + 1 >= argc {
+                return DriverResult{ok: false, code: 1, message: "--bootstrap requires a path", command: ""}
+            }
+            bootstrap = argv[i + 1]
+            i += 1
+        }
+    }
+
+    if is_empty(bootstrap) {
+        bootstrap = find_bootstrap_ycc()
+    }
+
+    cmd := command_new(8192)
+    cmd = append_shell_quoted(cmd, bootstrap)
+    cmd = append_space(cmd)
+    cmd = append_shell_quoted(cmd, mode)
+
+    i = 2
+    for (; i < argc; i++) {
+        arg := argv[i]
+        if str.eq(arg, "--bootstrap") {
+            i += 1
+        } else {
+            cmd = append_space(cmd)
+            cmd = append_shell_quoted(cmd, arg)
+        }
+    }
+
+    return run_command(cmd, "bootstrap ycc failed")
+}
+
+pub fn build_native_from_ir(out_dir string) DriverResult {
+    llc := find_tool("LLC", "llc")
+    clang := find_tool("CLANG", "clang")
+    linkflags := env_or_empty("LINKFLAGS")
+
+    ll_file := join_path(out_dir, "merged.ll")
+    obj_file := join_path(out_dir, "merged.o")
+    bin_file := join_path(out_dir, "merged")
+
+    cmd := command_new(8192)
+    cmd = append_shell_quoted(cmd, llc)
+    cmd = append_space(cmd)
+    cmd = append_text(cmd, "-filetype=obj")
+    cmd = append_space(cmd)
+    cmd = append_shell_quoted(cmd, ll_file)
+    cmd = append_space(cmd)
+    cmd = append_text(cmd, "-o")
+    cmd = append_space(cmd)
+    cmd = append_shell_quoted(cmd, obj_file)
+    result := run_command(cmd, "llc failed")
+    if !result.ok {
+        return result
+    }
+
+    cmd = command_new(8192)
+    cmd = append_shell_quoted(cmd, clang)
+    if !is_empty(linkflags) {
+        cmd = append_space(cmd)
+        cmd = append_text(cmd, linkflags)
+    }
+    cmd = append_space(cmd)
+    cmd = append_shell_quoted(cmd, obj_file)
+    cmd = append_space(cmd)
+    cmd = append_text(cmd, "-o")
+    cmd = append_space(cmd)
+    cmd = append_shell_quoted(cmd, bin_file)
+    return run_command(cmd, "clang link failed")
+}

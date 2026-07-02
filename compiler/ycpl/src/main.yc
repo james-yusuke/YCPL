@@ -1,0 +1,272 @@
+import "driver" as driver
+import "checker" as checker
+import "irgen" as irgen
+import "lexer" as lexer
+import "parser" as parser
+import "resolver" as resolver
+import "source" as source
+import "token" as tok
+import "std/fmt" as fmt
+import "std/str" as str
+
+fn usage() {
+    fmt.println("usage: ycc-ycpl <lex|parse|check|build|build-ir|build-ir-self> [options] <file.yc | dir>")
+    fmt.println("       ycc-ycpl build compiler/ycpl -o build/self")
+    fmt.println("       ycc-ycpl build-ir compiler/ycpl -o build/self")
+    fmt.println("options for build/build-ir:")
+    fmt.println("       --bootstrap <path-to-ycc>")
+}
+
+fn run_lex(path string, text string) i32 {
+    lx := lexer.new(path, text)
+    for (; true; ) {
+        lx = lexer.next(lx)
+        if !lx.ok {
+            fmt.printf("%s:%d:%d: %s\n", path, lx.tok_line, lx.tok_col, lx.message)
+            return 1
+        }
+        if lx.kind == tok.eof() {
+            return 0
+        }
+        if lx.kind != tok.newline() {
+            fmt.printf("%d:%d %s %s\n", lx.tok_line, lx.tok_col, tok.name(lx.kind), lx.lexeme)
+        }
+    }
+    return 0
+}
+
+fn run_parse(path string, text string) i32 {
+    result := parser.parse(path, text)
+    if !result.ok {
+        fmt.printf("%s:%d:%d: %s\n", path, result.line, result.col, result.message)
+        return 1
+    }
+    fmt.printf("parse ok: tokens=%d decls=%d funcs=%d structs=%d imports=%d nodes=%d depth=%d\n", result.tokens, result.decls, result.functions, result.structs, result.imports, result.program.arena.nodes, result.max_depth)
+    return 0
+}
+
+fn run_parse_project(path string) i32 {
+    result := resolver.parse_project(path)
+    if !result.ok {
+        fmt.printf("%s:%d:%d: %s\n", result.file, result.line, result.col, result.message)
+        return 1
+    }
+    fmt.printf("parse ok: files=%d tokens=%d decls=%d funcs=%d structs=%d imports=%d nodes=%d digest=%d\n", result.files, result.tokens, result.decls, result.functions, result.structs, result.imports, result.nodes, result.digest)
+    return 0
+}
+
+fn is_yc_file(path string) bool {
+    n := str.len(path)
+    if n < 3 {
+        return false
+    }
+    return path[n - 3] == '.' && path[n - 2] == 'y' && path[n - 1] == 'c'
+}
+
+fn output_dir(argc i32, argv *string) string {
+    i: i32 := 2
+    for (; i < argc; i++) {
+        if str.eq(argv[i], "-o") || str.eq(argv[i], "--output") {
+            if i + 1 < argc {
+                return argv[i + 1]
+            }
+        }
+    }
+    return "."
+}
+
+fn input_path(argc i32, argv *string) string {
+    i: i32 := 2
+    for (; i < argc; i++) {
+        if str.eq(argv[i], "-o") || str.eq(argv[i], "--output") || str.eq(argv[i], "--bootstrap") {
+            i += 1
+        } else {
+            return argv[i]
+        }
+    }
+    return ""
+}
+
+fn run_check(path string, text string) i32 {
+    checked := checker.check_tiny_main(path, text)
+    if !checked.ok {
+        fmt.printf("%s:%d:%d: %s\n", path, checked.line, checked.col, checked.message)
+        if !checked.supported {
+            return 2
+        }
+        return 1
+    }
+    fmt.printf("check ok: main returns %s value=%d\n", checked.return_type, checked.return_value)
+    return 0
+}
+
+fn run_check_project(path string) i32 {
+    checked := resolver.check_project(path)
+    if !checked.ok {
+        fmt.printf("%s:%d:%d: %s\n", checked.file, checked.line, checked.col, checked.message)
+        if !checked.supported {
+            return 2
+        }
+        return 1
+    }
+    fmt.printf("check ok: files=%d tokens=%d decls=%d funcs=%d structs=%d imports=%d nodes=%d calls=%d branches=%d loops=%d digest=%d\n", checked.files, checked.tokens, checked.decls, checked.functions, checked.structs, checked.imports, checked.nodes, checked.calls, checked.branches, checked.loops, checked.digest)
+    return 0
+}
+
+fn run_build_ir_self(argc i32, argv *string) i32 {
+    path := input_path(argc, argv)
+    if str.len(path) == 0 {
+        usage()
+        return 1
+    }
+
+    result := irgen.emit_file(path, output_dir(argc, argv))
+    if !result.ok {
+        fmt.printf("%s:%d:%d: %s\n", path, result.line, result.col, result.message)
+        if !result.supported {
+            return 2
+        }
+        return 1
+    }
+    fmt.printf("Wrote IR to \"%s\"\n", result.out_file)
+    return 0
+}
+
+fn run_build(mode string, argc i32, argv *string) i32 {
+    path := input_path(argc, argv)
+    if resolver.is_compiler_project(path) {
+        checked := resolver.check_project(path)
+        if !checked.ok {
+            fmt.printf("%s:%d:%d: %s\n", checked.file, checked.line, checked.col, checked.message)
+            return 1
+        }
+        if str.eq(mode, "build-ir") {
+            result := irgen.emit_project(path, output_dir(argc, argv))
+            if result.ok {
+                fmt.printf("Wrote IR to \"%s\"\n", result.out_file)
+                return 0
+            }
+            fmt.printf("%s:%d:%d: %s\n", path, result.line, result.col, result.message)
+            if !result.supported {
+                return 2
+            }
+            return 1
+        }
+        if driver.bootstrap_fallback_disabled() {
+            out := output_dir(argc, argv)
+            result := irgen.emit_project(path, out)
+            if !result.ok {
+                fmt.printf("%s:%d:%d: %s\n", path, result.line, result.col, result.message)
+                if !result.supported {
+                    return 2
+                }
+                return 1
+            }
+            native := driver.build_native_from_ir(out)
+            if !native.ok {
+                fmt.printf("%s\n", native.message)
+                fmt.printf("command: %s\n", native.command)
+                return 1
+            }
+            fmt.printf("Wrote IR to \"%s\"\n", result.out_file)
+            fmt.printf("Wrote native AST smoke binary to \"%s/merged\"\n", out)
+            return 0
+        }
+    }
+
+    if str.eq(mode, "build-ir") {
+        if is_yc_file(path) {
+            result := irgen.emit_file(path, output_dir(argc, argv))
+            if result.ok {
+                fmt.printf("Wrote IR to \"%s\"\n", result.out_file)
+                return 0
+            }
+            if result.supported {
+                fmt.printf("%s:%d:%d: %s\n", path, result.line, result.col, result.message)
+                return 1
+            }
+        }
+    }
+    if str.eq(mode, "build") {
+        if is_yc_file(path) {
+            out := output_dir(argc, argv)
+            result := irgen.emit_file(path, out)
+            if result.ok {
+                native := driver.build_native_from_ir(out)
+                if !native.ok {
+                    fmt.printf("%s\n", native.message)
+                    fmt.printf("command: %s\n", native.command)
+                    return 1
+                }
+                fmt.printf("Wrote IR to \"%s\"\n", result.out_file)
+                fmt.printf("Wrote binary to \"%s/merged\"\n", out)
+                return 0
+            }
+            if result.supported {
+                fmt.printf("%s:%d:%d: %s\n", path, result.line, result.col, result.message)
+                return 1
+            }
+        }
+    }
+
+    result := driver.run_bootstrap(mode, argc, argv)
+    if !result.ok {
+        fmt.printf("%s\n", result.message)
+        fmt.printf("command: %s\n", result.command)
+        return 1
+    }
+    return 0
+}
+
+fn main(argc i32, argv *string) i32 {
+    if argc < 2 {
+        usage()
+        return 1
+    }
+
+    mode := argv[1]
+
+    if str.eq(mode, "build") {
+        return run_build("build", argc, argv)
+    }
+    if str.eq(mode, "build-ir") || str.eq(mode, "ll") {
+        return run_build("build-ir", argc, argv)
+    }
+    if str.eq(mode, "build-ir-self") {
+        return run_build_ir_self(argc, argv)
+    }
+
+    if argc < 3 {
+        usage()
+        return 1
+    }
+
+    path := argv[2]
+    if resolver.is_compiler_project(path) {
+        if str.eq(mode, "parse") {
+            return run_parse_project(path)
+        }
+        if str.eq(mode, "check") {
+            return run_check_project(path)
+        }
+    }
+
+    src := source.load(path)
+    if !src.ok {
+        fmt.printf("%s: could not read file\n", path)
+        return 1
+    }
+
+    if str.eq(mode, "lex") {
+        return run_lex(path, src.text)
+    }
+    if str.eq(mode, "parse") {
+        return run_parse(path, src.text)
+    }
+    if str.eq(mode, "check") {
+        return run_check(path, src.text)
+    }
+
+    usage()
+    return 1
+}

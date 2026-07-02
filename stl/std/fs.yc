@@ -5,6 +5,10 @@ import "std/mem" as mem
 extern fn c_open(path string, flags i32, mode i32) i32 as "open"
 extern fn c_close(fd i32) i32 as "close"
 extern fn c_read(fd i32, buf string, count i32) i32 as "read"
+extern fn c_fopen(path string, mode string) *byte as "fopen"
+extern fn c_fputs(text string, file *byte) i32 as "fputs"
+extern fn c_fclose(file *byte) i32 as "fclose"
+extern fn c_mkdir(path string, mode i32) i32 as "mkdir"
 
 pub fn exists(path string) bool {
     fd := c_open(path, 0, 0)
@@ -26,6 +30,22 @@ pub fn read_file(path string) string {
     c_read(fd, buf, 65535)
     c_close(fd)
     return buf
+}
+
+pub fn write_file(path string, text string) bool {
+    file := c_fopen(path, "w")
+    if file == none {
+        return false
+    }
+
+    rc := c_fputs(text, file)
+    c_fclose(file)
+    return rc >= 0
+}
+
+pub fn mkdir(path string) bool {
+    rc := c_mkdir(path, 493)
+    return rc == 0
 }
 
 pub fn uri_to_path(uri string) string {

@@ -47,7 +47,7 @@ Value *CodeGen::codegen_index(const ast::IndexExpr *ie)
 
         ParsedType pt = parse_type_chain(localType->c_str());
 
-        if (pt.base == "string" && pt.array_depth == 0)
+        if (pt.base == "string" && pt.array_depth == 0 && pt.pointer_depth == 0)
         {
             Value *v = lookup_local(id->name);
 
@@ -63,7 +63,7 @@ Value *CodeGen::codegen_index(const ast::IndexExpr *ie)
             return builder.CreateZExt(ch, builder.getInt32Ty());
         }
 
-        if (pt.base == "string_params" && pt.array_depth == 0)
+        if (pt.base == "string_params" && pt.array_depth == 0 && pt.pointer_depth == 0)
         {
             Type *i8Ty = llvm::Type::getInt8Ty(context);
 
@@ -75,12 +75,41 @@ Value *CodeGen::codegen_index(const ast::IndexExpr *ie)
             Value *ch = builder.CreateLoad(i8Ty, charPtr);
             return builder.CreateZExt(ch, builder.getInt32Ty());
         }
+
+        if (pt.pointer_depth > 0 && pt.array_depth == 0)
+        {
+            Type *elemTy = getLLVMType(pt.base);
+            if (!elemTy)
+            {
+                error("index: cannot resolve pointer element type for " + id->name);
+                return nullptr;
+            }
+
+            if (!idxVal->getType()->isIntegerTy(64))
+            {
+                if (idxVal->getType()->isIntegerTy())
+                    idxVal = builder.CreateSExtOrTrunc(idxVal, detail::getI64Ty(context), "ptr_idx_i64");
+                else
+                {
+                    error("pointer index is not integer");
+                    return nullptr;
+                }
+            }
+
+            Value *elemPtr = builder.CreateInBoundsGEP(elemTy, colVal, {idxVal}, "ptr_index");
+            Value *loaded = builder.CreateLoad(elemTy, elemPtr, "ptr_index_load");
+            if (elemTy->isIntegerTy(1))
+                return builder.CreateZExt(loaded, builder.getInt32Ty(), "ptr_index_bool_ext");
+            if (elemTy->isIntegerTy(8))
+                return builder.CreateZExt(loaded, builder.getInt32Ty(), "ptr_index_i8_ext");
+            return loaded;
+        }
     }
 
     {
         std::string collectionType = infer_expr_type_name(ie->collection.get());
         ParsedType pt = parse_type_chain(collectionType);
-        if ((pt.base == "string" || pt.base == "string_params") && pt.array_depth == 0)
+        if ((pt.base == "string" || pt.base == "string_params") && pt.array_depth == 0 && pt.pointer_depth == 0)
         {
             if (!colVal->getType()->isPointerTy())
             {
