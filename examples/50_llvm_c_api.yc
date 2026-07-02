@@ -1,0 +1,25 @@
+import "std/fmt" as fmt
+import "std/llvm" as llvm
+
+fn main() {
+    ctx := llvm.context_create()
+    mod := llvm.module_create_with_name_in_context("ycpl_llvm_c_api", ctx)
+    builder := llvm.create_builder_in_context(ctx)
+
+    i32_type := llvm.int32_type_in_context(ctx)
+    main_type := llvm.function_type(i32_type, none, 0, 0)
+    main_fn := llvm.add_function(mod, "generated_main", main_type)
+    entry := llvm.append_basic_block_in_context(ctx, main_fn, "entry")
+    llvm.position_builder_at_end(builder, entry)
+
+    zero := llvm.const_int(i32_type, 0, 0)
+    llvm.build_ret(builder, zero)
+
+    ir := llvm.print_module_to_string(mod)
+    fmt.println(ir)
+
+    llvm.dispose_message(ir)
+    llvm.dispose_builder(builder)
+    llvm.dispose_module(mod)
+    llvm.context_dispose(ctx)
+}
