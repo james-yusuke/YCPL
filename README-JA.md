@@ -142,25 +142,34 @@ cd examples/04_module_project && ../../bazel-bin/ycc build
    ├─ YCPL で実装
    ├─ YCPL source を lex/parse
    ├─ 小さな self-codegen subset を型検査
-   ├─ i32 main、local、assignment、arithmetic は LLVM IR を直接生成
+   ├─ i32 main、local、assignment、call、arithmetic、return は LLVM IR を直接生成
    ├─ その subset は bootstrap ycc なしで native binary まで生成
-   ├─ compiler/ycpl を明示 project source set として parse/check
+   ├─ src/**/*.yc traversal で compiler/ycpl を parse/check
+   ├─ project AST 由来の function-name digest と main presence を保持
+   ├─ ast/body と parser/body で body statement node sequence を保持
+   ├─ local/call/control-flow 構造用に function-body token/digest summary を保持
+   ├─ function body 由来の return-expression count と digest を保持
+   ├─ std/llvm C API wrapper 経由で local/assignment/call/return node probe IR を生成
+   ├─ std/llvm C API wrapper 経由で project statement/expression lowering IR を生成
+   ├─ compiler/ycpl source 内の zero-argument i32 constant-return function を lower
    ├─ YCPL_NO_BOOTSTRAP=1 で compiler/ycpl の project LLVM IR を生成
    ├─ project AST IR を bootstrap ycc なしで native smoke binary に変換
+   ├─ 生成された stage2 binary は parse/check/build-ir compiler/ycpl に対応
+   ├─ 生成された stage2 binary は native stage3 smoke output を build 可能
+   ├─ 生成された stage2 binary は source 内容で tiny example input を別々の IR に lower
    └─ 未対応の build/build-ir input は bootstrap ycc に委譲
 ```
 
 ```text
 compiler/ycpl
-├─ source  bounded file loading
-├─ diag    file/line/column diagnostics
-├─ lexer   token stream、nested comments、string/char checks
-├─ ast     kind i32 の tagged structs
-├─ parser  current grammar surface と recovery diagnostics
-├─ checker tiny i32 typed subset gate と project AST gate
-├─ irgen   LLVM C API IR emission と project AST IR emission
-├─ driver  self-native build と bootstrap stage driver
-└─ cli     ycc-ycpl lex / parse / check / build-ir-self / build
+├─ src/ast       kind i32 の tagged structs と body node sequence records
+├─ src/checker   tiny i32 typed subset gate と project AST gate
+├─ src/codegen   LLVM C API tiny statement IR、node IR、project AST IR emission
+├─ src/driver    self-native build と bootstrap stage driver
+├─ src/lexer     token stream、nested comments、string/char checks
+├─ src/parser    current grammar surface、body node extraction、recovery diagnostics
+├─ src/resolver  YCPL.json project root と nested src/**/*.yc traversal
+└─ src/source    bounded file loading
 ```
 
 ```sh
@@ -169,9 +178,11 @@ bazel-bin/ycc-ycpl parse examples/01_hello.yc
 bazel-bin/ycc-ycpl check examples/53_self_codegen_main.yc
 bazel-bin/ycc-ycpl build-ir-self examples/53_self_codegen_main.yc -o /tmp/ycpl-self-tiny
 bazel-bin/ycc-ycpl build examples/54_self_codegen_arithmetic.yc -o /tmp/ycpl-self-native
+bazel-bin/ycc-ycpl build examples/56_self_codegen_call_assignment.yc -o /tmp/ycpl-self-call
 bazel-bin/ycc-ycpl parse compiler/ycpl
 bazel-bin/ycc-ycpl check compiler/ycpl
 bazel-bin/ycc-ycpl build-ir compiler/ycpl -o /tmp/ycpl-self-ir
+# std/llvm 経由で /tmp/ycpl-self-ir/local_return.ll も生成し、その node probe を merged.ll に統合
 bazel-bin/ycc-ycpl build compiler/ycpl -o /tmp/ycpl-self-native
 YCPL_NO_BOOTSTRAP=1 bazel-bin/ycc-ycpl build-ir compiler/ycpl -o /tmp/ycpl-strict
 YCPL_NO_BOOTSTRAP=1 bazel-bin/ycc-ycpl build compiler/ycpl -o /tmp/ycpl-strict-native
@@ -180,10 +191,20 @@ YCPL_NO_BOOTSTRAP=1 bazel-bin/ycc-ycpl build compiler/ycpl -o /tmp/ycpl-strict-n
 ```text
 stage-2 gate
 ├─ compiler/ycpl project parse/check は ycc-ycpl 側で処理
-├─ tiny arithmetic build は YCPL_NO_BOOTSTRAP=1 で実行可能
+├─ src/ast や src/codegen のような nested source folder は src/**/*.yc traversal で検出
+├─ tiny arithmetic/call build は YCPL_NO_BOOTSTRAP=1 で実行可能
 ├─ project build-ir は bootstrap fallback なしで実行
+├─ project build-ir は LLVM C API wrapper 経由で local_return.ll と project_body.ll を生成
+├─ merged.ll は local、assignment、call、return count 用の LLVM-wrapper-generated node probe を含む
+├─ merged.ll は LLVM-wrapper-generated project statement/expression lowering を呼び出す
+├─ project_body.ll は source-derived constant-return function lowering を含む
+├─ project parse/check は src/ast/shape.yc 由来の typed AST shape count と typed digest を出す
+├─ project AST IR は function symbol、body node、typed AST、main presence、return-expression gate を含む
 ├─ project AST IR は native smoke binary まで変換可能
-└─ compiler として等価な native ycc-ycpl は次段で対応
+├─ 生成された stage2 binary は stage3 LLVM IR を出力可能
+├─ 生成された stage2 binary は llc/clang で stage3 native output を build 可能
+├─ 生成された stage2 binary は examples/54 と renamed copy を exit code 13 の native に build
+└─ compiler として等価な build/native codegen は次段で対応
 ```
 
 ## YCPL から LLVM C API を呼ぶ

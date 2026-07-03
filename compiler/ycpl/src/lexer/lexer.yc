@@ -1,6 +1,6 @@
 module compiler.ycpl.lexer
 
-import "token" as tok
+import "lexer/token" as tok
 import "std/str" as str
 import "std/text" as text
 

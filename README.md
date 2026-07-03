@@ -142,25 +142,34 @@ Transition
    ├─ written in YCPL
    ├─ lexes and parses YCPL sources
    ├─ type-checks a tiny self-codegen subset
-   ├─ emits LLVM IR for i32 main, locals, assignments, arithmetic
+   ├─ emits LLVM IR for i32 main, locals, assignments, calls, arithmetic, and returns
    ├─ builds that subset to native binary without bootstrap ycc
-   ├─ parses/checks compiler/ycpl as an explicit project source set
+   ├─ parses/checks compiler/ycpl by traversing src/**/*.yc
+   ├─ tracks function-name digest and main presence from project AST
+   ├─ stores body statement node sequences in ast/body and parser/body
+   ├─ tracks function-body token/digest summaries for local/call/control-flow structure
+   ├─ tracks return-expression counts and digest from function bodies
+   ├─ emits local/assignment/call/return node probe IR through std/llvm C API wrappers
+   ├─ emits project statement/expression lowering IR through std/llvm C API wrappers
+   ├─ lowers zero-argument i32 constant-return functions from compiler/ycpl sources
    ├─ emits project LLVM IR for compiler/ycpl with YCPL_NO_BOOTSTRAP=1
    ├─ builds that project AST IR to a native smoke binary without bootstrap ycc
+   ├─ generated stage2 binary supports parse/check/build-ir compiler/ycpl
+   ├─ generated stage2 binary can build native stage3 smoke output
+   ├─ generated stage2 binary lowers tiny example inputs to distinct IR by source content
    └─ delegates unsupported build/build-ir inputs to bootstrap ycc
 ```
 
 ```text
 compiler/ycpl
-├─ source  bounded file loading
-├─ diag    file/line/column diagnostics
-├─ lexer   token stream, nested comments, string/char checks
-├─ ast     tagged structs with kind i32
-├─ parser  current grammar surface and recovery diagnostics
-├─ checker tiny i32 typed subset gate and project AST gate
-├─ irgen   LLVM C API IR emission and project AST IR emission
-├─ driver  self-native build and bootstrap stage driver
-└─ cli     ycc-ycpl lex / parse / check / build-ir-self / build
+├─ src/ast       tagged structs with kind i32 and body node sequence records
+├─ src/checker   tiny i32 typed subset gate and project AST gate
+├─ src/codegen   LLVM C API tiny statement IR, node IR, and project AST IR emission
+├─ src/driver    self-native build and bootstrap stage driver
+├─ src/lexer     token stream, nested comments, string/char checks
+├─ src/parser    current grammar surface, body node extraction, recovery diagnostics
+├─ src/resolver  YCPL.json project root and nested src/**/*.yc traversal
+└─ src/source    bounded file loading
 ```
 
 ```sh
@@ -169,9 +178,11 @@ bazel-bin/ycc-ycpl parse examples/01_hello.yc
 bazel-bin/ycc-ycpl check examples/53_self_codegen_main.yc
 bazel-bin/ycc-ycpl build-ir-self examples/53_self_codegen_main.yc -o /tmp/ycpl-self-tiny
 bazel-bin/ycc-ycpl build examples/54_self_codegen_arithmetic.yc -o /tmp/ycpl-self-native
+bazel-bin/ycc-ycpl build examples/56_self_codegen_call_assignment.yc -o /tmp/ycpl-self-call
 bazel-bin/ycc-ycpl parse compiler/ycpl
 bazel-bin/ycc-ycpl check compiler/ycpl
 bazel-bin/ycc-ycpl build-ir compiler/ycpl -o /tmp/ycpl-self-ir
+# also writes /tmp/ycpl-self-ir/local_return.ll via std/llvm and merges its node probe into merged.ll
 bazel-bin/ycc-ycpl build compiler/ycpl -o /tmp/ycpl-self-native
 YCPL_NO_BOOTSTRAP=1 bazel-bin/ycc-ycpl build-ir compiler/ycpl -o /tmp/ycpl-strict
 YCPL_NO_BOOTSTRAP=1 bazel-bin/ycc-ycpl build compiler/ycpl -o /tmp/ycpl-strict-native
@@ -180,10 +191,20 @@ YCPL_NO_BOOTSTRAP=1 bazel-bin/ycc-ycpl build compiler/ycpl -o /tmp/ycpl-strict-n
 ```text
 stage-2 gate
 ├─ compiler/ycpl project parse/check is handled by ycc-ycpl
-├─ tiny arithmetic build can run with YCPL_NO_BOOTSTRAP=1
+├─ nested source folders such as src/ast and src/codegen are discovered through src/**/*.yc traversal
+├─ tiny arithmetic/call builds can run with YCPL_NO_BOOTSTRAP=1
 ├─ project build-ir runs without bootstrap fallback
+├─ project build-ir emits local_return.ll and project_body.ll through LLVM C API wrappers
+├─ merged.ll includes the LLVM-wrapper-generated node probe for local, assignment, call, and return counts
+├─ merged.ll calls LLVM-wrapper-generated project statement/expression lowering
+├─ project_body.ll includes source-derived constant-return function lowering
+├─ project parse/check emits typed AST shape counts and a typed digest from src/ast/shape.yc
+├─ project AST IR contains function symbol, body node, typed-AST, main-presence, and return-expression gates
 ├─ project AST IR can be lowered to a native smoke binary
-└─ compiler-equivalent native ycc-ycpl remains the next stage
+├─ generated stage2 binary can emit stage3 LLVM IR
+├─ generated stage2 binary can invoke llc/clang to build stage3 native output
+├─ generated stage2 binary builds examples/54 and renamed copies to native exit code 13
+└─ full compiler-equivalent build/native codegen remains the next stage
 ```
 
 ## LLVM C API From YCPL
