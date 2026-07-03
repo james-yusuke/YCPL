@@ -1,0 +1,9 @@
+fn seed() i32 {
+    return 7
+}
+
+fn main() i32 {
+    x := seed()
+    x = x + 6
+    return x
+}

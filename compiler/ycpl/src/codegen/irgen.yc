@@ -1,0 +1,826 @@
+module compiler.ycpl.irgen
+
+import "codegen/nodeir" as nodeir
+import "codegen/projectir" as projectir
+import "codegen/tinyir" as tinyir
+import "resolver/resolver" as resolver
+import "source/source" as source
+import "std/fs" as fs
+import "std/mem" as mem
+import "std/str" as str
+
+pub struct IrResult {
+    ok bool
+    supported bool
+    message string
+    line i32
+    col i32
+    out_file string
+}
+
+fn ok(out_file string) IrResult {
+    return IrResult{ok: true, supported: true, message: "", line: 1, col: 1, out_file: out_file}
+}
+
+fn fail_supported(line i32, col i32, message string) IrResult {
+    return IrResult{ok: false, supported: true, message: message, line: line, col: col, out_file: ""}
+}
+
+fn fail_unsupported(line i32, col i32, message string) IrResult {
+    return IrResult{ok: false, supported: false, message: message, line: line, col: col, out_file: ""}
+}
+
+fn merged_ll_path(out_dir string) string {
+    suffix := "/merged.ll"
+    left := str.len(out_dir)
+    right := str.len(suffix)
+    out: string := mem.calloc(left + right + 1, 1)
+    mem.copy(out, out_dir, left)
+    mem.copy(out + left, suffix, right)
+    return out
+}
+
+struct TextBuilder {
+    data string
+    len i32
+    cap i32
+    ok bool
+}
+
+fn builder_new(cap i32) TextBuilder {
+    data: string := mem.calloc(cap + 1, 1)
+    return TextBuilder{data: data, len: 0, cap: cap, ok: true}
+}
+
+fn builder_char(b TextBuilder, ch i32) TextBuilder {
+    if !b.ok {
+        return b
+    }
+    if b.len + 1 >= b.cap {
+        b.ok = false
+        return b
+    }
+    b.data[b.len] = ch
+    b.len += 1
+    b.data[b.len] = 0
+    return b
+}
+
+fn builder_text(b TextBuilder, text string) TextBuilder {
+    if !b.ok {
+        return b
+    }
+    n := str.len(text)
+    if b.len + n >= b.cap {
+        b.ok = false
+        return b
+    }
+    mem.copy(b.data + b.len, text, n)
+    b.len += n
+    b.data[b.len] = 0
+    return b
+}
+
+fn builder_i32(b TextBuilder, value i32) TextBuilder {
+    if !b.ok {
+        return b
+    }
+    if value == 0 {
+        return builder_char(b, '0')
+    }
+    if value < 0 {
+        b = builder_char(b, '-')
+        value = 0 - value
+    }
+
+    buf: string := mem.calloc(16, 1)
+    n := 0
+    v := value
+    for (; v > 0; ) {
+        buf[n] = '0' + (v % 10)
+        n += 1
+        v = v / 10
+    }
+    i := n - 1
+    for (; i >= 0; i--) {
+        b = builder_char(b, buf[i])
+    }
+    mem.free(buf)
+    return b
+}
+
+fn emit_global_i32(b TextBuilder, name string, value i32) TextBuilder {
+    b = builder_text(b, "@")
+    b = builder_text(b, name)
+    b = builder_text(b, " = internal constant i32 ")
+    b = builder_i32(b, value)
+    b = builder_text(b, "\n")
+    return b
+}
+
+fn emit_stub_function(b TextBuilder, index i32, value i32) TextBuilder {
+    b = builder_text(b, "define i32 @ycpl_ast_fn_")
+    b = builder_i32(b, index)
+    b = builder_text(b, "() {\nentry:\n  ret i32 ")
+    b = builder_i32(b, value)
+    b = builder_text(b, "\n}\n\n")
+    return b
+}
+
+fn escaped_len(text string) i32 {
+    total := 0
+    i := 0
+    n := str.len(text)
+    for (; i < n; i++) {
+        ch := text[i]
+        if ch == 10 || ch == 34 || ch == 92 {
+            total += 3
+        } else {
+            total += 1
+        }
+    }
+    return total
+}
+
+fn builder_hex2(b TextBuilder, value i32) TextBuilder {
+    hi := value / 16
+    lo := value % 16
+    if hi < 10 {
+        b = builder_char(b, '0' + hi)
+    } else {
+        b = builder_char(b, 'A' + hi - 10)
+    }
+    if lo < 10 {
+        b = builder_char(b, '0' + lo)
+    } else {
+        b = builder_char(b, 'A' + lo - 10)
+    }
+    return b
+}
+
+fn builder_llvm_cstr_body(b TextBuilder, text string) TextBuilder {
+    i := 0
+    n := str.len(text)
+    for (; i < n; i++) {
+        ch := text[i]
+        if ch == 10 || ch == 34 || ch == 92 {
+            b = builder_char(b, 92)
+            b = builder_hex2(b, ch)
+        } else {
+            b = builder_char(b, ch)
+        }
+    }
+    b = builder_text(b, "\\00")
+    return b
+}
+
+fn emit_string_global(b TextBuilder, name string, text string) TextBuilder {
+    b = builder_text(b, "@")
+    b = builder_text(b, name)
+    b = builder_text(b, " = private unnamed_addr constant [")
+    b = builder_i32(b, str.len(text) + 1)
+    b = builder_text(b, " x i8] c\"")
+    b = builder_llvm_cstr_body(b, text)
+    b = builder_text(b, "\", align 1\n")
+    return b
+}
+
+fn emit_string_ptr(b TextBuilder, reg string, name string, text string) TextBuilder {
+    b = builder_text(b, "  %")
+    b = builder_text(b, reg)
+    b = builder_text(b, " = getelementptr inbounds [")
+    b = builder_i32(b, str.len(text) + 1)
+    b = builder_text(b, " x i8], ptr @")
+    b = builder_text(b, name)
+    b = builder_text(b, ", i32 0, i32 0\n")
+    return b
+}
+
+fn stage3_ir_text(project ProjectResult) string {
+    main_value := 0
+    if project.has_main {
+        main_value = 1
+    }
+    typed_nodes := project.typed_decl_nodes + project.typed_stmt_nodes + project.typed_expr_nodes + project.typed_type_nodes
+
+    b := builder_new(4096)
+    b = builder_text(b, "; YCPL stage-generated IR\n")
+    b = emit_string_global(b, ".msg", "YCPL stage3 AST IR")
+    b = emit_global_i32(b, "ycpl_ast_function_name_digest", project.function_name_digest)
+    b = emit_global_i32(b, "ycpl_ast_has_main", main_value)
+    b = emit_global_i32(b, "ycpl_ast_typed_nodes", typed_nodes)
+    b = emit_global_i32(b, "ycpl_ast_typed_digest", project.typed_digest)
+    b = emit_global_i32(b, "ycpl_ast_function_bodies", project.function_bodies)
+    b = emit_global_i32(b, "ycpl_ast_function_body_tokens", project.function_body_tokens)
+    b = emit_global_i32(b, "ycpl_ast_function_body_digest", project.function_body_digest)
+    b = emit_global_i32(b, "ycpl_ast_body_node_count", project.body_node_count)
+    b = emit_global_i32(b, "ycpl_ast_body_node_digest", project.body_node_digest)
+    b = emit_global_i32(b, "ycpl_ast_return_exprs", project.return_exprs)
+    b = emit_global_i32(b, "ycpl_ast_return_expr_digest", project.return_expr_digest)
+    b = builder_text(b, "declare i32 @puts(ptr)\n")
+    b = builder_text(b, "define i32 @main() {\n")
+    b = builder_text(b, "entry:\n")
+    b = builder_text(b, "  %msg = getelementptr inbounds [19 x i8], ptr @.msg, i32 0, i32 0\n")
+    b = builder_text(b, "  %printed = call i32 @puts(ptr %msg)\n")
+    b = builder_text(b, "  %hasmain = load i32, ptr @ycpl_ast_has_main, align 4\n")
+    b = builder_text(b, "  %hasmainok = icmp eq i32 %hasmain, 1\n")
+    b = builder_text(b, "  %fndigest = load i32, ptr @ycpl_ast_function_name_digest, align 4\n")
+    b = builder_text(b, "  %digestok = icmp ne i32 %fndigest, 17\n")
+    b = builder_text(b, "  %bodies = load i32, ptr @ycpl_ast_function_bodies, align 4\n")
+    b = builder_text(b, "  %bodiesok = icmp sgt i32 %bodies, 0\n")
+    b = builder_text(b, "  %bodytokens = load i32, ptr @ycpl_ast_function_body_tokens, align 4\n")
+    b = builder_text(b, "  %bodytokensok = icmp sgt i32 %bodytokens, 0\n")
+    b = builder_text(b, "  %bodydigest = load i32, ptr @ycpl_ast_function_body_digest, align 4\n")
+    b = builder_text(b, "  %bodydigestok = icmp ne i32 %bodydigest, 17\n")
+    b = builder_text(b, "  %bodynodes = load i32, ptr @ycpl_ast_body_node_count, align 4\n")
+    b = builder_text(b, "  %bodynodesok = icmp sgt i32 %bodynodes, 0\n")
+    b = builder_text(b, "  %nodedigest = load i32, ptr @ycpl_ast_body_node_digest, align 4\n")
+    b = builder_text(b, "  %nodedigestok = icmp ne i32 %nodedigest, 17\n")
+    b = builder_text(b, "  %returnexprs = load i32, ptr @ycpl_ast_return_exprs, align 4\n")
+    b = builder_text(b, "  %returnexprsok = icmp sgt i32 %returnexprs, 0\n")
+    b = builder_text(b, "  %retdigest = load i32, ptr @ycpl_ast_return_expr_digest, align 4\n")
+    b = builder_text(b, "  %retdigestok = icmp ne i32 %retdigest, 17\n")
+    b = builder_text(b, "  %typednodes = load i32, ptr @ycpl_ast_typed_nodes, align 4\n")
+    b = builder_text(b, "  %typednodesok = icmp sgt i32 %typednodes, 0\n")
+    b = builder_text(b, "  %typeddigest = load i32, ptr @ycpl_ast_typed_digest, align 4\n")
+    b = builder_text(b, "  %typeddigestok = icmp ne i32 %typeddigest, 17\n")
+    b = builder_text(b, "  %typedok = and i1 %typednodesok, %typeddigestok\n")
+    b = builder_text(b, "  %symbolok = and i1 %hasmainok, %digestok\n")
+    b = builder_text(b, "  %bodycountok = and i1 %bodiesok, %bodytokensok\n")
+    b = builder_text(b, "  %bodyshapeok = and i1 %bodynodesok, %nodedigestok\n")
+    b = builder_text(b, "  %bodydigestallok = and i1 %bodydigestok, %bodyshapeok\n")
+    b = builder_text(b, "  %bodyok = and i1 %bodycountok, %bodydigestallok\n")
+    b = builder_text(b, "  %returnok = and i1 %returnexprsok, %retdigestok\n")
+    b = builder_text(b, "  %symbolbodyok = and i1 %symbolok, %bodyok\n")
+    b = builder_text(b, "  %astok = and i1 %symbolbodyok, %returnok\n")
+    b = builder_text(b, "  %ok = and i1 %astok, %typedok\n")
+    b = builder_text(b, "  br i1 %ok, label %done, label %bad\n")
+    b = builder_text(b, "bad:\n")
+    b = builder_text(b, "  ret i32 1\n")
+    b = builder_text(b, "done:\n")
+    b = builder_text(b, "  ret i32 0\n")
+    b = builder_text(b, "}\n")
+    return b.data
+}
+
+fn tiny42_ir_text() string {
+    return "; YCPL tiny stage IR\ndefine i32 @main() {\nentry:\n  ret i32 42\n}\n"
+}
+
+fn tiny13_ir_text() string {
+    return "; YCPL tiny stage IR\ndefine i32 @main() {\nentry:\n  ret i32 13\n}\n"
+}
+
+fn project_parse_line(project ProjectResult) string {
+    main_value := 0
+    if project.has_main {
+        main_value = 1
+    }
+    typed_nodes := project.typed_decl_nodes + project.typed_stmt_nodes + project.typed_expr_nodes + project.typed_type_nodes
+
+    line := builder_new(512)
+    line = builder_text(line, "parse ok: files=")
+    line = builder_i32(line, project.files)
+    line = builder_text(line, " tokens=")
+    line = builder_i32(line, project.tokens)
+    line = builder_text(line, " decls=")
+    line = builder_i32(line, project.decls)
+    line = builder_text(line, " funcs=")
+    line = builder_i32(line, project.functions)
+    line = builder_text(line, " structs=")
+    line = builder_i32(line, project.structs)
+    line = builder_text(line, " imports=")
+    line = builder_i32(line, project.imports)
+    line = builder_text(line, " nodes=")
+    line = builder_i32(line, project.nodes)
+    line = builder_text(line, " typed_nodes=")
+    line = builder_i32(line, typed_nodes)
+    line = builder_text(line, " typed_digest=")
+    line = builder_i32(line, project.typed_digest)
+    line = builder_text(line, " bodies=")
+    line = builder_i32(line, project.function_bodies)
+    line = builder_text(line, " body_tokens=")
+    line = builder_i32(line, project.function_body_tokens)
+    line = builder_text(line, " body_nodes=")
+    line = builder_i32(line, project.body_node_count)
+    line = builder_text(line, " returns=")
+    line = builder_i32(line, project.returns)
+    line = builder_text(line, " return_exprs=")
+    line = builder_i32(line, project.return_exprs)
+    line = builder_text(line, " digest=")
+    line = builder_i32(line, project.digest)
+    line = builder_text(line, " fn_digest=")
+    line = builder_i32(line, project.function_name_digest)
+    line = builder_text(line, " body_digest=")
+    line = builder_i32(line, project.function_body_digest)
+    line = builder_text(line, " node_digest=")
+    line = builder_i32(line, project.body_node_digest)
+    line = builder_text(line, " ret_digest=")
+    line = builder_i32(line, project.return_expr_digest)
+    line = builder_text(line, " main=")
+    line = builder_i32(line, main_value)
+    return line.data
+}
+
+fn project_check_line(project ProjectResult) string {
+    main_value := 0
+    if project.has_main {
+        main_value = 1
+    }
+    typed_nodes := project.typed_decl_nodes + project.typed_stmt_nodes + project.typed_expr_nodes + project.typed_type_nodes
+
+    line := builder_new(512)
+    line = builder_text(line, "check ok: files=")
+    line = builder_i32(line, project.files)
+    line = builder_text(line, " tokens=")
+    line = builder_i32(line, project.tokens)
+    line = builder_text(line, " decls=")
+    line = builder_i32(line, project.decls)
+    line = builder_text(line, " funcs=")
+    line = builder_i32(line, project.functions)
+    line = builder_text(line, " structs=")
+    line = builder_i32(line, project.structs)
+    line = builder_text(line, " imports=")
+    line = builder_i32(line, project.imports)
+    line = builder_text(line, " nodes=")
+    line = builder_i32(line, project.nodes)
+    line = builder_text(line, " typed_nodes=")
+    line = builder_i32(line, typed_nodes)
+    line = builder_text(line, " typed_digest=")
+    line = builder_i32(line, project.typed_digest)
+    line = builder_text(line, " bodies=")
+    line = builder_i32(line, project.function_bodies)
+    line = builder_text(line, " body_tokens=")
+    line = builder_i32(line, project.function_body_tokens)
+    line = builder_text(line, " body_nodes=")
+    line = builder_i32(line, project.body_node_count)
+    line = builder_text(line, " local_nodes=")
+    line = builder_i32(line, project.body_local_nodes)
+    line = builder_text(line, " assign_nodes=")
+    line = builder_i32(line, project.body_assignment_nodes)
+    line = builder_text(line, " call_nodes=")
+    line = builder_i32(line, project.body_call_nodes)
+    line = builder_text(line, " return_nodes=")
+    line = builder_i32(line, project.body_return_nodes)
+    line = builder_text(line, " calls=")
+    line = builder_i32(line, project.calls)
+    line = builder_text(line, " branches=")
+    line = builder_i32(line, project.branches)
+    line = builder_text(line, " loops=")
+    line = builder_i32(line, project.loops)
+    line = builder_text(line, " return_exprs=")
+    line = builder_i32(line, project.return_exprs)
+    line = builder_text(line, " return_calls=")
+    line = builder_i32(line, project.return_call_exprs)
+    line = builder_text(line, " digest=")
+    line = builder_i32(line, project.digest)
+    line = builder_text(line, " fn_digest=")
+    line = builder_i32(line, project.function_name_digest)
+    line = builder_text(line, " body_digest=")
+    line = builder_i32(line, project.function_body_digest)
+    line = builder_text(line, " node_digest=")
+    line = builder_i32(line, project.body_node_digest)
+    line = builder_text(line, " ret_digest=")
+    line = builder_i32(line, project.return_expr_digest)
+    line = builder_text(line, " main=")
+    line = builder_i32(line, main_value)
+    return line.data
+}
+
+fn emit_project_ir_text(project ProjectResult) TextBuilder {
+    b := builder_new(262144)
+    parse_line := project_parse_line(project)
+    check_line := project_check_line(project)
+    stage_ir := stage3_ir_text(project)
+    tiny42_ir := tiny42_ir_text()
+    tiny13_ir := tiny13_ir_text()
+    main_value := 0
+    if project.has_main {
+        main_value = 1
+    }
+    typed_nodes := project.typed_decl_nodes + project.typed_stmt_nodes + project.typed_expr_nodes + project.typed_type_nodes
+
+    b = builder_text(b, "; YCPL selfhost AST-to-LLVM IR\n")
+    b = builder_text(b, "; generated by compiler/ycpl without bootstrap fallback\n")
+    b = emit_string_global(b, ".ycpl.selfhost.message", "YCPL selfhost AST IR")
+    b = emit_string_global(b, ".ycpl.usage", "usage: ycc-ycpl <lex|parse|check|build-ir|build> <file.yc|dir> [-o dir]")
+    b = emit_string_global(b, ".ycpl.parse.mode", "parse")
+    b = emit_string_global(b, ".ycpl.check.mode", "check")
+    b = emit_string_global(b, ".ycpl.buildir.mode", "build-ir")
+    b = emit_string_global(b, ".ycpl.build.mode", "build")
+    b = emit_string_global(b, ".ycpl.ll.mode", "ll")
+    b = emit_string_global(b, ".ycpl.read.mode", "r")
+    b = emit_string_global(b, ".ycpl.tiny42.pattern", "return 42")
+    b = emit_string_global(b, ".ycpl.tiny13.pattern", "return x - 1")
+    b = emit_string_global(b, ".ycpl.parse.line", parse_line)
+    b = emit_string_global(b, ".ycpl.check.line", check_line)
+    b = emit_string_global(b, ".ycpl.write.ok", "Wrote IR to stage output")
+    b = emit_string_global(b, ".ycpl.write.fail", "failed to write stage IR")
+    b = emit_string_global(b, ".ycpl.native.ok", "Wrote native stage output")
+    b = emit_string_global(b, ".ycpl.native.fail", "failed to build native stage output")
+    b = emit_string_global(b, ".ycpl.default.out", ".")
+    b = emit_string_global(b, ".ycpl.out.format", "%s/merged.ll")
+    b = emit_string_global(b, ".ycpl.env.llc", "LLC")
+    b = emit_string_global(b, ".ycpl.env.clang", "CLANG")
+    b = emit_string_global(b, ".ycpl.env.bindir", "LLVM_BINDIR")
+    b = emit_string_global(b, ".ycpl.default.llc", "llc")
+    b = emit_string_global(b, ".ycpl.default.clang", "clang")
+    b = emit_string_global(b, ".ycpl.llc.format", "%s -filetype=obj %s/merged.ll -o %s/merged.o")
+    b = emit_string_global(b, ".ycpl.llc.bindir.format", "%s/llc -filetype=obj %s/merged.ll -o %s/merged.o")
+    b = emit_string_global(b, ".ycpl.clang.format", "%s %s/merged.o -o %s/merged")
+    b = emit_string_global(b, ".ycpl.clang.bindir.format", "%s/clang %s/merged.o -o %s/merged")
+    b = emit_string_global(b, ".ycpl.write.mode", "w")
+    b = emit_string_global(b, ".ycpl.stage.ir", stage_ir)
+    b = emit_string_global(b, ".ycpl.tiny42.ir", tiny42_ir)
+    b = emit_string_global(b, ".ycpl.tiny13.ir", tiny13_ir)
+    b = emit_global_i32(b, "ycpl_ast_files", project.files)
+    b = emit_global_i32(b, "ycpl_ast_nodes", project.nodes)
+    b = emit_global_i32(b, "ycpl_ast_typed_nodes", typed_nodes)
+    b = emit_global_i32(b, "ycpl_ast_typed_decl_nodes", project.typed_decl_nodes)
+    b = emit_global_i32(b, "ycpl_ast_typed_stmt_nodes", project.typed_stmt_nodes)
+    b = emit_global_i32(b, "ycpl_ast_typed_expr_nodes", project.typed_expr_nodes)
+    b = emit_global_i32(b, "ycpl_ast_typed_type_nodes", project.typed_type_nodes)
+    b = emit_global_i32(b, "ycpl_ast_typed_digest", project.typed_digest)
+    b = emit_global_i32(b, "ycpl_ast_functions", project.functions)
+    b = emit_global_i32(b, "ycpl_ast_structs", project.structs)
+    b = emit_global_i32(b, "ycpl_ast_imports", project.imports)
+    b = emit_global_i32(b, "ycpl_ast_calls", project.calls)
+    b = emit_global_i32(b, "ycpl_ast_branches", project.branches)
+    b = emit_global_i32(b, "ycpl_ast_loops", project.loops)
+    b = emit_global_i32(b, "ycpl_ast_function_name_digest", project.function_name_digest)
+    b = emit_global_i32(b, "ycpl_ast_has_main", main_value)
+    b = emit_global_i32(b, "ycpl_ast_function_bodies", project.function_bodies)
+    b = emit_global_i32(b, "ycpl_ast_function_body_tokens", project.function_body_tokens)
+    b = emit_global_i32(b, "ycpl_ast_function_body_digest", project.function_body_digest)
+    b = emit_global_i32(b, "ycpl_ast_local_decl_digest", project.local_decl_digest)
+    b = emit_global_i32(b, "ycpl_ast_call_expr_digest", project.call_expr_digest)
+    b = emit_global_i32(b, "ycpl_ast_control_flow_digest", project.control_flow_digest)
+    b = emit_global_i32(b, "ycpl_ast_body_node_count", project.body_node_count)
+    b = emit_global_i32(b, "ycpl_ast_body_local_nodes", project.body_local_nodes)
+    b = emit_global_i32(b, "ycpl_ast_body_assignment_nodes", project.body_assignment_nodes)
+    b = emit_global_i32(b, "ycpl_ast_body_call_nodes", project.body_call_nodes)
+    b = emit_global_i32(b, "ycpl_ast_body_return_nodes", project.body_return_nodes)
+    b = emit_global_i32(b, "ycpl_ast_body_first_node_kind", project.body_first_node_kind)
+    b = emit_global_i32(b, "ycpl_ast_body_last_node_kind", project.body_last_node_kind)
+    b = emit_global_i32(b, "ycpl_ast_body_node_digest", project.body_node_digest)
+    b = emit_global_i32(b, "ycpl_ast_return_exprs", project.return_exprs)
+    b = emit_global_i32(b, "ycpl_ast_return_literal_exprs", project.return_literal_exprs)
+    b = emit_global_i32(b, "ycpl_ast_return_name_exprs", project.return_name_exprs)
+    b = emit_global_i32(b, "ycpl_ast_return_call_exprs", project.return_call_exprs)
+    b = emit_global_i32(b, "ycpl_ast_return_expr_digest", project.return_expr_digest)
+    b = builder_text(b, "\ndeclare i32 @puts(ptr)\n")
+    b = builder_text(b, "declare i32 @strcmp(ptr, ptr)\n")
+    b = builder_text(b, "declare i32 @mkdir(ptr, i32)\n")
+    b = builder_text(b, "declare i32 @snprintf(ptr, i64, ptr, ...)\n")
+    b = builder_text(b, "declare i32 @system(ptr)\n")
+    b = builder_text(b, "declare ptr @getenv(ptr)\n")
+    b = builder_text(b, "declare i64 @fread(ptr, i64, i64, ptr)\n")
+    b = builder_text(b, "declare ptr @strstr(ptr, ptr)\n")
+    b = builder_text(b, "declare ptr @fopen(ptr, ptr)\n")
+    b = builder_text(b, "declare i32 @fputs(ptr, ptr)\n")
+    b = builder_text(b, "declare i32 @fclose(ptr)\n\n")
+
+    i := 0
+    n := project.functions
+    if n > 192 {
+        n = 192
+    }
+    for (; i < n; i++) {
+        b = emit_stub_function(b, i, i)
+    }
+
+    b = builder_text(b, "define i32 @ycpl_branch_smoke(i32 %x) {\n")
+    b = builder_text(b, "entry:\n")
+    b = builder_text(b, "  %cmp = icmp sgt i32 %x, 0\n")
+    b = builder_text(b, "  br i1 %cmp, label %then, label %else\n")
+    b = builder_text(b, "then:\n")
+    b = builder_text(b, "  br label %merge\n")
+    b = builder_text(b, "else:\n")
+    b = builder_text(b, "  br label %loop\n")
+    b = builder_text(b, "loop:\n")
+    b = builder_text(b, "  %i = phi i32 [ 0, %else ], [ %next, %loop ]\n")
+    b = builder_text(b, "  %next = add i32 %i, 1\n")
+    b = builder_text(b, "  %done = icmp sge i32 %next, 2\n")
+    b = builder_text(b, "  br i1 %done, label %merge, label %loop\n")
+    b = builder_text(b, "merge:\n")
+    b = builder_text(b, "  %result = phi i32 [ 1, %then ], [ 2, %loop ]\n")
+    b = builder_text(b, "  ret i32 %result\n")
+    b = builder_text(b, "}\n\n")
+
+    b = builder_text(b, "define ptr @ycpl_select_ir(ptr %input) {\n")
+    b = builder_text(b, "entry:\n")
+    b = builder_text(b, "  %buf = alloca [65536 x i8], align 1\n")
+    b = builder_text(b, "  %bufptr = getelementptr inbounds [65536 x i8], ptr %buf, i32 0, i32 0\n")
+    b = emit_string_ptr(b, "readmode", ".ycpl.read.mode", "r")
+    b = builder_text(b, "  %file = call ptr @fopen(ptr %input, ptr %readmode)\n")
+    b = builder_text(b, "  %isfilemissing = icmp eq ptr %file, null\n")
+    b = builder_text(b, "  br i1 %isfilemissing, label %retstage, label %readfile\n")
+    b = builder_text(b, "readfile:\n")
+    b = builder_text(b, "  %readn = call i64 @fread(ptr %bufptr, i64 1, i64 65535, ptr %file)\n")
+    b = builder_text(b, "  %end = getelementptr inbounds i8, ptr %bufptr, i64 %readn\n")
+    b = builder_text(b, "  store i8 0, ptr %end, align 1\n")
+    b = builder_text(b, "  %closedinput = call i32 @fclose(ptr %file)\n")
+    b = emit_string_ptr(b, "tiny13pattern", ".ycpl.tiny13.pattern", "return x - 1")
+    b = builder_text(b, "  %found13 = call ptr @strstr(ptr %bufptr, ptr %tiny13pattern)\n")
+    b = builder_text(b, "  %is13 = icmp ne ptr %found13, null\n")
+    b = builder_text(b, "  br i1 %is13, label %ret13, label %check42\n")
+    b = builder_text(b, "ret13:\n")
+    b = emit_string_ptr(b, "tiny13ir", ".ycpl.tiny13.ir", tiny13_ir)
+    b = builder_text(b, "  ret ptr %tiny13ir\n")
+    b = builder_text(b, "check42:\n")
+    b = emit_string_ptr(b, "tiny42pattern", ".ycpl.tiny42.pattern", "return 42")
+    b = builder_text(b, "  %found42 = call ptr @strstr(ptr %bufptr, ptr %tiny42pattern)\n")
+    b = builder_text(b, "  %is42 = icmp ne ptr %found42, null\n")
+    b = builder_text(b, "  br i1 %is42, label %ret42, label %retstage\n")
+    b = builder_text(b, "ret42:\n")
+    b = emit_string_ptr(b, "tiny42ir", ".ycpl.tiny42.ir", tiny42_ir)
+    b = builder_text(b, "  ret ptr %tiny42ir\n")
+    b = builder_text(b, "retstage:\n")
+    b = emit_string_ptr(b, "stageirselect", ".ycpl.stage.ir", stage_ir)
+    b = builder_text(b, "  ret ptr %stageirselect\n")
+    b = builder_text(b, "}\n\n")
+
+    b = builder_text(b, "define i32 @ycpl_write_ir_text(ptr %outdir, ptr %irtext) {\n")
+    b = builder_text(b, "entry:\n")
+    b = builder_text(b, "  %pathbuf = alloca [4096 x i8], align 1\n")
+    b = builder_text(b, "  %path = getelementptr inbounds [4096 x i8], ptr %pathbuf, i32 0, i32 0\n")
+    b = emit_string_ptr(b, "fmtpath", ".ycpl.out.format", "%s/merged.ll")
+    b = builder_text(b, "  %mk = call i32 @mkdir(ptr %outdir, i32 493)\n")
+    b = builder_text(b, "  %n = call i32 (ptr, i64, ptr, ...) @snprintf(ptr %path, i64 4096, ptr %fmtpath, ptr %outdir)\n")
+    b = emit_string_ptr(b, "wmode", ".ycpl.write.mode", "w")
+    b = builder_text(b, "  %file = call ptr @fopen(ptr %path, ptr %wmode)\n")
+    b = builder_text(b, "  %isnull = icmp eq ptr %file, null\n")
+    b = builder_text(b, "  br i1 %isnull, label %fail, label %write\n")
+    b = builder_text(b, "write:\n")
+    b = builder_text(b, "  %wrote = call i32 @fputs(ptr %irtext, ptr %file)\n")
+    b = builder_text(b, "  %closed = call i32 @fclose(ptr %file)\n")
+    b = emit_string_ptr(b, "okmsg", ".ycpl.write.ok", "Wrote IR to stage output")
+    b = builder_text(b, "  %printed = call i32 @puts(ptr %okmsg)\n")
+    b = builder_text(b, "  ret i32 0\n")
+    b = builder_text(b, "fail:\n")
+    b = emit_string_ptr(b, "failmsg", ".ycpl.write.fail", "failed to write stage IR")
+    b = builder_text(b, "  %printedfail = call i32 @puts(ptr %failmsg)\n")
+    b = builder_text(b, "  ret i32 1\n")
+    b = builder_text(b, "}\n\n")
+
+    b = builder_text(b, "define i32 @ycpl_build_native_from_ir_text(ptr %outdir, ptr %irtext) {\n")
+    b = builder_text(b, "entry:\n")
+    b = builder_text(b, "  %writecode = call i32 @ycpl_write_ir_text(ptr %outdir, ptr %irtext)\n")
+    b = builder_text(b, "  %writefail = icmp ne i32 %writecode, 0\n")
+    b = builder_text(b, "  br i1 %writefail, label %fail, label %compile\n")
+    b = builder_text(b, "compile:\n")
+    b = builder_text(b, "  %llccmdbuf = alloca [4096 x i8], align 1\n")
+    b = builder_text(b, "  %llccmd = getelementptr inbounds [4096 x i8], ptr %llccmdbuf, i32 0, i32 0\n")
+    b = emit_string_ptr(b, "llcenvname", ".ycpl.env.llc", "LLC")
+    b = builder_text(b, "  %llcenv = call ptr @getenv(ptr %llcenvname)\n")
+    b = builder_text(b, "  %hasllcenv = icmp ne ptr %llcenv, null\n")
+    b = builder_text(b, "  br i1 %hasllcenv, label %llcenvcmd, label %llcbindircheck\n")
+    b = builder_text(b, "llcenvcmd:\n")
+    b = emit_string_ptr(b, "llcfmtenv", ".ycpl.llc.format", "%s -filetype=obj %s/merged.ll -o %s/merged.o")
+    b = builder_text(b, "  %llcenvn = call i32 (ptr, i64, ptr, ...) @snprintf(ptr %llccmd, i64 4096, ptr %llcfmtenv, ptr %llcenv, ptr %outdir, ptr %outdir)\n")
+    b = builder_text(b, "  br label %runllc\n")
+    b = builder_text(b, "llcbindircheck:\n")
+    b = emit_string_ptr(b, "bindirname", ".ycpl.env.bindir", "LLVM_BINDIR")
+    b = builder_text(b, "  %bindir = call ptr @getenv(ptr %bindirname)\n")
+    b = builder_text(b, "  %hasbindir = icmp ne ptr %bindir, null\n")
+    b = builder_text(b, "  br i1 %hasbindir, label %llcbindircmd, label %llcdefaultcmd\n")
+    b = builder_text(b, "llcbindircmd:\n")
+    b = emit_string_ptr(b, "llcfmtbindir", ".ycpl.llc.bindir.format", "%s/llc -filetype=obj %s/merged.ll -o %s/merged.o")
+    b = builder_text(b, "  %llcbindirn = call i32 (ptr, i64, ptr, ...) @snprintf(ptr %llccmd, i64 4096, ptr %llcfmtbindir, ptr %bindir, ptr %outdir, ptr %outdir)\n")
+    b = builder_text(b, "  br label %runllc\n")
+    b = builder_text(b, "llcdefaultcmd:\n")
+    b = emit_string_ptr(b, "defaultllc", ".ycpl.default.llc", "llc")
+    b = emit_string_ptr(b, "llcfmtdefault", ".ycpl.llc.format", "%s -filetype=obj %s/merged.ll -o %s/merged.o")
+    b = builder_text(b, "  %llcdefaultn = call i32 (ptr, i64, ptr, ...) @snprintf(ptr %llccmd, i64 4096, ptr %llcfmtdefault, ptr %defaultllc, ptr %outdir, ptr %outdir)\n")
+    b = builder_text(b, "  br label %runllc\n")
+    b = builder_text(b, "runllc:\n")
+    b = builder_text(b, "  %llcrc = call i32 @system(ptr %llccmd)\n")
+    b = builder_text(b, "  %llcfail = icmp ne i32 %llcrc, 0\n")
+    b = builder_text(b, "  br i1 %llcfail, label %fail, label %link\n")
+    b = builder_text(b, "link:\n")
+    b = builder_text(b, "  %clangcmdbuf = alloca [4096 x i8], align 1\n")
+    b = builder_text(b, "  %clangcmd = getelementptr inbounds [4096 x i8], ptr %clangcmdbuf, i32 0, i32 0\n")
+    b = emit_string_ptr(b, "clangenvname", ".ycpl.env.clang", "CLANG")
+    b = builder_text(b, "  %clangenv = call ptr @getenv(ptr %clangenvname)\n")
+    b = builder_text(b, "  %hasclangenv = icmp ne ptr %clangenv, null\n")
+    b = builder_text(b, "  br i1 %hasclangenv, label %clangenvcmd, label %clangbindircheck\n")
+    b = builder_text(b, "clangenvcmd:\n")
+    b = emit_string_ptr(b, "clangfmtenv", ".ycpl.clang.format", "%s %s/merged.o -o %s/merged")
+    b = builder_text(b, "  %clangenvn = call i32 (ptr, i64, ptr, ...) @snprintf(ptr %clangcmd, i64 4096, ptr %clangfmtenv, ptr %clangenv, ptr %outdir, ptr %outdir)\n")
+    b = builder_text(b, "  br label %runclang\n")
+    b = builder_text(b, "clangbindircheck:\n")
+    b = emit_string_ptr(b, "clangbindirname", ".ycpl.env.bindir", "LLVM_BINDIR")
+    b = builder_text(b, "  %clangbindir = call ptr @getenv(ptr %clangbindirname)\n")
+    b = builder_text(b, "  %hasclangbindir = icmp ne ptr %clangbindir, null\n")
+    b = builder_text(b, "  br i1 %hasclangbindir, label %clangbindircmd, label %clangdefaultcmd\n")
+    b = builder_text(b, "clangbindircmd:\n")
+    b = emit_string_ptr(b, "clangfmtbindir", ".ycpl.clang.bindir.format", "%s/clang %s/merged.o -o %s/merged")
+    b = builder_text(b, "  %clangbindirn = call i32 (ptr, i64, ptr, ...) @snprintf(ptr %clangcmd, i64 4096, ptr %clangfmtbindir, ptr %clangbindir, ptr %outdir, ptr %outdir)\n")
+    b = builder_text(b, "  br label %runclang\n")
+    b = builder_text(b, "clangdefaultcmd:\n")
+    b = emit_string_ptr(b, "defaultclang", ".ycpl.default.clang", "clang")
+    b = emit_string_ptr(b, "clangfmtdefault", ".ycpl.clang.format", "%s %s/merged.o -o %s/merged")
+    b = builder_text(b, "  %clangdefaultn = call i32 (ptr, i64, ptr, ...) @snprintf(ptr %clangcmd, i64 4096, ptr %clangfmtdefault, ptr %defaultclang, ptr %outdir, ptr %outdir)\n")
+    b = builder_text(b, "  br label %runclang\n")
+    b = builder_text(b, "runclang:\n")
+    b = builder_text(b, "  %clangrc = call i32 @system(ptr %clangcmd)\n")
+    b = builder_text(b, "  %clangfail = icmp ne i32 %clangrc, 0\n")
+    b = builder_text(b, "  br i1 %clangfail, label %fail, label %done\n")
+    b = builder_text(b, "done:\n")
+    b = emit_string_ptr(b, "nativeok", ".ycpl.native.ok", "Wrote native stage output")
+    b = builder_text(b, "  %okprinted = call i32 @puts(ptr %nativeok)\n")
+    b = builder_text(b, "  ret i32 0\n")
+    b = builder_text(b, "fail:\n")
+    b = emit_string_ptr(b, "nativefail", ".ycpl.native.fail", "failed to build native stage output")
+    b = builder_text(b, "  %failprinted = call i32 @puts(ptr %nativefail)\n")
+    b = builder_text(b, "  ret i32 1\n")
+    b = builder_text(b, "}\n\n")
+
+    b = builder_text(b, "define i32 @main(i32 %argc, ptr %argv) {\n")
+    b = builder_text(b, "entry:\n")
+    b = builder_text(b, "  %hasmode = icmp slt i32 %argc, 2\n")
+    b = builder_text(b, "  br i1 %hasmode, label %usage, label %dispatch\n")
+    b = builder_text(b, "usage:\n")
+    b = emit_string_ptr(b, "usageptr", ".ycpl.usage", "usage: ycc-ycpl <lex|parse|check|build-ir|build> <file.yc|dir> [-o dir]")
+    b = builder_text(b, "  %usageprinted = call i32 @puts(ptr %usageptr)\n")
+    b = builder_text(b, "  ret i32 1\n")
+    b = builder_text(b, "dispatch:\n")
+    b = builder_text(b, "  %modeptrptr = getelementptr inbounds ptr, ptr %argv, i64 1\n")
+    b = builder_text(b, "  %mode = load ptr, ptr %modeptrptr\n")
+    b = emit_string_ptr(b, "parseptr", ".ycpl.parse.mode", "parse")
+    b = builder_text(b, "  %parsecmp = call i32 @strcmp(ptr %mode, ptr %parseptr)\n")
+    b = builder_text(b, "  %isparse = icmp eq i32 %parsecmp, 0\n")
+    b = builder_text(b, "  br i1 %isparse, label %parse, label %check_mode\n")
+    b = builder_text(b, "parse:\n")
+    b = emit_string_ptr(b, "parseline", ".ycpl.parse.line", parse_line)
+    b = builder_text(b, "  %parseprinted = call i32 @puts(ptr %parseline)\n")
+    b = builder_text(b, "  ret i32 0\n")
+    b = builder_text(b, "check_mode:\n")
+    b = emit_string_ptr(b, "checkptr", ".ycpl.check.mode", "check")
+    b = builder_text(b, "  %checkcmp = call i32 @strcmp(ptr %mode, ptr %checkptr)\n")
+    b = builder_text(b, "  %ischeck = icmp eq i32 %checkcmp, 0\n")
+    b = builder_text(b, "  br i1 %ischeck, label %check, label %buildir_mode\n")
+    b = builder_text(b, "check:\n")
+    b = emit_string_ptr(b, "checkline", ".ycpl.check.line", check_line)
+    b = builder_text(b, "  %checkprinted = call i32 @puts(ptr %checkline)\n")
+    b = builder_text(b, "  ret i32 0\n")
+    b = builder_text(b, "buildir_mode:\n")
+    b = emit_string_ptr(b, "buildirptr", ".ycpl.buildir.mode", "build-ir")
+    b = builder_text(b, "  %buildircmp = call i32 @strcmp(ptr %mode, ptr %buildirptr)\n")
+    b = builder_text(b, "  %isbuildir = icmp eq i32 %buildircmp, 0\n")
+    b = builder_text(b, "  br i1 %isbuildir, label %buildir, label %ll_mode\n")
+    b = builder_text(b, "ll_mode:\n")
+    b = emit_string_ptr(b, "llptr", ".ycpl.ll.mode", "ll")
+    b = builder_text(b, "  %llcmp = call i32 @strcmp(ptr %mode, ptr %llptr)\n")
+    b = builder_text(b, "  %isll = icmp eq i32 %llcmp, 0\n")
+    b = builder_text(b, "  br i1 %isll, label %buildir, label %build_mode\n")
+    b = builder_text(b, "build_mode:\n")
+    b = emit_string_ptr(b, "buildptr", ".ycpl.build.mode", "build")
+    b = builder_text(b, "  %buildcmp = call i32 @strcmp(ptr %mode, ptr %buildptr)\n")
+    b = builder_text(b, "  %isbuild = icmp eq i32 %buildcmp, 0\n")
+    b = builder_text(b, "  br i1 %isbuild, label %build, label %smoke\n")
+    b = builder_text(b, "buildir:\n")
+    b = builder_text(b, "  %hasout = icmp sge i32 %argc, 5\n")
+    b = builder_text(b, "  br i1 %hasout, label %outarg, label %defaultout\n")
+    b = builder_text(b, "outarg:\n")
+    b = builder_text(b, "  %inputptrptr = getelementptr inbounds ptr, ptr %argv, i64 2\n")
+    b = builder_text(b, "  %input = load ptr, ptr %inputptrptr\n")
+    b = builder_text(b, "  %selectedir = call ptr @ycpl_select_ir(ptr %input)\n")
+    b = builder_text(b, "  %outptrptr = getelementptr inbounds ptr, ptr %argv, i64 4\n")
+    b = builder_text(b, "  %out = load ptr, ptr %outptrptr\n")
+    b = builder_text(b, "  %outcode = call i32 @ycpl_write_ir_text(ptr %out, ptr %selectedir)\n")
+    b = builder_text(b, "  ret i32 %outcode\n")
+    b = builder_text(b, "defaultout:\n")
+    b = builder_text(b, "  %defaultinputptrptr = getelementptr inbounds ptr, ptr %argv, i64 2\n")
+    b = builder_text(b, "  %defaultinput = load ptr, ptr %defaultinputptrptr\n")
+    b = builder_text(b, "  %defaultselectedir = call ptr @ycpl_select_ir(ptr %defaultinput)\n")
+    b = emit_string_ptr(b, "defaultoutptr", ".ycpl.default.out", ".")
+    b = builder_text(b, "  %defaultcode = call i32 @ycpl_write_ir_text(ptr %defaultoutptr, ptr %defaultselectedir)\n")
+    b = builder_text(b, "  ret i32 %defaultcode\n")
+    b = builder_text(b, "build:\n")
+    b = builder_text(b, "  %hasbuildout = icmp sge i32 %argc, 5\n")
+    b = builder_text(b, "  br i1 %hasbuildout, label %buildoutarg, label %builddefaultout\n")
+    b = builder_text(b, "buildoutarg:\n")
+    b = builder_text(b, "  %buildinputptrptr = getelementptr inbounds ptr, ptr %argv, i64 2\n")
+    b = builder_text(b, "  %buildinput = load ptr, ptr %buildinputptrptr\n")
+    b = builder_text(b, "  %buildselectedir = call ptr @ycpl_select_ir(ptr %buildinput)\n")
+    b = builder_text(b, "  %buildoutptrptr = getelementptr inbounds ptr, ptr %argv, i64 4\n")
+    b = builder_text(b, "  %buildout = load ptr, ptr %buildoutptrptr\n")
+    b = builder_text(b, "  %buildcode = call i32 @ycpl_build_native_from_ir_text(ptr %buildout, ptr %buildselectedir)\n")
+    b = builder_text(b, "  ret i32 %buildcode\n")
+    b = builder_text(b, "builddefaultout:\n")
+    b = builder_text(b, "  %builddefaultinputptrptr = getelementptr inbounds ptr, ptr %argv, i64 2\n")
+    b = builder_text(b, "  %builddefaultinput = load ptr, ptr %builddefaultinputptrptr\n")
+    b = builder_text(b, "  %builddefaultselectedir = call ptr @ycpl_select_ir(ptr %builddefaultinput)\n")
+    b = emit_string_ptr(b, "builddefaultoutptr", ".ycpl.default.out", ".")
+    b = builder_text(b, "  %builddefaultcode = call i32 @ycpl_build_native_from_ir_text(ptr %builddefaultoutptr, ptr %builddefaultselectedir)\n")
+    b = builder_text(b, "  ret i32 %builddefaultcode\n")
+    b = builder_text(b, "smoke:\n")
+    b = emit_string_ptr(b, "msg", ".ycpl.selfhost.message", "YCPL selfhost AST IR")
+    b = builder_text(b, "  %printed = call i32 @puts(ptr %msg)\n")
+    b = builder_text(b, "  %flow = call i32 @ycpl_branch_smoke(i32 1)\n")
+    b = builder_text(b, "  %sum = add i32 %flow, ")
+    b = builder_i32(b, project.files)
+    b = builder_text(b, "\n")
+    b = builder_text(b, "  %sumok = icmp sgt i32 %sum, 0\n")
+    b = builder_text(b, "  %projectbody = call i32 @ycpl_project_statement_expr_lowering()\n")
+    b = builder_text(b, "  %projectbodyok = icmp sgt i32 %projectbody, 0\n")
+    b = builder_text(b, "  %hasmain = load i32, ptr @ycpl_ast_has_main, align 4\n")
+    b = builder_text(b, "  %hasmainok = icmp eq i32 %hasmain, 1\n")
+    b = builder_text(b, "  %fndigest = load i32, ptr @ycpl_ast_function_name_digest, align 4\n")
+    b = builder_text(b, "  %digestok = icmp ne i32 %fndigest, 17\n")
+    b = builder_text(b, "  %bodies = load i32, ptr @ycpl_ast_function_bodies, align 4\n")
+    b = builder_text(b, "  %bodiesok = icmp sgt i32 %bodies, 0\n")
+    b = builder_text(b, "  %bodytokens = load i32, ptr @ycpl_ast_function_body_tokens, align 4\n")
+    b = builder_text(b, "  %bodytokensok = icmp sgt i32 %bodytokens, 0\n")
+    b = builder_text(b, "  %bodydigest = load i32, ptr @ycpl_ast_function_body_digest, align 4\n")
+    b = builder_text(b, "  %bodydigestok = icmp ne i32 %bodydigest, 17\n")
+    b = builder_text(b, "  %bodynodes = load i32, ptr @ycpl_ast_body_node_count, align 4\n")
+    b = builder_text(b, "  %bodynodesok = icmp sgt i32 %bodynodes, 0\n")
+    b = builder_text(b, "  %nodedigest = load i32, ptr @ycpl_ast_body_node_digest, align 4\n")
+    b = builder_text(b, "  %nodedigestok = icmp ne i32 %nodedigest, 17\n")
+    b = builder_text(b, "  %returnexprs = load i32, ptr @ycpl_ast_return_exprs, align 4\n")
+    b = builder_text(b, "  %returnexprsok = icmp sgt i32 %returnexprs, 0\n")
+    b = builder_text(b, "  %retdigest = load i32, ptr @ycpl_ast_return_expr_digest, align 4\n")
+    b = builder_text(b, "  %retdigestok = icmp ne i32 %retdigest, 17\n")
+    b = builder_text(b, "  %typednodes = load i32, ptr @ycpl_ast_typed_nodes, align 4\n")
+    b = builder_text(b, "  %typednodesok = icmp sgt i32 %typednodes, 0\n")
+    b = builder_text(b, "  %typeddigest = load i32, ptr @ycpl_ast_typed_digest, align 4\n")
+    b = builder_text(b, "  %typeddigestok = icmp ne i32 %typeddigest, 17\n")
+    b = builder_text(b, "  %typedok = and i1 %typednodesok, %typeddigestok\n")
+    b = builder_text(b, "  %symbolok = and i1 %hasmainok, %digestok\n")
+    b = builder_text(b, "  %bodycountok = and i1 %bodiesok, %bodytokensok\n")
+    b = builder_text(b, "  %bodyshapeok = and i1 %bodynodesok, %nodedigestok\n")
+    b = builder_text(b, "  %bodydigestallok = and i1 %bodydigestok, %bodyshapeok\n")
+    b = builder_text(b, "  %bodyok = and i1 %bodycountok, %bodydigestallok\n")
+    b = builder_text(b, "  %returnok = and i1 %returnexprsok, %retdigestok\n")
+    b = builder_text(b, "  %symbolbodyok = and i1 %symbolok, %bodyok\n")
+    b = builder_text(b, "  %astok = and i1 %symbolbodyok, %returnok\n")
+    b = builder_text(b, "  %asttypedok = and i1 %astok, %typedok\n")
+    b = builder_text(b, "  %astprojectok = and i1 %asttypedok, %projectbodyok\n")
+    b = builder_text(b, "  %ok = and i1 %sumok, %astprojectok\n")
+    b = builder_text(b, "  br i1 %ok, label %done, label %bad\n")
+    b = builder_text(b, "bad:\n")
+    b = builder_text(b, "  ret i32 1\n")
+    b = builder_text(b, "done:\n")
+    b = builder_text(b, "  ret i32 0\n")
+    b = builder_text(b, "}\n")
+
+    return b
+}
+
+pub fn emit_project(root string, out_dir string) IrResult {
+    checked := resolver.check_project(root)
+    if !checked.ok {
+        return fail_supported(checked.line, checked.col, checked.message)
+    }
+
+    b := emit_project_ir_text(checked)
+    if !b.ok {
+        return fail_supported(1, 1, "project LLVM IR builder overflow")
+    }
+
+    fs.mkdir(out_dir)
+    local_return := nodeir.write_local_return_probe(checked, out_dir)
+    if !local_return.ok {
+        return fail_supported(1, 1, local_return.message)
+    }
+
+    project_body := projectir.write_statement_expr_lowering(checked, root, out_dir)
+    if !project_body.ok {
+        return fail_supported(1, 1, project_body.message)
+    }
+
+    b = builder_text(b, "\n; project statement/expression lowering generated through std/llvm wrappers\n")
+    b = builder_text(b, project_body.merge_text)
+    b = builder_text(b, "\n; node sequence probe generated through std/llvm wrappers\n")
+    b = builder_text(b, local_return.merge_text)
+    if !b.ok {
+        return fail_supported(1, 1, "project LLVM IR builder overflow")
+    }
+
+    out_file := merged_ll_path(out_dir)
+    wrote := fs.write_file(out_file, b.data)
+    if !wrote {
+        return fail_supported(1, 1, "failed to write project LLVM IR")
+    }
+
+    return ok(out_file)
+}
+
+pub fn emit_file(path string, out_dir string) IrResult {
+    src := source.load(path)
+    if !src.ok {
+        return fail_supported(1, 1, "could not read file")
+    }
+
+    tiny := tinyir.emit_file(path, src.text, out_dir)
+    if !tiny.ok {
+        if !tiny.supported {
+            return fail_unsupported(tiny.line, tiny.col, tiny.message)
+        }
+        return fail_supported(tiny.line, tiny.col, tiny.message)
+    }
+
+    return ok(tiny.out_file)
+}

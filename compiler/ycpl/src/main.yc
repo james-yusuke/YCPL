@@ -1,11 +1,11 @@
-import "driver" as driver
-import "checker" as checker
-import "irgen" as irgen
-import "lexer" as lexer
-import "parser" as parser
-import "resolver" as resolver
-import "source" as source
-import "token" as tok
+import "driver/driver" as driver
+import "checker/checker" as checker
+import "codegen/irgen" as irgen
+import "lexer/lexer" as lexer
+import "parser/parser" as parser
+import "resolver/resolver" as resolver
+import "source/source" as source
+import "lexer/token" as tok
 import "std/fmt" as fmt
 import "std/str" as str
 
@@ -51,7 +51,12 @@ fn run_parse_project(path string) i32 {
         fmt.printf("%s:%d:%d: %s\n", result.file, result.line, result.col, result.message)
         return 1
     }
-    fmt.printf("parse ok: files=%d tokens=%d decls=%d funcs=%d structs=%d imports=%d nodes=%d digest=%d\n", result.files, result.tokens, result.decls, result.functions, result.structs, result.imports, result.nodes, result.digest)
+    main_value := 0
+    if result.has_main {
+        main_value = 1
+    }
+    typed_nodes := result.typed_decl_nodes + result.typed_stmt_nodes + result.typed_expr_nodes + result.typed_type_nodes
+    fmt.printf("parse ok: files=%d tokens=%d decls=%d funcs=%d structs=%d imports=%d nodes=%d typed_nodes=%d typed_digest=%d bodies=%d body_tokens=%d body_nodes=%d returns=%d return_exprs=%d digest=%d fn_digest=%d body_digest=%d node_digest=%d ret_digest=%d main=%d\n", result.files, result.tokens, result.decls, result.functions, result.structs, result.imports, result.nodes, typed_nodes, result.typed_digest, result.function_bodies, result.function_body_tokens, result.body_node_count, result.returns, result.return_exprs, result.digest, result.function_name_digest, result.function_body_digest, result.body_node_digest, result.return_expr_digest, main_value)
     return 0
 }
 
@@ -109,7 +114,12 @@ fn run_check_project(path string) i32 {
         }
         return 1
     }
-    fmt.printf("check ok: files=%d tokens=%d decls=%d funcs=%d structs=%d imports=%d nodes=%d calls=%d branches=%d loops=%d digest=%d\n", checked.files, checked.tokens, checked.decls, checked.functions, checked.structs, checked.imports, checked.nodes, checked.calls, checked.branches, checked.loops, checked.digest)
+    main_value := 0
+    if checked.has_main {
+        main_value = 1
+    }
+    typed_nodes := checked.typed_decl_nodes + checked.typed_stmt_nodes + checked.typed_expr_nodes + checked.typed_type_nodes
+    fmt.printf("check ok: files=%d tokens=%d decls=%d funcs=%d structs=%d imports=%d nodes=%d typed_nodes=%d typed_digest=%d bodies=%d body_tokens=%d body_nodes=%d local_nodes=%d assign_nodes=%d call_nodes=%d return_nodes=%d calls=%d branches=%d loops=%d return_exprs=%d return_calls=%d digest=%d fn_digest=%d body_digest=%d node_digest=%d ret_digest=%d main=%d\n", checked.files, checked.tokens, checked.decls, checked.functions, checked.structs, checked.imports, checked.nodes, typed_nodes, checked.typed_digest, checked.function_bodies, checked.function_body_tokens, checked.body_node_count, checked.body_local_nodes, checked.body_assignment_nodes, checked.body_call_nodes, checked.body_return_nodes, checked.calls, checked.branches, checked.loops, checked.return_exprs, checked.return_call_exprs, checked.digest, checked.function_name_digest, checked.function_body_digest, checked.body_node_digest, checked.return_expr_digest, main_value)
     return 0
 }
 
