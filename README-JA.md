@@ -146,16 +146,38 @@ cd examples/04_module_project && ../../bazel-bin/ycc build
    ├─ その subset は bootstrap ycc なしで native binary まで生成
    ├─ src/**/*.yc traversal で compiler/ycpl を parse/check
    ├─ project AST 由来の function-name digest と main presence を保持
-   ├─ ast/body と parser/body で body statement node sequence を保持
+   ├─ ast/body と parser/body で parser-owned body statement node arena を保持
+   ├─ body node transition digest と local/assign/call/return edge を保持
+   ├─ body if/for node count を LLVM C API の conditional / loop block に lower
    ├─ local/call/control-flow 構造用に function-body token/digest summary を保持
    ├─ function body 由来の return-expression count と digest を保持
    ├─ std/llvm C API wrapper 経由で local/assignment/call/return node probe IR を生成
    ├─ std/llvm C API wrapper 経由で project statement/expression lowering IR を生成
+   ├─ local/assignment/call/return body node を専用 alloca/load/store/call lowering に分岐
+   ├─ compiler/ycpl の parser body arena を per-function slot と全関数 aggregate data として LLVM alloca/call/branch/loop IR に lower
+   ├─ per-function body slot table の count/max/digest を parse/check と生成 IR で gate
+   ├─ parser-owned body-node arena から identifier/literal/type/control payload table を保持
+   ├─ local symbol、assignment target、call target、return symbol/literal、type ref、control ref の semantic role table を保持
+   ├─ function、struct、std import、alias、visibility、digest の declaration/import/module symbol summary を構築
+   ├─ function signature と call-site arity summary を parser count と照合し、生成 IR に保持
+   ├─ function signature と call-site を parser-owned semantic node table として保持
+   ├─ primary/call/member/index/binary/unary expression を parser-owned expression node table として保持
+   ├─ expression node table を parser expression、call、member、index count と照合
+   ├─ parser-owned expression table から per-function expression slot count、max slot size、digest を保持
+   ├─ per-function expression table を function body LLVM lowering に投入
+   ├─ identifier/literal/call/member/index/binary/unary expression node を専用 LLVM lowering path に分岐
+   ├─ binary operator tag を保持し、add/sub/mul/div/rem/compare node を LLVM arithmetic/comparison wrapper で lower
+   ├─ 小さな代表 sample だけではなく、1024-node cap の拡張 per-function expression node sequence を project_body.ll に lower
+   ├─ 600+ expression lowering floor を生成 stage2/stage3 IR の自己検査へ引き継ぐ
+   ├─ compiler/ycpl の先頭 32 個の function body に対して per-function LLVM lowering function を生成
+   ├─ compiler/ycpl の function body 0 から 383 までを range bucket LLVM lowering として生成
+   ├─ metadata/source position/payload table/semantic role 付き可変長 body-node arena を node-sequence LLVM IR block に lower
    ├─ compiler/ycpl source 内の zero-argument i32 constant-return function を lower
    ├─ YCPL_NO_BOOTSTRAP=1 で compiler/ycpl の project LLVM IR を生成
    ├─ project AST IR を bootstrap ycc なしで native smoke binary に変換
    ├─ 生成された stage2 binary は parse/check/build-ir compiler/ycpl に対応
-   ├─ 生成された stage2 binary は native stage3 smoke output を build 可能
+   ├─ 生成された stage2 binary は native stage3 compiler-smoke output を build 可能
+   ├─ 生成された stage3 binary は parse/check/build-ir compiler/ycpl に対応し stage4 LLVM IR を出力可能
    ├─ 生成された stage2 binary は source 内容で tiny example input を別々の IR に lower
    └─ 未対応の build/build-ir input は bootstrap ycc に委譲
 ```
@@ -195,14 +217,25 @@ stage-2 gate
 ├─ tiny arithmetic/call build は YCPL_NO_BOOTSTRAP=1 で実行可能
 ├─ project build-ir は bootstrap fallback なしで実行
 ├─ project build-ir は LLVM C API wrapper 経由で local_return.ll と project_body.ll を生成
-├─ merged.ll は local、assignment、call、return count 用の LLVM-wrapper-generated node probe を含む
+├─ merged.ll は local、assignment、call、return、transition、if/for control flow 用の LLVM-wrapper-generated node probe を含む
 ├─ merged.ll は LLVM-wrapper-generated project statement/expression lowering を呼び出す
-├─ project_body.ll は source-derived constant-return function lowering を含む
+├─ project_body.ll は source-derived constant-return、parser-owned per-function slot、全関数 body lowering、metadata/payload-table/semantic-role 付き body-node arena lowering を含む
+├─ project parse/check と生成 IR は declaration/import/module symbol table summary を gate
+├─ project parse/check と生成 IR は parser-owned expression node table と digest を gate
+├─ project_body.ll は per-function expression slot metadata を LLVM-wrapper-generated IR に lower
+├─ project_body.ll は body-node lowering と per-function expression node/slot/digest lowering を結合
+├─ project_body.ll は parser-owned expression node kind を identifier/literal/call/member/index/binary/unary LLVM IR lowering に分岐
+├─ project_body.ll は parser-owned binary operator tag を LLVM add/sub/mul/sdiv/srem/icmp 命令へ lower
+├─ project_body.ll は 600+ node の拡張 expression lowering sequence 用に function_expr_lowered_nodes と function_expression_sequence_lowered を記録
+├─ 生成された stage2/stage3 IR は ycpl_stage_expr_lowered_floor で expression lowering floor を gate
+├─ project_body.ll は ycpl_project_function_body_0 から ycpl_project_function_body_31 までを生成
+├─ project_body.ll は ycpl_project_function_body_range_0_63 から ycpl_project_function_body_range_320_383 までの range bucket lowerer を生成
 ├─ project parse/check は src/ast/shape.yc 由来の typed AST shape count と typed digest を出す
-├─ project AST IR は function symbol、body node、typed AST、main presence、return-expression gate を含む
+├─ project AST IR は function symbol、body node、expression-table、typed AST、main presence、return-expression gate を含む
 ├─ project AST IR は native smoke binary まで変換可能
 ├─ 生成された stage2 binary は stage3 LLVM IR を出力可能
 ├─ 生成された stage2 binary は llc/clang で stage3 native output を build 可能
+├─ 生成された stage3 native output は compiler/ycpl を parse/check し、llc-valid な stage4 IR を出力可能
 ├─ 生成された stage2 binary は examples/54 と renamed copy を exit code 13 の native に build
 └─ compiler として等価な build/native codegen は次段で対応
 ```
@@ -269,6 +302,8 @@ README-JA.md
 - [標準ライブラリ](docs/stdlib.ja.md)
 - [実装状況](docs/status.ja.md)
 - [YCPL LSP](tools/lsp/README.md)
+- [Contributing](CONTRIBUTING.md)
+- [Security policy](SECURITY.md)
 
 ## エディタと LSP
 
