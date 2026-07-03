@@ -157,8 +157,9 @@ pub fn read_file(path string) string {
         return none
     }
 
-    buf: string := mem.calloc(65536, 1)
-    c_read(fd, buf, 65535)
+    cap := 1048576
+    buf: string := mem.calloc(cap + 1, 1)
+    c_read(fd, buf, cap)
     c_close(fd)
     return buf
 }

@@ -1,0 +1,160 @@
+module compiler.ycpl.parser.signature
+
+import "ast/signature" as sig
+import "lexer/lexer" as lexer
+import "lexer/token" as tok
+
+fn is_type_token(kind i32) bool {
+    return kind == tok.ident() || kind == tok.star() || kind == tok.lbrack() || kind == tok.rbrack() || kind == tok.kw_byte()
+}
+
+pub fn parse(path string, source string) SignatureTable {
+    lx := lexer.new(path, source)
+    table := sig.empty()
+    pending_function_name := false
+    await_function_lparen := false
+    in_function_params := false
+    function_param_depth := 0
+    function_param_commas := 0
+    function_param_tokens := 0
+    await_return_type := false
+    function_has_return := false
+    function_name := ""
+    function_line := 1
+    function_col := 1
+    function_params := 0
+    in_call_args := false
+    call_depth := 0
+    call_commas := 0
+    call_arg_tokens := 0
+    prev_kind := tok.eof()
+    prev_prev_kind := tok.eof()
+    prev_lexeme := ""
+    prev_line := 1
+    prev_col := 1
+
+    for (; true; ) {
+        lx = lexer.next(lx)
+        if !lx.ok {
+            return sig.fail(lx.tok_line, lx.tok_col, lx.message)
+        }
+        if lx.kind == tok.eof() {
+            break
+        }
+
+        if await_return_type {
+            if is_type_token(lx.kind) {
+                function_has_return = true
+            }
+            if lx.kind == tok.lbrace() || lx.kind == tok.newline() || lx.kind == tok.kw_as() {
+                table = sig.add_function(table, function_line, function_col, function_name, function_params, function_has_return)
+                await_return_type = false
+                function_has_return = false
+                function_name = ""
+                function_params = 0
+            }
+        }
+
+        if in_call_args {
+            if lx.kind == tok.lparen() {
+                call_depth += 1
+                if call_depth > 1 {
+                    call_arg_tokens += 1
+                }
+            } else if lx.kind == tok.rparen() {
+                call_depth -= 1
+                if call_depth == 0 {
+                    args := 0
+                    if call_arg_tokens > 0 {
+                        args = call_commas + 1
+                    }
+                    table = sig.record_call_arity(table, args)
+                    in_call_args = false
+                    call_depth = 0
+                    call_commas = 0
+                    call_arg_tokens = 0
+                } else {
+                    call_arg_tokens += 1
+                }
+            } else {
+                if call_depth == 1 && lx.kind == tok.comma() {
+                    call_commas += 1
+                } else if lx.kind != tok.newline() {
+                    call_arg_tokens += 1
+                }
+            }
+        }
+
+        if in_function_params {
+            if lx.kind == tok.lparen() {
+                function_param_depth += 1
+                if function_param_depth > 1 {
+                    function_param_tokens += 1
+                }
+            } else if lx.kind == tok.rparen() {
+                function_param_depth -= 1
+                if function_param_depth == 0 {
+                    function_params = 0
+                    if function_param_tokens > 0 {
+                        function_params = function_param_commas + 1
+                    }
+                    in_function_params = false
+                    function_param_depth = 0
+                    function_param_commas = 0
+                    function_param_tokens = 0
+                    await_return_type = true
+                    function_has_return = false
+                } else {
+                    function_param_tokens += 1
+                }
+            } else {
+                if function_param_depth == 1 && lx.kind == tok.comma() {
+                    function_param_commas += 1
+                } else if lx.kind != tok.newline() {
+                    function_param_tokens += 1
+                }
+            }
+        }
+
+        if pending_function_name && lx.kind == tok.ident() {
+            function_name = lx.lexeme
+            function_line = lx.tok_line
+            function_col = lx.tok_col
+            pending_function_name = false
+            await_function_lparen = true
+        }
+
+        if lx.kind == tok.kw_fn() {
+            pending_function_name = true
+        }
+        if await_function_lparen && lx.kind == tok.lparen() {
+            in_function_params = true
+            function_param_depth = 1
+            function_param_commas = 0
+            function_param_tokens = 0
+            await_function_lparen = false
+        }
+        if lx.kind == tok.lparen() && prev_kind == tok.ident() && prev_prev_kind != tok.kw_fn() && !in_function_params && !await_function_lparen {
+            table = sig.add_call_site(table, prev_line, prev_col, prev_lexeme)
+            if !in_call_args {
+                in_call_args = true
+                call_depth = 1
+                call_commas = 0
+                call_arg_tokens = 0
+            }
+        }
+
+        if lx.kind != tok.newline() {
+            prev_prev_kind = prev_kind
+            prev_kind = lx.kind
+            prev_lexeme = lx.lexeme
+            prev_line = lx.tok_line
+            prev_col = lx.tok_col
+        }
+    }
+
+    if await_return_type {
+        table = sig.add_function(table, function_line, function_col, function_name, function_params, function_has_return)
+    }
+    return table
+}
