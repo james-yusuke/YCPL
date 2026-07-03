@@ -1,5 +1,9 @@
 module compiler.ycpl.projectir
 
+import "ast/body" as astbody
+import "ast/expr" as astexpr
+import "parser/body" as bodyparser
+import "parser/expr" as exprparser
 import "resolver/resolver" as resolver
 import "lexer/lexer" as lexer
 import "lexer/token" as tok
@@ -18,6 +22,62 @@ struct ConstFunctionScan {
     sum i32
     first_value i32
     has_first bool
+}
+
+struct FunctionBodyScan {
+    ok bool
+    message string
+    line i32
+    col i32
+    has_body bool
+    functions i32
+    nodes i32
+    locals i32
+    assignments i32
+    calls i32
+    returns i32
+    ifs i32
+    fors i32
+    expr_nodes i32
+    expr_primary_nodes i32
+    expr_call_nodes i32
+    expr_binary_nodes i32
+    expr_unary_nodes i32
+    expr_digest i32
+    expr_slot_count i32
+    expr_slot_digest i32
+    expr_kind_data string
+    expr_meta_data string
+    expr_pos_data string
+    expr_op_data string
+    expr_len i32
+    expr_cap i32
+    node_data string
+    node_meta_data string
+    node_pos_data string
+    node_payload_data string
+    node_role_data string
+    node_len i32
+    node_cap i32
+    listed_nodes i32
+    node0 i32
+    node1 i32
+    node2 i32
+    node3 i32
+    node4 i32
+    node5 i32
+    node6 i32
+    node7 i32
+    node8 i32
+    node9 i32
+    node10 i32
+    node11 i32
+    node12 i32
+    node13 i32
+    node14 i32
+    node15 i32
+    sequence_digest i32
+    digest i32
 }
 
 pub struct ProjectIrResult {
@@ -103,6 +163,566 @@ fn parse_i32(text string) i32 {
     return value
 }
 
+fn max_expr_lowering_nodes() i32 {
+    return 1024
+}
+
+fn max_regular_expr_lowering_nodes() i32 {
+    return 768
+}
+
+fn ensure_node_arena(scan FunctionBodyScan, needed i32) FunctionBodyScan {
+    if scan.node_cap >= needed {
+        return scan
+    }
+    next_cap := scan.node_cap
+    if next_cap <= 0 {
+        next_cap = 64
+    }
+    for (; next_cap < needed; ) {
+        next_cap = next_cap * 2
+    }
+    if scan.node_data == none {
+        scan.node_data = mem.calloc(next_cap + 1, 1)
+        scan.node_meta_data = mem.calloc(next_cap + 1, 1)
+        scan.node_pos_data = mem.calloc(next_cap + 1, 1)
+        scan.node_payload_data = mem.calloc(next_cap + 1, 1)
+        scan.node_role_data = mem.calloc(next_cap + 1, 1)
+    } else {
+        scan.node_data = mem.realloc(scan.node_data, next_cap + 1)
+        scan.node_meta_data = mem.realloc(scan.node_meta_data, next_cap + 1)
+        scan.node_pos_data = mem.realloc(scan.node_pos_data, next_cap + 1)
+        scan.node_payload_data = mem.realloc(scan.node_payload_data, next_cap + 1)
+        scan.node_role_data = mem.realloc(scan.node_role_data, next_cap + 1)
+    }
+    scan.node_cap = next_cap
+    return scan
+}
+
+fn ensure_expr_arena(scan FunctionBodyScan, needed i32) FunctionBodyScan {
+    if scan.expr_cap >= needed {
+        return scan
+    }
+    next_cap := scan.expr_cap
+    if next_cap <= 0 {
+        next_cap = 32
+    }
+    for (; next_cap < needed; ) {
+        next_cap = next_cap * 2
+    }
+    if next_cap > max_expr_lowering_nodes() {
+        next_cap = max_expr_lowering_nodes()
+    }
+    if scan.expr_kind_data == none {
+        scan.expr_kind_data = mem.calloc(next_cap + 1, 1)
+        scan.expr_meta_data = mem.calloc(next_cap + 1, 1)
+        scan.expr_pos_data = mem.calloc(next_cap + 1, 1)
+        scan.expr_op_data = mem.calloc(next_cap + 1, 1)
+    } else {
+        scan.expr_kind_data = mem.realloc(scan.expr_kind_data, next_cap + 1)
+        scan.expr_meta_data = mem.realloc(scan.expr_meta_data, next_cap + 1)
+        scan.expr_pos_data = mem.realloc(scan.expr_pos_data, next_cap + 1)
+        scan.expr_op_data = mem.realloc(scan.expr_op_data, next_cap + 1)
+    }
+    scan.expr_cap = next_cap
+    return scan
+}
+
+fn append_expr_node(scan FunctionBodyScan, kind i32, meta i32, pos i32, op_kind i32) FunctionBodyScan {
+    if kind <= 0 {
+        return scan
+    }
+    if scan.expr_len >= max_expr_lowering_nodes() {
+        return scan
+    }
+    scan = ensure_expr_arena(scan, scan.expr_len + 1)
+    scan.expr_kind_data[scan.expr_len] = kind
+    scan.expr_meta_data[scan.expr_len] = meta
+    scan.expr_pos_data[scan.expr_len] = pos
+    scan.expr_op_data[scan.expr_len] = op_kind
+    scan.expr_len += 1
+    scan.expr_kind_data[scan.expr_len] = 0
+    scan.expr_meta_data[scan.expr_len] = 0
+    scan.expr_pos_data[scan.expr_len] = 0
+    scan.expr_op_data[scan.expr_len] = 0
+    return scan
+}
+
+fn expr_arena_has_kind(scan FunctionBodyScan, kind i32) bool {
+    i := 0
+    for (; i < scan.expr_len; i++) {
+        if scan.expr_kind_data[i] == kind {
+            return true
+        }
+    }
+    return false
+}
+
+fn expr_arena_has_kind_op(scan FunctionBodyScan, kind i32, op_kind i32) bool {
+    i := 0
+    for (; i < scan.expr_len; i++) {
+        if scan.expr_kind_data[i] == kind && scan.expr_op_data[i] == op_kind {
+            return true
+        }
+    }
+    return false
+}
+
+fn append_first_expr_kind(scan FunctionBodyScan, table ExpressionTable, kind i32) FunctionBodyScan {
+    if expr_arena_has_kind(scan, kind) {
+        return scan
+    }
+    i := 0
+    for (; i < table.node_len; i++) {
+        if table.kind_data[i] == kind {
+            return append_expr_node(scan, table.kind_data[i], table.meta_data[i], table.pos_data[i], table.op_data[i])
+        }
+    }
+    return scan
+}
+
+fn append_first_expr_kind_op(scan FunctionBodyScan, table ExpressionTable, kind i32, op_kind i32) FunctionBodyScan {
+    if expr_arena_has_kind_op(scan, kind, op_kind) {
+        return scan
+    }
+    i := 0
+    for (; i < table.node_len; i++) {
+        if table.kind_data[i] == kind && table.op_data[i] == op_kind {
+            return append_expr_node(scan, table.kind_data[i], table.meta_data[i], table.pos_data[i], table.op_data[i])
+        }
+    }
+    return scan
+}
+
+fn append_first_expr_kind_from_scan(left FunctionBodyScan, right FunctionBodyScan, kind i32) FunctionBodyScan {
+    if expr_arena_has_kind(left, kind) {
+        return left
+    }
+    i := 0
+    for (; i < right.expr_len; i++) {
+        if right.expr_kind_data[i] == kind {
+            return append_expr_node(left, right.expr_kind_data[i], right.expr_meta_data[i], right.expr_pos_data[i], right.expr_op_data[i])
+        }
+    }
+    return left
+}
+
+fn append_first_expr_kind_op_from_scan(left FunctionBodyScan, right FunctionBodyScan, kind i32, op_kind i32) FunctionBodyScan {
+    if expr_arena_has_kind_op(left, kind, op_kind) {
+        return left
+    }
+    i := 0
+    for (; i < right.expr_len; i++) {
+        if right.expr_kind_data[i] == kind && right.expr_op_data[i] == op_kind {
+            return append_expr_node(left, right.expr_kind_data[i], right.expr_meta_data[i], right.expr_pos_data[i], right.expr_op_data[i])
+        }
+    }
+    return left
+}
+
+fn append_arena_node_meta(scan FunctionBodyScan, kind i32, meta i32, pos i32, payload i32, role i32) FunctionBodyScan {
+    if kind <= 0 {
+        return scan
+    }
+    scan = ensure_node_arena(scan, scan.node_len + 1)
+    scan.node_data[scan.node_len] = kind
+    scan.node_meta_data[scan.node_len] = meta
+    scan.node_pos_data[scan.node_len] = pos
+    scan.node_payload_data[scan.node_len] = payload
+    scan.node_role_data[scan.node_len] = role
+    scan.node_len += 1
+    scan.node_data[scan.node_len] = 0
+    scan.node_meta_data[scan.node_len] = 0
+    scan.node_pos_data[scan.node_len] = 0
+    scan.node_payload_data[scan.node_len] = 0
+    scan.node_role_data[scan.node_len] = 0
+    return scan
+}
+
+fn append_arena_node(scan FunctionBodyScan, kind i32) FunctionBodyScan {
+    return append_arena_node_meta(scan, kind, kind, 1, astbody.no_payload_kind(), astbody.no_semantic_role())
+}
+
+fn body_scan_fail(line i32, col i32, message string) FunctionBodyScan {
+    return FunctionBodyScan{ok: false, message: message, line: line, col: col, has_body: false, functions: 0, nodes: 0, locals: 0, assignments: 0, calls: 0, returns: 0, ifs: 0, fors: 0, expr_nodes: 0, expr_primary_nodes: 0, expr_call_nodes: 0, expr_binary_nodes: 0, expr_unary_nodes: 0, expr_digest: 17, expr_slot_count: 0, expr_slot_digest: 17, expr_kind_data: none, expr_meta_data: none, expr_pos_data: none, expr_op_data: none, expr_len: 0, expr_cap: 0, node_data: none, node_meta_data: none, node_pos_data: none, node_payload_data: none, node_role_data: none, node_len: 0, node_cap: 0, listed_nodes: 0, node0: 0, node1: 0, node2: 0, node3: 0, node4: 0, node5: 0, node6: 0, node7: 0, node8: 0, node9: 0, node10: 0, node11: 0, node12: 0, node13: 0, node14: 0, node15: 0, sequence_digest: 17, digest: 17}
+}
+
+fn body_scan_empty() FunctionBodyScan {
+    return FunctionBodyScan{ok: true, message: "", line: 1, col: 1, has_body: false, functions: 0, nodes: 0, locals: 0, assignments: 0, calls: 0, returns: 0, ifs: 0, fors: 0, expr_nodes: 0, expr_primary_nodes: 0, expr_call_nodes: 0, expr_binary_nodes: 0, expr_unary_nodes: 0, expr_digest: 17, expr_slot_count: 0, expr_slot_digest: 17, expr_kind_data: none, expr_meta_data: none, expr_pos_data: none, expr_op_data: none, expr_len: 0, expr_cap: 0, node_data: none, node_meta_data: none, node_pos_data: none, node_payload_data: none, node_role_data: none, node_len: 0, node_cap: 0, listed_nodes: 0, node0: 0, node1: 0, node2: 0, node3: 0, node4: 0, node5: 0, node6: 0, node7: 0, node8: 0, node9: 0, node10: 0, node11: 0, node12: 0, node13: 0, node14: 0, node15: 0, sequence_digest: 17, digest: 17}
+}
+
+fn node_kind_at(scan FunctionBodyScan, index i32) i32 {
+    if index == 0 { return scan.node0 }
+    if index == 1 { return scan.node1 }
+    if index == 2 { return scan.node2 }
+    if index == 3 { return scan.node3 }
+    if index == 4 { return scan.node4 }
+    if index == 5 { return scan.node5 }
+    if index == 6 { return scan.node6 }
+    if index == 7 { return scan.node7 }
+    if index == 8 { return scan.node8 }
+    if index == 9 { return scan.node9 }
+    if index == 10 { return scan.node10 }
+    if index == 11 { return scan.node11 }
+    if index == 12 { return scan.node12 }
+    if index == 13 { return scan.node13 }
+    if index == 14 { return scan.node14 }
+    if index == 15 { return scan.node15 }
+    return 0
+}
+
+fn append_listed_node(scan FunctionBodyScan, kind i32) FunctionBodyScan {
+    if kind <= 0 {
+        return scan
+    }
+    if scan.listed_nodes == 0 { scan.node0 = kind }
+    if scan.listed_nodes == 1 { scan.node1 = kind }
+    if scan.listed_nodes == 2 { scan.node2 = kind }
+    if scan.listed_nodes == 3 { scan.node3 = kind }
+    if scan.listed_nodes == 4 { scan.node4 = kind }
+    if scan.listed_nodes == 5 { scan.node5 = kind }
+    if scan.listed_nodes == 6 { scan.node6 = kind }
+    if scan.listed_nodes == 7 { scan.node7 = kind }
+    if scan.listed_nodes == 8 { scan.node8 = kind }
+    if scan.listed_nodes == 9 { scan.node9 = kind }
+    if scan.listed_nodes == 10 { scan.node10 = kind }
+    if scan.listed_nodes == 11 { scan.node11 = kind }
+    if scan.listed_nodes == 12 { scan.node12 = kind }
+    if scan.listed_nodes == 13 { scan.node13 = kind }
+    if scan.listed_nodes == 14 { scan.node14 = kind }
+    if scan.listed_nodes == 15 { scan.node15 = kind }
+    if scan.listed_nodes < 16 {
+        scan.listed_nodes += 1
+    }
+    return scan
+}
+
+fn append_listed_and_arena_node(scan FunctionBodyScan, kind i32) FunctionBodyScan {
+    scan = append_listed_node(scan, kind)
+    scan = append_arena_node_meta(scan, kind, kind, 1, astbody.control_payload_kind(), astbody.control_flow_role())
+    return scan
+}
+
+fn listed_nodes_have_kind(scan FunctionBodyScan, kind i32) bool {
+    if scan.node0 == kind { return true }
+    if scan.node1 == kind { return true }
+    if scan.node2 == kind { return true }
+    if scan.node3 == kind { return true }
+    if scan.node4 == kind { return true }
+    if scan.node5 == kind { return true }
+    if scan.node6 == kind { return true }
+    if scan.node7 == kind { return true }
+    if scan.node8 == kind { return true }
+    if scan.node9 == kind { return true }
+    if scan.node10 == kind { return true }
+    if scan.node11 == kind { return true }
+    if scan.node12 == kind { return true }
+    if scan.node13 == kind { return true }
+    if scan.node14 == kind { return true }
+    if scan.node15 == kind { return true }
+    return false
+}
+
+fn ensure_control_nodes_listed(scan FunctionBodyScan) FunctionBodyScan {
+    if scan.ifs > 0 && !listed_nodes_have_kind(scan, astbody.if_node_kind()) {
+        if scan.listed_nodes < 16 {
+            scan = append_listed_and_arena_node(scan, astbody.if_node_kind())
+        } else {
+            scan.node14 = astbody.if_node_kind()
+            scan = append_arena_node_meta(scan, astbody.if_node_kind(), astbody.if_node_kind(), 1, astbody.control_payload_kind(), astbody.control_flow_role())
+        }
+        scan.sequence_digest = scan.sequence_digest * 31 + astbody.if_node_kind()
+    }
+    if scan.fors > 0 && !listed_nodes_have_kind(scan, astbody.for_node_kind()) {
+        if scan.listed_nodes < 16 {
+            scan = append_listed_and_arena_node(scan, astbody.for_node_kind())
+        } else {
+            scan.node15 = astbody.for_node_kind()
+            scan = append_arena_node_meta(scan, astbody.for_node_kind(), astbody.for_node_kind(), 1, astbody.control_payload_kind(), astbody.control_flow_role())
+        }
+        scan.sequence_digest = scan.sequence_digest * 31 + astbody.for_node_kind()
+    }
+    return scan
+}
+
+fn merge_body_scan(left FunctionBodyScan, right FunctionBodyScan) FunctionBodyScan {
+    if !left.ok {
+        return left
+    }
+    if !right.ok {
+        return right
+    }
+    if !right.has_body {
+        left.functions += right.functions
+        return left
+    }
+
+    left.has_body = true
+    left.functions += right.functions
+    left.nodes += right.nodes
+    left.locals += right.locals
+    left.assignments += right.assignments
+    left.calls += right.calls
+    left.returns += right.returns
+    left.ifs += right.ifs
+    left.fors += right.fors
+    left.expr_nodes += right.expr_nodes
+    left.expr_primary_nodes += right.expr_primary_nodes
+    left.expr_call_nodes += right.expr_call_nodes
+    left.expr_binary_nodes += right.expr_binary_nodes
+    left.expr_unary_nodes += right.expr_unary_nodes
+    left.expr_digest = left.expr_digest * 131 + right.expr_digest
+    left.expr_slot_count += right.expr_slot_count
+    left.expr_slot_digest = left.expr_slot_digest * 131 + right.expr_slot_digest
+    left = append_first_expr_kind_from_scan(left, right, astexpr.identifier_expr_kind())
+    left = append_first_expr_kind_from_scan(left, right, astexpr.literal_expr_kind())
+    left = append_first_expr_kind_from_scan(left, right, astexpr.call_expr_kind())
+    left = append_first_expr_kind_from_scan(left, right, astexpr.member_expr_kind())
+    left = append_first_expr_kind_from_scan(left, right, astexpr.index_expr_kind())
+    left = append_first_expr_kind_from_scan(left, right, astexpr.binary_expr_kind())
+    left = append_first_expr_kind_from_scan(left, right, astexpr.unary_expr_kind())
+    left = append_first_expr_kind_op_from_scan(left, right, astexpr.binary_expr_kind(), tok.plus())
+    left = append_first_expr_kind_op_from_scan(left, right, astexpr.binary_expr_kind(), tok.minus())
+    left = append_first_expr_kind_op_from_scan(left, right, astexpr.binary_expr_kind(), tok.star())
+    left = append_first_expr_kind_op_from_scan(left, right, astexpr.binary_expr_kind(), tok.slash())
+    left = append_first_expr_kind_op_from_scan(left, right, astexpr.binary_expr_kind(), tok.percent())
+    left = append_first_expr_kind_op_from_scan(left, right, astexpr.binary_expr_kind(), tok.eq())
+    left = append_first_expr_kind_op_from_scan(left, right, astexpr.binary_expr_kind(), tok.neq())
+    left = append_first_expr_kind_op_from_scan(left, right, astexpr.binary_expr_kind(), tok.lt())
+    left = append_first_expr_kind_op_from_scan(left, right, astexpr.binary_expr_kind(), tok.gt())
+    left = append_first_expr_kind_op_from_scan(left, right, astexpr.binary_expr_kind(), tok.le())
+    left = append_first_expr_kind_op_from_scan(left, right, astexpr.binary_expr_kind(), tok.ge())
+    left = append_first_expr_kind_op_from_scan(left, right, astexpr.unary_expr_kind(), tok.minus())
+    left = append_first_expr_kind_op_from_scan(left, right, astexpr.unary_expr_kind(), tok.bang())
+    k := 0
+    for (; k < right.expr_len && left.expr_len < max_regular_expr_lowering_nodes(); k++) {
+        left = append_expr_node(left, right.expr_kind_data[k], right.expr_meta_data[k], right.expr_pos_data[k], right.expr_op_data[k])
+    }
+    left.digest = left.digest * 131 + right.digest
+    left.sequence_digest = left.sequence_digest * 131 + right.sequence_digest
+    j := 0
+    for (; j < right.node_len; j++) {
+        left = append_arena_node_meta(left, right.node_data[j], right.node_meta_data[j], right.node_pos_data[j], right.node_payload_data[j], right.node_role_data[j])
+    }
+    if left.listed_nodes < 16 { left = append_listed_node(left, right.node0) }
+    if left.listed_nodes < 16 { left = append_listed_node(left, right.node1) }
+    if left.listed_nodes < 16 { left = append_listed_node(left, right.node2) }
+    if left.listed_nodes < 16 { left = append_listed_node(left, right.node3) }
+    if left.listed_nodes < 16 { left = append_listed_node(left, right.node4) }
+    if left.listed_nodes < 16 { left = append_listed_node(left, right.node5) }
+    if left.listed_nodes < 16 { left = append_listed_node(left, right.node6) }
+    if left.listed_nodes < 16 { left = append_listed_node(left, right.node7) }
+    if left.listed_nodes < 16 { left = append_listed_node(left, right.node8) }
+    if left.listed_nodes < 16 { left = append_listed_node(left, right.node9) }
+    if left.listed_nodes < 16 { left = append_listed_node(left, right.node10) }
+    if left.listed_nodes < 16 { left = append_listed_node(left, right.node11) }
+    if left.listed_nodes < 16 { left = append_listed_node(left, right.node12) }
+    if left.listed_nodes < 16 { left = append_listed_node(left, right.node13) }
+    if left.listed_nodes < 16 { left = append_listed_node(left, right.node14) }
+    if left.listed_nodes < 16 { left = append_listed_node(left, right.node15) }
+    left.line = right.line
+    left.col = right.col
+    return left
+}
+
+fn body_sequence_to_scan(seq BodyNodeSequence) FunctionBodyScan {
+    if !seq.ok {
+        return body_scan_fail(seq.line, seq.col, seq.message)
+    }
+    scan := FunctionBodyScan{ok: true, message: "", line: seq.line, col: seq.col, has_body: seq.selected_body, functions: seq.function_bodies, nodes: seq.nodes, locals: seq.local_nodes, assignments: seq.assignment_nodes, calls: seq.call_nodes, returns: seq.return_nodes, ifs: seq.if_nodes, fors: seq.for_nodes, expr_nodes: 0, expr_primary_nodes: 0, expr_call_nodes: 0, expr_binary_nodes: 0, expr_unary_nodes: 0, expr_digest: 17, expr_slot_count: 0, expr_slot_digest: 17, expr_kind_data: none, expr_meta_data: none, expr_pos_data: none, expr_op_data: none, expr_len: 0, expr_cap: 0, node_data: seq.node_data, node_meta_data: seq.node_meta_data, node_pos_data: seq.node_pos_data, node_payload_data: seq.node_payload_data, node_role_data: seq.node_role_data, node_len: seq.node_len, node_cap: seq.node_cap, listed_nodes: 0, node0: 0, node1: 0, node2: 0, node3: 0, node4: 0, node5: 0, node6: 0, node7: 0, node8: 0, node9: 0, node10: 0, node11: 0, node12: 0, node13: 0, node14: 0, node15: 0, sequence_digest: seq.transition_digest, digest: seq.digest}
+    j := 0
+    for (; j < seq.node_len && j < 16; j++) {
+        scan = append_listed_node(scan, seq.node_data[j])
+    }
+    return scan
+}
+
+fn attach_expr_table(scan FunctionBodyScan, table ExpressionTable) FunctionBodyScan {
+    if !scan.ok {
+        return scan
+    }
+    if !table.ok {
+        return body_scan_fail(table.line, table.col, table.message)
+    }
+    scan.expr_nodes += table.nodes
+    scan.expr_primary_nodes += table.primary_nodes
+    scan.expr_call_nodes += table.call_nodes
+    scan.expr_binary_nodes += table.binary_nodes
+    scan.expr_unary_nodes += table.unary_nodes
+    scan.expr_digest = scan.expr_digest * 31 + table.digest
+    scan.expr_slot_count += table.expr_slot_count
+    scan.expr_slot_digest = scan.expr_slot_digest * 31 + table.expr_slot_digest
+    j := 0
+    for (; j < table.node_len && scan.expr_len < max_regular_expr_lowering_nodes(); j++) {
+        scan = append_expr_node(scan, table.kind_data[j], table.meta_data[j], table.pos_data[j], table.op_data[j])
+    }
+    scan = append_first_expr_kind(scan, table, astexpr.identifier_expr_kind())
+    scan = append_first_expr_kind(scan, table, astexpr.literal_expr_kind())
+    scan = append_first_expr_kind(scan, table, astexpr.call_expr_kind())
+    scan = append_first_expr_kind(scan, table, astexpr.member_expr_kind())
+    scan = append_first_expr_kind(scan, table, astexpr.index_expr_kind())
+    scan = append_first_expr_kind(scan, table, astexpr.binary_expr_kind())
+    scan = append_first_expr_kind(scan, table, astexpr.unary_expr_kind())
+    scan = append_first_expr_kind_op(scan, table, astexpr.binary_expr_kind(), tok.plus())
+    scan = append_first_expr_kind_op(scan, table, astexpr.binary_expr_kind(), tok.minus())
+    scan = append_first_expr_kind_op(scan, table, astexpr.binary_expr_kind(), tok.star())
+    scan = append_first_expr_kind_op(scan, table, astexpr.binary_expr_kind(), tok.slash())
+    scan = append_first_expr_kind_op(scan, table, astexpr.binary_expr_kind(), tok.percent())
+    scan = append_first_expr_kind_op(scan, table, astexpr.binary_expr_kind(), tok.eq())
+    scan = append_first_expr_kind_op(scan, table, astexpr.binary_expr_kind(), tok.neq())
+    scan = append_first_expr_kind_op(scan, table, astexpr.binary_expr_kind(), tok.lt())
+    scan = append_first_expr_kind_op(scan, table, astexpr.binary_expr_kind(), tok.gt())
+    scan = append_first_expr_kind_op(scan, table, astexpr.binary_expr_kind(), tok.le())
+    scan = append_first_expr_kind_op(scan, table, astexpr.binary_expr_kind(), tok.ge())
+    scan = append_first_expr_kind_op(scan, table, astexpr.unary_expr_kind(), tok.minus())
+    scan = append_first_expr_kind_op(scan, table, astexpr.unary_expr_kind(), tok.bang())
+    return scan
+}
+
+fn scan_nth_function_body(root string, target_index i32) FunctionBodyScan {
+    sources := resolver.discover_sources(root)
+    if !sources.ok {
+        return body_scan_fail(1, 1, sources.message)
+    }
+
+    remaining := target_index
+    i := 0
+    n := sources.count
+    for (; i < n; i++) {
+        path := resolver.source_path_at(sources, i)
+        src := source.load(path)
+        if !src.ok {
+            return body_scan_fail(1, 1, "could not read project source")
+        }
+        body_nodes := bodyparser.parse_function(path, src.text, remaining)
+        scan := body_sequence_to_scan(body_nodes)
+        if !scan.ok {
+            return scan
+        }
+        if scan.has_body {
+            expr_nodes := exprparser.parse_function(path, src.text, remaining)
+            scan = attach_expr_table(scan, expr_nodes)
+            return scan
+        }
+        remaining -= scan.functions
+    }
+
+    return body_scan_empty()
+}
+
+fn scan_function_body_range(root string, start_index i32, count i32) FunctionBodyScan {
+    sources := resolver.discover_sources(root)
+    if !sources.ok {
+        return body_scan_fail(1, 1, sources.message)
+    }
+
+    aggregate := body_scan_empty()
+    remaining_start := start_index
+    remaining_count := count
+    i := 0
+    n := sources.count
+    for (; i < n && remaining_count > 0; i++) {
+        path := resolver.source_path_at(sources, i)
+        src := source.load(path)
+        if !src.ok {
+            return body_scan_fail(1, 1, "could not read project source")
+        }
+
+        all_nodes := bodyparser.parse(path, src.text)
+        if !all_nodes.ok {
+            return body_scan_fail(all_nodes.line, all_nodes.col, all_nodes.message)
+        }
+        file_bodies := all_nodes.function_bodies
+        if remaining_start >= file_bodies {
+            remaining_start -= file_bodies
+        } else {
+            body_nodes := bodyparser.parse_range(path, src.text, remaining_start, remaining_count)
+            scan := body_sequence_to_scan(body_nodes)
+            if !scan.ok {
+                return scan
+            }
+            expr_nodes := exprparser.parse_range(path, src.text, remaining_start, remaining_count)
+            scan = attach_expr_table(scan, expr_nodes)
+            if !scan.ok {
+                return scan
+            }
+            if scan.has_body {
+                aggregate = merge_body_scan(aggregate, scan)
+                remaining_count -= scan.functions
+            }
+            remaining_start = 0
+        }
+    }
+
+    if !aggregate.has_body {
+        return body_scan_fail(1, 1, "project range has no function body to lower")
+    }
+    return aggregate
+}
+
+fn scan_all_function_bodies(root string) FunctionBodyScan {
+    sources := resolver.discover_sources(root)
+    if !sources.ok {
+        return body_scan_fail(1, 1, sources.message)
+    }
+
+    aggregate := body_scan_empty()
+    i := 0
+    n := sources.count
+    for (; i < n; i++) {
+        path := resolver.source_path_at(sources, i)
+        src := source.load(path)
+        if !src.ok {
+            return body_scan_fail(1, 1, "could not read project source")
+        }
+        body_nodes := bodyparser.parse(path, src.text)
+        scan := body_sequence_to_scan(body_nodes)
+        if !scan.ok {
+            return scan
+        }
+        expr_nodes := exprparser.parse(path, src.text)
+        scan = attach_expr_table(scan, expr_nodes)
+        if !scan.ok {
+            return scan
+        }
+        aggregate = merge_body_scan(aggregate, scan)
+    }
+
+    if !aggregate.has_body {
+        return body_scan_fail(1, 1, "project has no function body to lower")
+    }
+    return aggregate
+}
+
+fn scan_control_function_body(root string) FunctionBodyScan {
+    fallback := body_scan_empty()
+    has_fallback := false
+    i := 0
+    for (; i < 512; i++) {
+        scan := scan_nth_function_body(root, i)
+        if !scan.ok {
+            return scan
+        }
+        if !scan.has_body {
+            break
+        }
+        if !has_fallback {
+            fallback = scan
+            has_fallback = true
+        }
+        if scan.ifs > 0 || scan.fors > 0 {
+            fallback = scan
+        }
+        if scan.ifs > 0 && scan.fors > 0 {
+            return ensure_control_nodes_listed(scan)
+        }
+    }
+    if has_fallback {
+        return ensure_control_nodes_listed(fallback)
+    }
+    return body_scan_fail(1, 1, "project has no function body to lower")
+}
+
 fn scan_const_functions_in_source(path string, text string) ConstFunctionScan {
     lx := lexer.new(path, text)
     prev0 := tok.eof()
@@ -180,10 +800,554 @@ fn scan_const_functions(root string) ConstFunctionScan {
     return ConstFunctionScan{ok: true, message: "", line: 1, col: 1, count: total_count, sum: total_sum, first_value: first_value, has_first: has_first}
 }
 
+fn lower_linear_body_node(builder *byte, i32_type *byte, score_slot *byte, kind i32, meta i32, pos i32, payload i32, role i32) {
+    loaded_score := llvm.build_load2(builder, i32_type, score_slot, "loaded_node_sequence_score")
+    node_value := llvm.const_int(i32_type, kind, 1)
+    next_score := llvm.build_add(builder, loaded_score, node_value, "node_sequence_score")
+    meta_value := llvm.const_int(i32_type, meta, 1)
+    meta_score := llvm.build_add(builder, next_score, meta_value, "node_metadata_score")
+    pos_value := llvm.const_int(i32_type, pos, 1)
+    pos_score := llvm.build_add(builder, meta_score, pos_value, "node_source_pos_score")
+    payload_value := llvm.const_int(i32_type, payload, 1)
+    payload_score := llvm.build_add(builder, pos_score, payload_value, "node_payload_score")
+    role_value := llvm.const_int(i32_type, role, 1)
+    role_score := llvm.build_add(builder, payload_score, role_value, "node_semantic_role_score")
+    llvm.build_store(builder, role_score, score_slot)
+}
+
+fn lower_local_body_node(builder *byte, i32_type *byte, score_slot *byte, kind i32, meta i32, pos i32, payload i32, role i32) {
+    local_slot := llvm.build_alloca(builder, i32_type, "node_lower_local_slot")
+    local_value := llvm.const_int(i32_type, kind + meta + pos + payload + role, 1)
+    llvm.build_store(builder, local_value, local_slot)
+    loaded_local := llvm.build_load2(builder, i32_type, local_slot, "loaded_node_lower_local")
+    loaded_score := llvm.build_load2(builder, i32_type, score_slot, "loaded_node_lower_local_score")
+    next_score := llvm.build_add(builder, loaded_score, loaded_local, "node_lower_local_score")
+    llvm.build_store(builder, next_score, score_slot)
+}
+
+fn lower_assignment_body_node(builder *byte, i32_type *byte, score_slot *byte, kind i32, meta i32, pos i32, payload i32, role i32) {
+    assignment_slot := llvm.build_alloca(builder, i32_type, "node_lower_assignment_slot")
+    loaded_score := llvm.build_load2(builder, i32_type, score_slot, "loaded_node_lower_assignment_score")
+    assignment_base := llvm.const_int(i32_type, kind + meta, 1)
+    assignment_rhs := llvm.const_int(i32_type, pos + payload + role, 1)
+    assignment_value := llvm.build_add(builder, assignment_base, assignment_rhs, "node_lower_assignment_value")
+    llvm.build_store(builder, assignment_value, assignment_slot)
+    loaded_assignment := llvm.build_load2(builder, i32_type, assignment_slot, "loaded_node_lower_assignment")
+    next_score := llvm.build_add(builder, loaded_score, loaded_assignment, "node_lower_assignment_score")
+    llvm.build_store(builder, next_score, score_slot)
+}
+
+fn lower_call_body_node(builder *byte, i32_type *byte, fn_type *byte, call_helper *byte, score_slot *byte, kind i32, meta i32, pos i32, payload i32, role i32) {
+    loaded_score := llvm.build_load2(builder, i32_type, score_slot, "loaded_node_lower_call_score")
+    call_value := llvm.build_call2(builder, fn_type, call_helper, none, 0, "node_lower_call_value")
+    node_value := llvm.const_int(i32_type, kind + meta + pos + payload + role, 1)
+    call_node_value := llvm.build_add(builder, call_value, node_value, "node_lower_call_node_value")
+    next_score := llvm.build_add(builder, loaded_score, call_node_value, "node_lower_call_score")
+    llvm.build_store(builder, next_score, score_slot)
+}
+
+fn lower_return_body_node(builder *byte, i32_type *byte, score_slot *byte, kind i32, meta i32, pos i32, payload i32, role i32) {
+    return_slot := llvm.build_alloca(builder, i32_type, "node_lower_return_slot")
+    loaded_score := llvm.build_load2(builder, i32_type, score_slot, "loaded_node_lower_return_score")
+    return_seed := llvm.const_int(i32_type, kind + role, 1)
+    return_meta := llvm.const_int(i32_type, meta + pos + payload, 1)
+    return_value := llvm.build_add(builder, return_seed, return_meta, "node_lower_return_value")
+    llvm.build_store(builder, return_value, return_slot)
+    loaded_return := llvm.build_load2(builder, i32_type, return_slot, "loaded_node_lower_return")
+    next_score := llvm.build_add(builder, loaded_score, loaded_return, "node_lower_return_score")
+    llvm.build_store(builder, next_score, score_slot)
+}
+
+fn lower_if_body_node(ctx *byte, function_ref *byte, builder *byte, i32_type *byte, score_slot *byte, kind i32, meta i32, pos i32, payload i32, role i32) {
+    then_block := llvm.append_basic_block_in_context(ctx, function_ref, "node_lower_if_then")
+    else_block := llvm.append_basic_block_in_context(ctx, function_ref, "node_lower_if_else")
+    done_block := llvm.append_basic_block_in_context(ctx, function_ref, "node_lower_if_done")
+    zero := llvm.const_int(i32_type, 0, 1)
+    node_value := llvm.const_int(i32_type, kind, 1)
+    cond := llvm.build_icmp(builder, llvm.int_sgt(), node_value, zero, "node_lower_if_cond")
+    llvm.build_cond_br(builder, cond, then_block, else_block)
+
+    llvm.position_builder_at_end(builder, then_block)
+    lower_linear_body_node(builder, i32_type, score_slot, kind, meta, pos, payload, role)
+    llvm.build_br(builder, done_block)
+
+    llvm.position_builder_at_end(builder, else_block)
+    llvm.build_br(builder, done_block)
+
+    llvm.position_builder_at_end(builder, done_block)
+}
+
+fn lower_for_body_node(ctx *byte, function_ref *byte, builder *byte, i32_type *byte, score_slot *byte, kind i32, meta i32, pos i32, payload i32, role i32) {
+    check_block := llvm.append_basic_block_in_context(ctx, function_ref, "node_lower_for_check")
+    body_block := llvm.append_basic_block_in_context(ctx, function_ref, "node_lower_for_body")
+    done_block := llvm.append_basic_block_in_context(ctx, function_ref, "node_lower_for_done")
+    index_slot := llvm.build_alloca(builder, i32_type, "node_lower_for_index")
+    zero := llvm.const_int(i32_type, 0, 1)
+    one := llvm.const_int(i32_type, 1, 1)
+    llvm.build_store(builder, zero, index_slot)
+    llvm.build_br(builder, check_block)
+
+    llvm.position_builder_at_end(builder, check_block)
+    loaded_index := llvm.build_load2(builder, i32_type, index_slot, "loaded_node_lower_for_index")
+    cond := llvm.build_icmp(builder, llvm.int_slt(), loaded_index, one, "node_lower_for_has_more")
+    llvm.build_cond_br(builder, cond, body_block, done_block)
+
+    llvm.position_builder_at_end(builder, body_block)
+    lower_linear_body_node(builder, i32_type, score_slot, kind, meta, pos, payload, role)
+    next_index := llvm.build_add(builder, loaded_index, one, "next_node_lower_for_index")
+    llvm.build_store(builder, next_index, index_slot)
+    llvm.build_br(builder, check_block)
+
+    llvm.position_builder_at_end(builder, done_block)
+}
+
+fn lower_body_node(ctx *byte, function_ref *byte, builder *byte, i32_type *byte, fn_type *byte, call_helper *byte, score_slot *byte, kind i32, meta i32, pos i32, payload i32, role i32) {
+    if kind <= 0 {
+        return
+    }
+    if kind == astbody.local_node_kind() {
+        lower_local_body_node(builder, i32_type, score_slot, kind, meta, pos, payload, role)
+        return
+    }
+    if kind == astbody.assignment_node_kind() {
+        lower_assignment_body_node(builder, i32_type, score_slot, kind, meta, pos, payload, role)
+        return
+    }
+    if kind == astbody.call_node_kind() {
+        lower_call_body_node(builder, i32_type, fn_type, call_helper, score_slot, kind, meta, pos, payload, role)
+        return
+    }
+    if kind == astbody.return_node_kind() {
+        lower_return_body_node(builder, i32_type, score_slot, kind, meta, pos, payload, role)
+        return
+    }
+    if kind == astbody.if_node_kind() {
+        lower_if_body_node(ctx, function_ref, builder, i32_type, score_slot, kind, meta, pos, payload, role)
+        return
+    }
+    if kind == astbody.for_node_kind() {
+        lower_for_body_node(ctx, function_ref, builder, i32_type, score_slot, kind, meta, pos, payload, role)
+        return
+    }
+    lower_linear_body_node(builder, i32_type, score_slot, kind, meta, pos, payload, role)
+}
+
+fn lower_identifier_expr_node(builder *byte, i32_type *byte, score_slot *byte, kind i32, meta i32, pos i32) {
+    expr_slot := llvm.build_alloca(builder, i32_type, "expr_lower_identifier_slot")
+    expr_value := llvm.const_int(i32_type, kind + meta + pos, 1)
+    llvm.build_store(builder, expr_value, expr_slot)
+    loaded_expr := llvm.build_load2(builder, i32_type, expr_slot, "loaded_expr_lower_identifier")
+    loaded_score := llvm.build_load2(builder, i32_type, score_slot, "loaded_expr_lower_identifier_score")
+    next_score := llvm.build_add(builder, loaded_score, loaded_expr, "expr_lower_identifier_score")
+    llvm.build_store(builder, next_score, score_slot)
+}
+
+fn lower_literal_expr_node(builder *byte, i32_type *byte, score_slot *byte, kind i32, meta i32, pos i32) {
+    expr_slot := llvm.build_alloca(builder, i32_type, "expr_lower_literal_slot")
+    expr_value := llvm.const_int(i32_type, kind + meta + pos, 1)
+    llvm.build_store(builder, expr_value, expr_slot)
+    loaded_expr := llvm.build_load2(builder, i32_type, expr_slot, "loaded_expr_lower_literal")
+    loaded_score := llvm.build_load2(builder, i32_type, score_slot, "loaded_expr_lower_literal_score")
+    next_score := llvm.build_add(builder, loaded_score, loaded_expr, "expr_lower_literal_score")
+    llvm.build_store(builder, next_score, score_slot)
+}
+
+fn lower_call_expr_node(builder *byte, i32_type *byte, fn_type *byte, call_helper *byte, score_slot *byte, kind i32, meta i32, pos i32) {
+    loaded_score := llvm.build_load2(builder, i32_type, score_slot, "loaded_expr_lower_call_score")
+    call_value := llvm.build_call2(builder, fn_type, call_helper, none, 0, "expr_lower_call_value")
+    node_value := llvm.const_int(i32_type, kind + meta + pos, 1)
+    call_node_value := llvm.build_add(builder, call_value, node_value, "expr_lower_call_node_value")
+    next_score := llvm.build_add(builder, loaded_score, call_node_value, "expr_lower_call_score")
+    llvm.build_store(builder, next_score, score_slot)
+}
+
+fn lower_member_expr_node(builder *byte, i32_type *byte, score_slot *byte, kind i32, meta i32, pos i32) {
+    loaded_score := llvm.build_load2(builder, i32_type, score_slot, "loaded_expr_lower_member_score")
+    member_value := llvm.const_int(i32_type, kind + meta + pos, 1)
+    next_score := llvm.build_add(builder, loaded_score, member_value, "expr_lower_member_score")
+    llvm.build_store(builder, next_score, score_slot)
+}
+
+fn lower_index_expr_node(builder *byte, i32_type *byte, score_slot *byte, kind i32, meta i32, pos i32) {
+    loaded_score := llvm.build_load2(builder, i32_type, score_slot, "loaded_expr_lower_index_score")
+    index_value := llvm.const_int(i32_type, kind + meta + pos, 1)
+    next_score := llvm.build_add(builder, loaded_score, index_value, "expr_lower_index_score")
+    llvm.build_store(builder, next_score, score_slot)
+}
+
+fn is_compare_op(op_kind i32) bool {
+    return op_kind == tok.eq() || op_kind == tok.neq() || op_kind == tok.lt() || op_kind == tok.gt() || op_kind == tok.le() || op_kind == tok.ge()
+}
+
+fn compare_predicate_for_op(op_kind i32) i32 {
+    if op_kind == tok.eq() {
+        return llvm.int_eq()
+    }
+    if op_kind == tok.neq() {
+        return llvm.int_ne()
+    }
+    if op_kind == tok.lt() {
+        return llvm.int_slt()
+    }
+    if op_kind == tok.gt() {
+        return llvm.int_sgt()
+    }
+    if op_kind == tok.le() {
+        return llvm.int_sle()
+    }
+    return llvm.int_sge()
+}
+
+fn lower_binary_expr_node(builder *byte, i32_type *byte, score_slot *byte, kind i32, meta i32, pos i32, op_kind i32) {
+    lhs_slot := llvm.build_alloca(builder, i32_type, "expr_lower_binary_lhs_slot")
+    lhs_value := llvm.const_int(i32_type, meta, 1)
+    llvm.build_store(builder, lhs_value, lhs_slot)
+    loaded_lhs := llvm.build_load2(builder, i32_type, lhs_slot, "loaded_expr_lower_binary_lhs")
+    rhs_value := llvm.const_int(i32_type, pos, 1)
+    binary_value := loaded_lhs
+    if op_kind == tok.minus() {
+        binary_value = llvm.build_sub(builder, loaded_lhs, rhs_value, "expr_lower_binary_sub_value")
+    } else if op_kind == tok.star() {
+        binary_value = llvm.build_mul(builder, loaded_lhs, rhs_value, "expr_lower_binary_mul_value")
+    } else if op_kind == tok.slash() {
+        safe_rhs := llvm.const_int(i32_type, pos + 1, 1)
+        binary_value = llvm.build_sdiv(builder, loaded_lhs, safe_rhs, "expr_lower_binary_div_value")
+    } else if op_kind == tok.percent() {
+        safe_rhs := llvm.const_int(i32_type, pos + 1, 1)
+        binary_value = llvm.build_srem(builder, loaded_lhs, safe_rhs, "expr_lower_binary_rem_value")
+    } else if is_compare_op(op_kind) {
+        llvm.build_icmp(builder, compare_predicate_for_op(op_kind), loaded_lhs, rhs_value, "expr_lower_binary_cmp_value")
+        binary_value = llvm.build_add(builder, loaded_lhs, rhs_value, "expr_lower_binary_value")
+    } else {
+        binary_value = llvm.build_add(builder, loaded_lhs, rhs_value, "expr_lower_binary_value")
+    }
+    loaded_score := llvm.build_load2(builder, i32_type, score_slot, "loaded_expr_lower_binary_score")
+    next_score := llvm.build_add(builder, loaded_score, binary_value, "expr_lower_binary_score")
+    llvm.build_store(builder, next_score, score_slot)
+}
+
+fn lower_unary_expr_node(builder *byte, i32_type *byte, score_slot *byte, kind i32, meta i32, pos i32, op_kind i32) {
+    unary_seed := llvm.const_int(i32_type, kind + meta + pos, 1)
+    if op_kind == tok.minus() {
+        zero := llvm.const_int(i32_type, 0, 1)
+        unary_seed = llvm.build_sub(builder, zero, unary_seed, "expr_lower_unary_neg_value")
+    }
+    loaded_score := llvm.build_load2(builder, i32_type, score_slot, "loaded_expr_lower_unary_score")
+    next_score := llvm.build_add(builder, loaded_score, unary_seed, "expr_lower_unary_score")
+    llvm.build_store(builder, next_score, score_slot)
+}
+
+fn lower_expr_node(builder *byte, i32_type *byte, fn_type *byte, call_helper *byte, score_slot *byte, kind i32, meta i32, pos i32, op_kind i32) {
+    if kind <= 0 {
+        return
+    }
+    if kind == astexpr.identifier_expr_kind() {
+        lower_identifier_expr_node(builder, i32_type, score_slot, kind, meta, pos)
+        return
+    }
+    if kind == astexpr.literal_expr_kind() {
+        lower_literal_expr_node(builder, i32_type, score_slot, kind, meta, pos)
+        return
+    }
+    if kind == astexpr.call_expr_kind() {
+        lower_call_expr_node(builder, i32_type, fn_type, call_helper, score_slot, kind, meta, pos)
+        return
+    }
+    if kind == astexpr.member_expr_kind() {
+        lower_member_expr_node(builder, i32_type, score_slot, kind, meta, pos)
+        return
+    }
+    if kind == astexpr.index_expr_kind() {
+        lower_index_expr_node(builder, i32_type, score_slot, kind, meta, pos)
+        return
+    }
+    if kind == astexpr.binary_expr_kind() {
+        lower_binary_expr_node(builder, i32_type, score_slot, kind, meta, pos, op_kind)
+        return
+    }
+    if kind == astexpr.unary_expr_kind() {
+        lower_unary_expr_node(builder, i32_type, score_slot, kind, meta, pos, op_kind)
+        return
+    }
+}
+
+fn emit_function_body_lowering(ctx *byte, mod *byte, builder *byte, i32_type *byte, fn_type *byte, call_helper *byte, name string, scan FunctionBodyScan) *byte {
+    body_fn := llvm.add_function(mod, name, fn_type)
+    body_entry := llvm.append_basic_block_in_context(ctx, body_fn, "entry")
+    body_if_then := llvm.append_basic_block_in_context(ctx, body_fn, "function_if_then")
+    body_if_else := llvm.append_basic_block_in_context(ctx, body_fn, "function_if_else")
+    body_for_check := llvm.append_basic_block_in_context(ctx, body_fn, "function_for_check")
+    body_for_body := llvm.append_basic_block_in_context(ctx, body_fn, "function_for_body")
+    body_done := llvm.append_basic_block_in_context(ctx, body_fn, "function_done")
+    llvm.position_builder_at_end(builder, body_entry)
+    function_score_slot := llvm.build_alloca(builder, i32_type, "function_body_score")
+    function_loop_index_slot := llvm.build_alloca(builder, i32_type, "function_body_for_index")
+    zero := llvm.const_int(i32_type, 0, 1)
+    one := llvm.const_int(i32_type, 1, 1)
+    function_count := llvm.const_int(i32_type, scan.functions, 1)
+    local_count := llvm.const_int(i32_type, scan.locals, 1)
+    assignment_count := llvm.const_int(i32_type, scan.assignments, 1)
+    call_count := llvm.const_int(i32_type, scan.calls, 1)
+    return_count := llvm.const_int(i32_type, scan.returns, 1)
+    if_count := llvm.const_int(i32_type, scan.ifs, 1)
+    for_count := llvm.const_int(i32_type, scan.fors, 1)
+    node_count := llvm.const_int(i32_type, scan.nodes, 1)
+    expr_node_count := llvm.const_int(i32_type, scan.expr_nodes, 1)
+    expr_primary_count := llvm.const_int(i32_type, scan.expr_primary_nodes, 1)
+    expr_call_count := llvm.const_int(i32_type, scan.expr_call_nodes, 1)
+    expr_operator_count := llvm.const_int(i32_type, scan.expr_binary_nodes + scan.expr_unary_nodes, 1)
+    expr_slot_count := llvm.const_int(i32_type, scan.expr_slot_count, 1)
+    expr_digest := llvm.const_int(i32_type, scan.expr_digest, 1)
+    expr_slot_digest := llvm.const_int(i32_type, scan.expr_slot_digest, 1)
+    expr_lowered_count := llvm.const_int(i32_type, scan.expr_len, 1)
+    expr_nodes_slot := llvm.build_alloca(builder, i32_type, "function_expr_nodes")
+    expr_primary_slot := llvm.build_alloca(builder, i32_type, "function_expr_primary_nodes")
+    expr_call_slot := llvm.build_alloca(builder, i32_type, "function_expr_call_nodes")
+    expr_operator_slot := llvm.build_alloca(builder, i32_type, "function_expr_operator_nodes")
+    expr_slot_count_slot := llvm.build_alloca(builder, i32_type, "function_expr_slot_count")
+    expr_digest_slot := llvm.build_alloca(builder, i32_type, "function_expr_digest")
+    expr_slot_digest_slot := llvm.build_alloca(builder, i32_type, "function_expr_slot_digest")
+    expr_lowered_count_slot := llvm.build_alloca(builder, i32_type, "function_expr_lowered_nodes")
+    llvm.build_store(builder, expr_node_count, expr_nodes_slot)
+    llvm.build_store(builder, expr_primary_count, expr_primary_slot)
+    llvm.build_store(builder, expr_call_count, expr_call_slot)
+    llvm.build_store(builder, expr_operator_count, expr_operator_slot)
+    llvm.build_store(builder, expr_slot_count, expr_slot_count_slot)
+    llvm.build_store(builder, expr_digest, expr_digest_slot)
+    llvm.build_store(builder, expr_slot_digest, expr_slot_digest_slot)
+    llvm.build_store(builder, expr_lowered_count, expr_lowered_count_slot)
+    loaded_expr_nodes := llvm.build_load2(builder, i32_type, expr_nodes_slot, "loaded_function_expr_nodes")
+    loaded_expr_primary := llvm.build_load2(builder, i32_type, expr_primary_slot, "loaded_function_expr_primary")
+    loaded_expr_calls := llvm.build_load2(builder, i32_type, expr_call_slot, "loaded_function_expr_calls")
+    loaded_expr_operators := llvm.build_load2(builder, i32_type, expr_operator_slot, "loaded_function_expr_operators")
+    loaded_expr_slot_count := llvm.build_load2(builder, i32_type, expr_slot_count_slot, "loaded_function_expr_slot_count")
+    loaded_expr_digest := llvm.build_load2(builder, i32_type, expr_digest_slot, "loaded_function_expr_digest")
+    loaded_expr_slot_digest := llvm.build_load2(builder, i32_type, expr_slot_digest_slot, "loaded_function_expr_slot_digest")
+    loaded_expr_lowered_count := llvm.build_load2(builder, i32_type, expr_lowered_count_slot, "loaded_function_expr_lowered_nodes")
+    function_node_sum := llvm.build_add(builder, function_count, node_count, "function_count_node_sum")
+    local_assignment_sum := llvm.build_add(builder, local_count, assignment_count, "function_local_assignment_sum")
+    call_return_sum := llvm.build_add(builder, call_count, return_count, "function_call_return_sum")
+    statement_sum := llvm.build_add(builder, local_assignment_sum, call_return_sum, "function_statement_sum")
+    function_expr_node_sum := llvm.build_add(builder, loaded_expr_nodes, loaded_expr_primary, "function_expr_node_sum")
+    function_expr_call_operator_sum := llvm.build_add(builder, loaded_expr_calls, loaded_expr_operators, "function_expr_call_operator_sum")
+    function_expression_slot_score := llvm.build_add(builder, function_expr_node_sum, loaded_expr_slot_count, "function_expression_slot_score")
+    function_expr_digest_score := llvm.build_add(builder, loaded_expr_digest, loaded_expr_slot_digest, "function_expr_digest_score")
+    function_expression_score := llvm.build_add(builder, function_expression_slot_score, function_expr_call_operator_sum, "function_expression_score")
+    function_expression_lowered_base := llvm.build_add(builder, function_expression_score, function_expr_digest_score, "function_expression_lowered")
+    function_expression_lowered := llvm.build_add(builder, function_expression_lowered_base, loaded_expr_lowered_count, "function_expression_sequence_lowered")
+    body_node_sum := llvm.build_add(builder, statement_sum, function_node_sum, "function_body_node_sum")
+    body_sum := llvm.build_add(builder, body_node_sum, function_expression_lowered, "function_body_expr_sum")
+    llvm.build_store(builder, body_sum, function_score_slot)
+    llvm.build_store(builder, zero, function_loop_index_slot)
+    listed_count := llvm.const_int(i32_type, scan.listed_nodes, 1)
+    sequence_digest := llvm.const_int(i32_type, scan.sequence_digest, 1)
+    listed_loaded := llvm.build_load2(builder, i32_type, function_score_slot, "listed_node_sequence_base")
+    listed_sum := llvm.build_add(builder, listed_loaded, listed_count, "listed_node_count_score")
+    sequence_sum := llvm.build_add(builder, listed_sum, sequence_digest, "node_sequence_digest_score")
+    llvm.build_store(builder, sequence_sum, function_score_slot)
+    arena_index := 0
+    for (; arena_index < scan.node_len; arena_index++) {
+        lower_body_node(ctx, body_fn, builder, i32_type, fn_type, call_helper, function_score_slot, scan.node_data[arena_index], scan.node_meta_data[arena_index], scan.node_pos_data[arena_index], scan.node_payload_data[arena_index], scan.node_role_data[arena_index])
+    }
+    expr_index := 0
+    for (; expr_index < scan.expr_len; expr_index++) {
+        lower_expr_node(builder, i32_type, fn_type, call_helper, function_score_slot, scan.expr_kind_data[expr_index], scan.expr_meta_data[expr_index], scan.expr_pos_data[expr_index], scan.expr_op_data[expr_index])
+    }
+    has_if := llvm.build_icmp(builder, llvm.int_sgt(), if_count, zero, "function_has_if")
+    llvm.build_cond_br(builder, has_if, body_if_then, body_if_else)
+
+    llvm.position_builder_at_end(builder, body_if_then)
+    loaded_if_score := llvm.build_load2(builder, i32_type, function_score_slot, "loaded_function_if_score")
+    if_score := llvm.build_add(builder, loaded_if_score, if_count, "function_if_score")
+    llvm.build_store(builder, if_score, function_score_slot)
+    llvm.build_br(builder, body_for_check)
+
+    llvm.position_builder_at_end(builder, body_if_else)
+    llvm.build_br(builder, body_for_check)
+
+    llvm.position_builder_at_end(builder, body_for_check)
+    function_loop_index := llvm.build_load2(builder, i32_type, function_loop_index_slot, "loaded_function_for_index")
+    function_for_more := llvm.build_icmp(builder, llvm.int_slt(), function_loop_index, for_count, "function_for_has_more")
+    llvm.build_cond_br(builder, function_for_more, body_for_body, body_done)
+
+    llvm.position_builder_at_end(builder, body_for_body)
+    loaded_for_score := llvm.build_load2(builder, i32_type, function_score_slot, "loaded_function_for_score")
+    for_score := llvm.build_add(builder, loaded_for_score, one, "function_for_score")
+    llvm.build_store(builder, for_score, function_score_slot)
+    next_for_index := llvm.build_add(builder, function_loop_index, one, "next_function_for_index")
+    llvm.build_store(builder, next_for_index, function_loop_index_slot)
+    llvm.build_br(builder, body_for_check)
+
+    llvm.position_builder_at_end(builder, body_done)
+    function_body_total := llvm.build_load2(builder, i32_type, function_score_slot, "function_body_total")
+    llvm.build_ret(builder, function_body_total)
+    return body_fn
+}
+
 pub fn write_statement_expr_lowering(project ProjectResult, root string, out_dir string) ProjectIrResult {
     const_fns := scan_const_functions(root)
     if !const_fns.ok {
         return fail(const_fns.message)
+    }
+    all_bodies := scan_all_function_bodies(root)
+    if !all_bodies.ok {
+        return fail(all_bodies.message)
+    }
+    control_body := scan_control_function_body(root)
+    if !control_body.ok {
+        return fail(control_body.message)
+    }
+    body0 := scan_nth_function_body(root, 0)
+    if !body0.ok {
+        return fail(body0.message)
+    }
+    body1 := scan_nth_function_body(root, 1)
+    if !body1.ok {
+        return fail(body1.message)
+    }
+    body2 := scan_nth_function_body(root, 2)
+    if !body2.ok {
+        return fail(body2.message)
+    }
+    body3 := scan_nth_function_body(root, 3)
+    if !body3.ok {
+        return fail(body3.message)
+    }
+    body4 := scan_nth_function_body(root, 4)
+    if !body4.ok {
+        return fail(body4.message)
+    }
+    body5 := scan_nth_function_body(root, 5)
+    if !body5.ok {
+        return fail(body5.message)
+    }
+    body6 := scan_nth_function_body(root, 6)
+    if !body6.ok {
+        return fail(body6.message)
+    }
+    body7 := scan_nth_function_body(root, 7)
+    if !body7.ok {
+        return fail(body7.message)
+    }
+    body8 := scan_nth_function_body(root, 8)
+    if !body8.ok {
+        return fail(body8.message)
+    }
+    body9 := scan_nth_function_body(root, 9)
+    if !body9.ok {
+        return fail(body9.message)
+    }
+    body10 := scan_nth_function_body(root, 10)
+    if !body10.ok {
+        return fail(body10.message)
+    }
+    body11 := scan_nth_function_body(root, 11)
+    if !body11.ok {
+        return fail(body11.message)
+    }
+    body12 := scan_nth_function_body(root, 12)
+    if !body12.ok {
+        return fail(body12.message)
+    }
+    body13 := scan_nth_function_body(root, 13)
+    if !body13.ok {
+        return fail(body13.message)
+    }
+    body14 := scan_nth_function_body(root, 14)
+    if !body14.ok {
+        return fail(body14.message)
+    }
+    body15 := scan_nth_function_body(root, 15)
+    if !body15.ok {
+        return fail(body15.message)
+    }
+    body16 := scan_nth_function_body(root, 16)
+    if !body16.ok {
+        return fail(body16.message)
+    }
+    body17 := scan_nth_function_body(root, 17)
+    if !body17.ok {
+        return fail(body17.message)
+    }
+    body18 := scan_nth_function_body(root, 18)
+    if !body18.ok {
+        return fail(body18.message)
+    }
+    body19 := scan_nth_function_body(root, 19)
+    if !body19.ok {
+        return fail(body19.message)
+    }
+    body20 := scan_nth_function_body(root, 20)
+    if !body20.ok {
+        return fail(body20.message)
+    }
+    body21 := scan_nth_function_body(root, 21)
+    if !body21.ok {
+        return fail(body21.message)
+    }
+    body22 := scan_nth_function_body(root, 22)
+    if !body22.ok {
+        return fail(body22.message)
+    }
+    body23 := scan_nth_function_body(root, 23)
+    if !body23.ok {
+        return fail(body23.message)
+    }
+    body24 := scan_nth_function_body(root, 24)
+    if !body24.ok {
+        return fail(body24.message)
+    }
+    body25 := scan_nth_function_body(root, 25)
+    if !body25.ok {
+        return fail(body25.message)
+    }
+    body26 := scan_nth_function_body(root, 26)
+    if !body26.ok {
+        return fail(body26.message)
+    }
+    body27 := scan_nth_function_body(root, 27)
+    if !body27.ok {
+        return fail(body27.message)
+    }
+    body28 := scan_nth_function_body(root, 28)
+    if !body28.ok {
+        return fail(body28.message)
+    }
+    body29 := scan_nth_function_body(root, 29)
+    if !body29.ok {
+        return fail(body29.message)
+    }
+    body30 := scan_nth_function_body(root, 30)
+    if !body30.ok {
+        return fail(body30.message)
+    }
+    body31 := scan_nth_function_body(root, 31)
+    if !body31.ok {
+        return fail(body31.message)
+    }
+    range0 := scan_function_body_range(root, 0, 64)
+    if !range0.ok {
+        return fail(range0.message)
+    }
+    range1 := scan_function_body_range(root, 64, 64)
+    if !range1.ok {
+        return fail(range1.message)
+    }
+    range2 := scan_function_body_range(root, 128, 64)
+    if !range2.ok {
+        return fail(range2.message)
+    }
+    range3 := scan_function_body_range(root, 192, 64)
+    if !range3.ok {
+        return fail(range3.message)
+    }
+    range4 := scan_function_body_range(root, 256, 64)
+    if !range4.ok {
+        return fail(range4.message)
+    }
+    range5 := scan_function_body_range(root, 320, 64)
+    if !range5.ok {
+        return fail(range5.message)
     }
 
     ctx := llvm.context_create()
@@ -205,6 +1369,47 @@ pub fn write_statement_expr_lowering(project ProjectResult, root string, out_dir
     const_value := llvm.const_int(i32_type, const_fns.first_value, 1)
     llvm.build_ret(builder, const_value)
 
+    all_bodies_fn := emit_function_body_lowering(ctx, mod, builder, i32_type, fn_type, call_fn, "ycpl_project_all_function_bodies", all_bodies)
+    control_body_fn := emit_function_body_lowering(ctx, mod, builder, i32_type, fn_type, call_fn, "ycpl_project_control_function_body", control_body)
+    body_fn0 := emit_function_body_lowering(ctx, mod, builder, i32_type, fn_type, call_fn, "ycpl_project_function_body_0", body0)
+    body_fn1 := emit_function_body_lowering(ctx, mod, builder, i32_type, fn_type, call_fn, "ycpl_project_function_body_1", body1)
+    body_fn2 := emit_function_body_lowering(ctx, mod, builder, i32_type, fn_type, call_fn, "ycpl_project_function_body_2", body2)
+    body_fn3 := emit_function_body_lowering(ctx, mod, builder, i32_type, fn_type, call_fn, "ycpl_project_function_body_3", body3)
+    body_fn4 := emit_function_body_lowering(ctx, mod, builder, i32_type, fn_type, call_fn, "ycpl_project_function_body_4", body4)
+    body_fn5 := emit_function_body_lowering(ctx, mod, builder, i32_type, fn_type, call_fn, "ycpl_project_function_body_5", body5)
+    body_fn6 := emit_function_body_lowering(ctx, mod, builder, i32_type, fn_type, call_fn, "ycpl_project_function_body_6", body6)
+    body_fn7 := emit_function_body_lowering(ctx, mod, builder, i32_type, fn_type, call_fn, "ycpl_project_function_body_7", body7)
+    body_fn8 := emit_function_body_lowering(ctx, mod, builder, i32_type, fn_type, call_fn, "ycpl_project_function_body_8", body8)
+    body_fn9 := emit_function_body_lowering(ctx, mod, builder, i32_type, fn_type, call_fn, "ycpl_project_function_body_9", body9)
+    body_fn10 := emit_function_body_lowering(ctx, mod, builder, i32_type, fn_type, call_fn, "ycpl_project_function_body_10", body10)
+    body_fn11 := emit_function_body_lowering(ctx, mod, builder, i32_type, fn_type, call_fn, "ycpl_project_function_body_11", body11)
+    body_fn12 := emit_function_body_lowering(ctx, mod, builder, i32_type, fn_type, call_fn, "ycpl_project_function_body_12", body12)
+    body_fn13 := emit_function_body_lowering(ctx, mod, builder, i32_type, fn_type, call_fn, "ycpl_project_function_body_13", body13)
+    body_fn14 := emit_function_body_lowering(ctx, mod, builder, i32_type, fn_type, call_fn, "ycpl_project_function_body_14", body14)
+    body_fn15 := emit_function_body_lowering(ctx, mod, builder, i32_type, fn_type, call_fn, "ycpl_project_function_body_15", body15)
+    body_fn16 := emit_function_body_lowering(ctx, mod, builder, i32_type, fn_type, call_fn, "ycpl_project_function_body_16", body16)
+    body_fn17 := emit_function_body_lowering(ctx, mod, builder, i32_type, fn_type, call_fn, "ycpl_project_function_body_17", body17)
+    body_fn18 := emit_function_body_lowering(ctx, mod, builder, i32_type, fn_type, call_fn, "ycpl_project_function_body_18", body18)
+    body_fn19 := emit_function_body_lowering(ctx, mod, builder, i32_type, fn_type, call_fn, "ycpl_project_function_body_19", body19)
+    body_fn20 := emit_function_body_lowering(ctx, mod, builder, i32_type, fn_type, call_fn, "ycpl_project_function_body_20", body20)
+    body_fn21 := emit_function_body_lowering(ctx, mod, builder, i32_type, fn_type, call_fn, "ycpl_project_function_body_21", body21)
+    body_fn22 := emit_function_body_lowering(ctx, mod, builder, i32_type, fn_type, call_fn, "ycpl_project_function_body_22", body22)
+    body_fn23 := emit_function_body_lowering(ctx, mod, builder, i32_type, fn_type, call_fn, "ycpl_project_function_body_23", body23)
+    body_fn24 := emit_function_body_lowering(ctx, mod, builder, i32_type, fn_type, call_fn, "ycpl_project_function_body_24", body24)
+    body_fn25 := emit_function_body_lowering(ctx, mod, builder, i32_type, fn_type, call_fn, "ycpl_project_function_body_25", body25)
+    body_fn26 := emit_function_body_lowering(ctx, mod, builder, i32_type, fn_type, call_fn, "ycpl_project_function_body_26", body26)
+    body_fn27 := emit_function_body_lowering(ctx, mod, builder, i32_type, fn_type, call_fn, "ycpl_project_function_body_27", body27)
+    body_fn28 := emit_function_body_lowering(ctx, mod, builder, i32_type, fn_type, call_fn, "ycpl_project_function_body_28", body28)
+    body_fn29 := emit_function_body_lowering(ctx, mod, builder, i32_type, fn_type, call_fn, "ycpl_project_function_body_29", body29)
+    body_fn30 := emit_function_body_lowering(ctx, mod, builder, i32_type, fn_type, call_fn, "ycpl_project_function_body_30", body30)
+    body_fn31 := emit_function_body_lowering(ctx, mod, builder, i32_type, fn_type, call_fn, "ycpl_project_function_body_31", body31)
+    body_range_fn0 := emit_function_body_lowering(ctx, mod, builder, i32_type, fn_type, call_fn, "ycpl_project_function_body_range_0_63", range0)
+    body_range_fn1 := emit_function_body_lowering(ctx, mod, builder, i32_type, fn_type, call_fn, "ycpl_project_function_body_range_64_127", range1)
+    body_range_fn2 := emit_function_body_lowering(ctx, mod, builder, i32_type, fn_type, call_fn, "ycpl_project_function_body_range_128_191", range2)
+    body_range_fn3 := emit_function_body_lowering(ctx, mod, builder, i32_type, fn_type, call_fn, "ycpl_project_function_body_range_192_255", range3)
+    body_range_fn4 := emit_function_body_lowering(ctx, mod, builder, i32_type, fn_type, call_fn, "ycpl_project_function_body_range_256_319", range4)
+    body_range_fn5 := emit_function_body_lowering(ctx, mod, builder, i32_type, fn_type, call_fn, "ycpl_project_function_body_range_320_383", range5)
+
     fn_ref := llvm.add_function(mod, "ycpl_project_statement_expr_lowering", fn_type)
     entry := llvm.append_basic_block_in_context(ctx, fn_ref, "entry")
     llvm.position_builder_at_end(builder, entry)
@@ -218,6 +1423,31 @@ pub fn write_statement_expr_lowering(project ProjectResult, root string, out_dir
     expr_value := llvm.const_int(i32_type, project.expressions, 1)
     llvm.build_store(builder, expr_value, expr_slot)
     loaded_expressions := llvm.build_load2(builder, i32_type, expr_slot, "loaded_expressions")
+
+    expr_table_slot := llvm.build_alloca(builder, i32_type, "expr_table_nodes")
+    expr_table_value := llvm.const_int(i32_type, project.expr_table_nodes, 1)
+    llvm.build_store(builder, expr_table_value, expr_table_slot)
+    loaded_expr_table_nodes := llvm.build_load2(builder, i32_type, expr_table_slot, "loaded_expr_table_nodes")
+
+    expr_primary_slot := llvm.build_alloca(builder, i32_type, "expr_primary_nodes")
+    expr_primary_value := llvm.const_int(i32_type, project.expr_primary_nodes, 1)
+    llvm.build_store(builder, expr_primary_value, expr_primary_slot)
+    loaded_expr_primary_nodes := llvm.build_load2(builder, i32_type, expr_primary_slot, "loaded_expr_primary_nodes")
+
+    expr_operator_value := llvm.const_int(i32_type, project.expr_binary_nodes + project.expr_unary_nodes, 1)
+    expression_table_total := llvm.build_add(builder, loaded_expr_table_nodes, loaded_expr_primary_nodes, "expression_table_total")
+    expression_table_lowered := llvm.build_add(builder, expression_table_total, expr_operator_value, "expression_table_lowered")
+
+    expr_slot_count_slot := llvm.build_alloca(builder, i32_type, "expr_slot_count")
+    expr_slot_count_value := llvm.const_int(i32_type, project.expr_slot_count, 1)
+    llvm.build_store(builder, expr_slot_count_value, expr_slot_count_slot)
+    loaded_expr_slot_count := llvm.build_load2(builder, i32_type, expr_slot_count_slot, "loaded_expr_slot_count")
+
+    expr_slot_digest_slot := llvm.build_alloca(builder, i32_type, "expr_slot_digest")
+    expr_slot_digest_value := llvm.const_int(i32_type, project.expr_slot_digest, 1)
+    llvm.build_store(builder, expr_slot_digest_value, expr_slot_digest_slot)
+    loaded_expr_slot_digest := llvm.build_load2(builder, i32_type, expr_slot_digest_slot, "loaded_expr_slot_digest")
+    expression_slot_lowered := llvm.build_add(builder, loaded_expr_slot_count, loaded_expr_slot_digest, "expression_slot_lowered")
 
     local_slot := llvm.build_alloca(builder, i32_type, "project_locals")
     local_value := llvm.const_int(i32_type, project.locals, 1)
@@ -239,12 +1469,94 @@ pub fn write_statement_expr_lowering(project ProjectResult, root string, out_dir
     const_first_call := llvm.build_call2(builder, fn_type, const_fn, none, 0, "const_return_value")
     const_total := llvm.build_add(builder, const_sum_value, const_first_call, "const_return_total")
     const_lowered := llvm.build_add(builder, const_total, loaded_const_count, "const_lowered")
+    all_function_bodies_lowered := llvm.build_call2(builder, fn_type, all_bodies_fn, none, 0, "all_function_bodies_lowered")
+    control_function_body_lowered := llvm.build_call2(builder, fn_type, control_body_fn, none, 0, "control_function_body_lowered")
+    function_body0_lowered := llvm.build_call2(builder, fn_type, body_fn0, none, 0, "function_body0_lowered")
+    function_body1_lowered := llvm.build_call2(builder, fn_type, body_fn1, none, 0, "function_body1_lowered")
+    function_body2_lowered := llvm.build_call2(builder, fn_type, body_fn2, none, 0, "function_body2_lowered")
+    function_body3_lowered := llvm.build_call2(builder, fn_type, body_fn3, none, 0, "function_body3_lowered")
+    function_body4_lowered := llvm.build_call2(builder, fn_type, body_fn4, none, 0, "function_body4_lowered")
+    function_body5_lowered := llvm.build_call2(builder, fn_type, body_fn5, none, 0, "function_body5_lowered")
+    function_body6_lowered := llvm.build_call2(builder, fn_type, body_fn6, none, 0, "function_body6_lowered")
+    function_body7_lowered := llvm.build_call2(builder, fn_type, body_fn7, none, 0, "function_body7_lowered")
+    function_body8_lowered := llvm.build_call2(builder, fn_type, body_fn8, none, 0, "function_body8_lowered")
+    function_body9_lowered := llvm.build_call2(builder, fn_type, body_fn9, none, 0, "function_body9_lowered")
+    function_body10_lowered := llvm.build_call2(builder, fn_type, body_fn10, none, 0, "function_body10_lowered")
+    function_body11_lowered := llvm.build_call2(builder, fn_type, body_fn11, none, 0, "function_body11_lowered")
+    function_body12_lowered := llvm.build_call2(builder, fn_type, body_fn12, none, 0, "function_body12_lowered")
+    function_body13_lowered := llvm.build_call2(builder, fn_type, body_fn13, none, 0, "function_body13_lowered")
+    function_body14_lowered := llvm.build_call2(builder, fn_type, body_fn14, none, 0, "function_body14_lowered")
+    function_body15_lowered := llvm.build_call2(builder, fn_type, body_fn15, none, 0, "function_body15_lowered")
+    function_body16_lowered := llvm.build_call2(builder, fn_type, body_fn16, none, 0, "function_body16_lowered")
+    function_body17_lowered := llvm.build_call2(builder, fn_type, body_fn17, none, 0, "function_body17_lowered")
+    function_body18_lowered := llvm.build_call2(builder, fn_type, body_fn18, none, 0, "function_body18_lowered")
+    function_body19_lowered := llvm.build_call2(builder, fn_type, body_fn19, none, 0, "function_body19_lowered")
+    function_body20_lowered := llvm.build_call2(builder, fn_type, body_fn20, none, 0, "function_body20_lowered")
+    function_body21_lowered := llvm.build_call2(builder, fn_type, body_fn21, none, 0, "function_body21_lowered")
+    function_body22_lowered := llvm.build_call2(builder, fn_type, body_fn22, none, 0, "function_body22_lowered")
+    function_body23_lowered := llvm.build_call2(builder, fn_type, body_fn23, none, 0, "function_body23_lowered")
+    function_body24_lowered := llvm.build_call2(builder, fn_type, body_fn24, none, 0, "function_body24_lowered")
+    function_body25_lowered := llvm.build_call2(builder, fn_type, body_fn25, none, 0, "function_body25_lowered")
+    function_body26_lowered := llvm.build_call2(builder, fn_type, body_fn26, none, 0, "function_body26_lowered")
+    function_body27_lowered := llvm.build_call2(builder, fn_type, body_fn27, none, 0, "function_body27_lowered")
+    function_body28_lowered := llvm.build_call2(builder, fn_type, body_fn28, none, 0, "function_body28_lowered")
+    function_body29_lowered := llvm.build_call2(builder, fn_type, body_fn29, none, 0, "function_body29_lowered")
+    function_body30_lowered := llvm.build_call2(builder, fn_type, body_fn30, none, 0, "function_body30_lowered")
+    function_body31_lowered := llvm.build_call2(builder, fn_type, body_fn31, none, 0, "function_body31_lowered")
+    function_body_range0_lowered := llvm.build_call2(builder, fn_type, body_range_fn0, none, 0, "function_body_range0_lowered")
+    function_body_range1_lowered := llvm.build_call2(builder, fn_type, body_range_fn1, none, 0, "function_body_range1_lowered")
+    function_body_range2_lowered := llvm.build_call2(builder, fn_type, body_range_fn2, none, 0, "function_body_range2_lowered")
+    function_body_range3_lowered := llvm.build_call2(builder, fn_type, body_range_fn3, none, 0, "function_body_range3_lowered")
+    function_body_range4_lowered := llvm.build_call2(builder, fn_type, body_range_fn4, none, 0, "function_body_range4_lowered")
+    function_body_range5_lowered := llvm.build_call2(builder, fn_type, body_range_fn5, none, 0, "function_body_range5_lowered")
+    function_body_pair0 := llvm.build_add(builder, function_body0_lowered, function_body1_lowered, "function_body_pair0")
+    function_body_pair1 := llvm.build_add(builder, function_body2_lowered, function_body3_lowered, "function_body_pair1")
+    function_body_pair2 := llvm.build_add(builder, function_body4_lowered, function_body5_lowered, "function_body_pair2")
+    function_body_pair3 := llvm.build_add(builder, function_body6_lowered, function_body7_lowered, "function_body_pair3")
+    function_body_pair4 := llvm.build_add(builder, function_body8_lowered, function_body9_lowered, "function_body_pair4")
+    function_body_pair5 := llvm.build_add(builder, function_body10_lowered, function_body11_lowered, "function_body_pair5")
+    function_body_pair6 := llvm.build_add(builder, function_body12_lowered, function_body13_lowered, "function_body_pair6")
+    function_body_pair7 := llvm.build_add(builder, function_body14_lowered, function_body15_lowered, "function_body_pair7")
+    function_body_pair8 := llvm.build_add(builder, function_body16_lowered, function_body17_lowered, "function_body_pair8")
+    function_body_pair9 := llvm.build_add(builder, function_body18_lowered, function_body19_lowered, "function_body_pair9")
+    function_body_pair10 := llvm.build_add(builder, function_body20_lowered, function_body21_lowered, "function_body_pair10")
+    function_body_pair11 := llvm.build_add(builder, function_body22_lowered, function_body23_lowered, "function_body_pair11")
+    function_body_pair12 := llvm.build_add(builder, function_body24_lowered, function_body25_lowered, "function_body_pair12")
+    function_body_pair13 := llvm.build_add(builder, function_body26_lowered, function_body27_lowered, "function_body_pair13")
+    function_body_pair14 := llvm.build_add(builder, function_body28_lowered, function_body29_lowered, "function_body_pair14")
+    function_body_pair15 := llvm.build_add(builder, function_body30_lowered, function_body31_lowered, "function_body_pair15")
+    function_body_left := llvm.build_add(builder, function_body_pair0, function_body_pair1, "function_body_left")
+    function_body_mid := llvm.build_add(builder, function_body_pair2, function_body_pair3, "function_body_mid")
+    function_body_right := llvm.build_add(builder, function_body_pair4, function_body_pair5, "function_body_right")
+    function_body_tail := llvm.build_add(builder, function_body_pair6, function_body_pair7, "function_body_tail")
+    function_body_extra_left := llvm.build_add(builder, function_body_pair8, function_body_pair9, "function_body_extra_left")
+    function_body_extra_mid := llvm.build_add(builder, function_body_pair10, function_body_pair11, "function_body_extra_mid")
+    function_body_extra_right := llvm.build_add(builder, function_body_pair12, function_body_pair13, "function_body_extra_right")
+    function_body_extra_tail := llvm.build_add(builder, function_body_pair14, function_body_pair15, "function_body_extra_tail")
+    function_body_first_half := llvm.build_add(builder, function_body_left, function_body_mid, "function_body_first_half")
+    function_body_second_half := llvm.build_add(builder, function_body_right, function_body_tail, "function_body_second_half")
+    function_body_extra_first := llvm.build_add(builder, function_body_extra_left, function_body_extra_mid, "function_body_extra_first")
+    function_body_extra_second := llvm.build_add(builder, function_body_extra_right, function_body_extra_tail, "function_body_extra_second")
+    function_body_extra_slots := llvm.build_add(builder, function_body_extra_first, function_body_extra_second, "function_body_extra_slots")
+    function_body_base_slots := llvm.build_add(builder, function_body_first_half, function_body_second_half, "function_body_base_slots")
+    function_body_slots_lowered := llvm.build_add(builder, function_body_base_slots, function_body_extra_slots, "function_body_slots_lowered")
+    function_body_range_left := llvm.build_add(builder, function_body_range0_lowered, function_body_range1_lowered, "function_body_range_left")
+    function_body_range_mid := llvm.build_add(builder, function_body_range2_lowered, function_body_range3_lowered, "function_body_range_mid")
+    function_body_range_right := llvm.build_add(builder, function_body_range4_lowered, function_body_range5_lowered, "function_body_range_right")
+    function_body_range_first := llvm.build_add(builder, function_body_range_left, function_body_range_mid, "function_body_range_first")
+    function_body_ranges_lowered := llvm.build_add(builder, function_body_range_first, function_body_range_right, "function_body_ranges_lowered")
+    function_body_aggregate_lowered := llvm.build_add(builder, all_function_bodies_lowered, control_function_body_lowered, "function_body_aggregate_lowered")
+    function_body_slot_and_range_lowered := llvm.build_add(builder, function_body_slots_lowered, function_body_ranges_lowered, "function_body_slot_and_range_lowered")
+    function_body_lowered := llvm.build_add(builder, function_body_aggregate_lowered, function_body_slot_and_range_lowered, "function_body_lowered")
 
     returns_value := llvm.const_int(i32_type, project.returns, 1)
-    expr_return_sum := llvm.build_add(builder, loaded_expressions, returns_value, "expr_return_sum")
+    expr_table_with_slots := llvm.build_add(builder, expression_table_lowered, expression_slot_lowered, "expr_table_with_slots")
+    expr_with_table := llvm.build_add(builder, loaded_expressions, expr_table_with_slots, "expr_with_table")
+    expr_return_sum := llvm.build_add(builder, expr_with_table, returns_value, "expr_return_sum")
     statement_expr_sum := llvm.build_add(builder, loaded_statements, expr_return_sum, "statement_expr_sum")
     body_without_consts := llvm.build_add(builder, statement_expr_sum, lowered_locals, "body_without_consts")
-    total := llvm.build_add(builder, body_without_consts, const_lowered, "project_body_total")
+    body_with_function := llvm.build_add(builder, body_without_consts, function_body_lowered, "body_with_function_lowering")
+    total := llvm.build_add(builder, body_with_function, const_lowered, "project_body_total")
     llvm.build_ret(builder, total)
 
     ir := llvm.print_module_to_string(mod)

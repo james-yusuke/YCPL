@@ -22,7 +22,7 @@ pub struct ParseResult {
 }
 
 fn fail(line i32, col i32, message string) ParseResult {
-    empty := ast.make_program("", 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 17, 17, 17, 17, 0, 0, 0, 0, 0, 0, 0, 17, 0, 0, 0, 0, 17, 17, false, 0, 0, 0, 0, 0, 17)
+    empty := ast.make_program("", 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 17, 17, 17, 17, 0, 0, 0, 0, 0, 0, 0, 0, 0, 17, 17, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 17, 0, 0, 0, 0, 0, 0, 0, 17, 0, 0, 0, 17, 0, 0, 0, 0, 17, 17, false, 0, 0, 0, 0, 0, 17)
     return ParseResult{ok: false, message: message, line: line, col: col, tokens: 0, decls: 0, functions: 0, structs: 0, imports: 0, max_depth: 0, program: empty}
 }
 
@@ -268,6 +268,6 @@ pub fn parse(path string, source string) ParseResult {
         return fail(typed.line, typed.col, typed.message)
     }
 
-    program := ast.make_program(path, decls, functions, structs, imports, externs, intrinsics, statements, expressions, locals, returns, calls, branches, loops, strings, members, indexes, assignments, function_bodies, function_body_tokens, function_body_digest, local_decl_digest, call_expr_digest, control_flow_digest, body_nodes.nodes, body_nodes.local_nodes, body_nodes.assignment_nodes, body_nodes.call_nodes, body_nodes.return_nodes, body_nodes.first_kind, body_nodes.last_kind, body_nodes.digest, return_exprs, return_literal_exprs, return_name_exprs, return_call_exprs, return_expr_digest, function_name_digest, has_main, max_depth, typed.decl_nodes, typed.stmt_nodes, typed.expr_nodes, typed.type_nodes, typed.digest)
+    program := ast.make_program(path, decls, functions, structs, imports, externs, intrinsics, statements, expressions, locals, returns, calls, branches, loops, strings, members, indexes, assignments, function_bodies, function_body_tokens, function_body_digest, local_decl_digest, call_expr_digest, control_flow_digest, body_nodes.nodes, body_nodes.local_nodes, body_nodes.assignment_nodes, body_nodes.call_nodes, body_nodes.return_nodes, body_nodes.if_nodes, body_nodes.for_nodes, body_nodes.first_kind, body_nodes.last_kind, body_nodes.digest, body_nodes.transition_digest, body_nodes.local_assign_edges, body_nodes.assign_call_edges, body_nodes.call_return_edges, body_nodes.return_local_edges, body_nodes.if_for_edges, body_nodes.for_return_edges, body_nodes.identifier_payloads, body_nodes.literal_payloads, body_nodes.type_payloads, body_nodes.control_payloads, body_nodes.payload_digest, body_nodes.local_symbol_refs, body_nodes.assignment_target_refs, body_nodes.call_target_refs, body_nodes.return_symbol_refs, body_nodes.return_literal_refs, body_nodes.type_refs, body_nodes.control_refs, body_nodes.semantic_digest, body_nodes.body_slot_len, body_nodes.nonempty_body_slots, body_nodes.max_body_nodes, body_nodes.body_slot_digest, return_exprs, return_literal_exprs, return_name_exprs, return_call_exprs, return_expr_digest, function_name_digest, has_main, max_depth, typed.decl_nodes, typed.stmt_nodes, typed.expr_nodes, typed.type_nodes, typed.digest)
     return ok(tokens, program)
 }

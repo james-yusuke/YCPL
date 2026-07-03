@@ -1,33 +1,89 @@
 module compiler.ycpl.ast.body
 
+import "std/mem" as mem
 import "std/str" as str
 
 pub fn local_node_kind() i32 { return 1 }
 pub fn assignment_node_kind() i32 { return 2 }
 pub fn call_node_kind() i32 { return 3 }
 pub fn return_node_kind() i32 { return 4 }
+pub fn if_node_kind() i32 { return 5 }
+pub fn for_node_kind() i32 { return 6 }
+
+pub fn no_payload_kind() i32 { return 0 }
+pub fn identifier_payload_kind() i32 { return 1 }
+pub fn literal_payload_kind() i32 { return 2 }
+pub fn type_payload_kind() i32 { return 3 }
+pub fn control_payload_kind() i32 { return 4 }
+
+pub fn no_semantic_role() i32 { return 0 }
+pub fn local_symbol_role() i32 { return 1 }
+pub fn assignment_target_role() i32 { return 2 }
+pub fn call_target_role() i32 { return 3 }
+pub fn return_symbol_role() i32 { return 4 }
+pub fn return_literal_role() i32 { return 5 }
+pub fn type_reference_role() i32 { return 6 }
+pub fn control_flow_role() i32 { return 7 }
 
 pub struct BodyNodeSequence {
     ok bool
     message string
     line i32
     col i32
+    selected_body bool
+    function_bodies i32
     nodes i32
     local_nodes i32
     assignment_nodes i32
     call_nodes i32
     return_nodes i32
+    if_nodes i32
+    for_nodes i32
     first_kind i32
     last_kind i32
+    transition_digest i32
+    local_assign_edges i32
+    assign_call_edges i32
+    call_return_edges i32
+    return_local_edges i32
+    if_for_edges i32
+    for_return_edges i32
+    identifier_payloads i32
+    literal_payloads i32
+    type_payloads i32
+    control_payloads i32
+    payload_digest i32
+    local_symbol_refs i32
+    assignment_target_refs i32
+    call_target_refs i32
+    return_symbol_refs i32
+    return_literal_refs i32
+    type_refs i32
+    control_refs i32
+    semantic_digest i32
+    nonempty_body_slots i32
+    max_body_nodes i32
+    body_slot_digest i32
+    node_data string
+    node_meta_data string
+    node_pos_data string
+    node_payload_data string
+    node_role_data string
+    body_slot_data string
+    node_len i32
+    node_cap i32
+    body_slot_len i32
+    body_slot_cap i32
+    current_body_nodes i32
     digest i32
 }
 
 pub fn empty() BodyNodeSequence {
-    return BodyNodeSequence{ok: true, message: "", line: 1, col: 1, nodes: 0, local_nodes: 0, assignment_nodes: 0, call_nodes: 0, return_nodes: 0, first_kind: 0, last_kind: 0, digest: 17}
+    return BodyNodeSequence{ok: true, message: "", line: 1, col: 1, selected_body: false, function_bodies: 0, nodes: 0, local_nodes: 0, assignment_nodes: 0, call_nodes: 0, return_nodes: 0, if_nodes: 0, for_nodes: 0, first_kind: 0, last_kind: 0, transition_digest: 17, local_assign_edges: 0, assign_call_edges: 0, call_return_edges: 0, return_local_edges: 0, if_for_edges: 0, for_return_edges: 0, identifier_payloads: 0, literal_payloads: 0, type_payloads: 0, control_payloads: 0, payload_digest: 17, local_symbol_refs: 0, assignment_target_refs: 0, call_target_refs: 0, return_symbol_refs: 0, return_literal_refs: 0, type_refs: 0, control_refs: 0, semantic_digest: 17, nonempty_body_slots: 0, max_body_nodes: 0, body_slot_digest: 17, node_data: none, node_meta_data: none, node_pos_data: none, node_payload_data: none, node_role_data: none, body_slot_data: none, node_len: 0, node_cap: 0, body_slot_len: 0, body_slot_cap: 0, current_body_nodes: 0, digest: 17}
 }
 
 pub fn fail(line i32, col i32, message string) BodyNodeSequence {
-    return BodyNodeSequence{ok: false, message: message, line: line, col: col, nodes: 0, local_nodes: 0, assignment_nodes: 0, call_nodes: 0, return_nodes: 0, first_kind: 0, last_kind: 0, digest: 17}
+    return BodyNodeSequence{ok: false, message: message, line: line, col: col, selected_body: false, function_bodies: 0, nodes: 0, local_nodes: 0, assignment_nodes: 0, call_nodes: 0, return_nodes: 0, if_nodes: 0, for_nodes: 0, first_kind: 0, last_kind: 0, transition_digest: 17, local_assign_edges: 0, assign_call_edges: 0, call_return_edges: 0, return_local_edges: 0, if_for_edges: 0, for_return_edges: 0, identifier_payloads: 0, literal_payloads: 0, type_payloads: 0, control_payloads: 0, payload_digest: 17, local_symbol_refs: 0, assignment_target_refs: 0, call_target_refs: 0, return_symbol_refs: 0, return_literal_refs: 0, type_refs: 0, control_refs: 0, semantic_digest: 17, nonempty_body_slots: 0, max_body_nodes: 0, body_slot_digest: 17, node_data: none, node_meta_data: none, node_pos_data: none, node_payload_data: none, node_role_data: none, body_slot_data: none, node_len: 0, node_cap: 0, body_slot_len: 0, body_slot_cap: 0, current_body_nodes: 0, digest: 17}
 }
 
 fn hash_name(seed i32, name string) i32 {
@@ -40,19 +96,164 @@ fn hash_name(seed i32, name string) i32 {
     return h
 }
 
-pub fn add(seq BodyNodeSequence, kind i32, line i32, col i32, lexeme string) BodyNodeSequence {
+pub fn meta_hash(text string) i32 {
+    h := hash_name(17, text)
+    if h < 0 {
+        h = 0 - h
+    }
+    return (h % 97) + 1
+}
+
+pub fn pos_hash(line i32, col i32) i32 {
+    value := line * 31 + col
+    if value < 0 {
+        value = 0 - value
+    }
+    return (value % 97) + 1
+}
+
+fn ensure_arena(seq BodyNodeSequence, needed i32) BodyNodeSequence {
+    if seq.node_cap >= needed {
+        return seq
+    }
+
+    next_cap := seq.node_cap
+    if next_cap <= 0 {
+        next_cap = 64
+    }
+    for (; next_cap < needed; ) {
+        next_cap = next_cap * 2
+    }
+
+    if seq.node_data == none {
+        seq.node_data = mem.calloc(next_cap + 1, 1)
+        seq.node_meta_data = mem.calloc(next_cap + 1, 1)
+        seq.node_pos_data = mem.calloc(next_cap + 1, 1)
+        seq.node_payload_data = mem.calloc(next_cap + 1, 1)
+        seq.node_role_data = mem.calloc(next_cap + 1, 1)
+    } else {
+        seq.node_data = mem.realloc(seq.node_data, next_cap + 1)
+        seq.node_meta_data = mem.realloc(seq.node_meta_data, next_cap + 1)
+        seq.node_pos_data = mem.realloc(seq.node_pos_data, next_cap + 1)
+        seq.node_payload_data = mem.realloc(seq.node_payload_data, next_cap + 1)
+        seq.node_role_data = mem.realloc(seq.node_role_data, next_cap + 1)
+    }
+    seq.node_cap = next_cap
+    return seq
+}
+
+fn ensure_body_slot_arena(seq BodyNodeSequence, needed i32) BodyNodeSequence {
+    if seq.body_slot_cap >= needed {
+        return seq
+    }
+
+    next_cap := seq.body_slot_cap
+    if next_cap <= 0 {
+        next_cap = 32
+    }
+    for (; next_cap < needed; ) {
+        next_cap = next_cap * 2
+    }
+
+    if seq.body_slot_data == none {
+        seq.body_slot_data = mem.calloc(next_cap + 1, 1)
+    } else {
+        seq.body_slot_data = mem.realloc(seq.body_slot_data, next_cap + 1)
+    }
+    seq.body_slot_cap = next_cap
+    return seq
+}
+
+fn small_count(value i32) i32 {
+    if value < 0 {
+        return 0
+    }
+    if value > 250 {
+        return 250
+    }
+    return value
+}
+
+pub fn finish_function_body(seq BodyNodeSequence) BodyNodeSequence {
+    if !seq.ok {
+        return seq
+    }
+    seq = ensure_body_slot_arena(seq, seq.body_slot_len + 1)
+    seq.body_slot_data[seq.body_slot_len] = small_count(seq.current_body_nodes)
+    seq.body_slot_len += 1
+    seq.body_slot_data[seq.body_slot_len] = 0
+    if seq.current_body_nodes > 0 {
+        seq.nonempty_body_slots += 1
+    }
+    if seq.current_body_nodes > seq.max_body_nodes {
+        seq.max_body_nodes = seq.current_body_nodes
+    }
+    seq.body_slot_digest = seq.body_slot_digest * 31 + seq.current_body_nodes
+    seq.current_body_nodes = 0
+    return seq
+}
+
+pub fn append_node(seq BodyNodeSequence, kind i32, line i32, col i32, lexeme string, payload_kind i32, role_kind i32) BodyNodeSequence {
+    if kind <= 0 {
+        return seq
+    }
+    seq = ensure_arena(seq, seq.node_len + 1)
+    seq.node_data[seq.node_len] = kind
+    seq.node_meta_data[seq.node_len] = meta_hash(lexeme)
+    seq.node_pos_data[seq.node_len] = pos_hash(line, col)
+    seq.node_payload_data[seq.node_len] = payload_kind
+    seq.node_role_data[seq.node_len] = role_kind
+    seq.node_len += 1
+    seq.node_data[seq.node_len] = 0
+    seq.node_meta_data[seq.node_len] = 0
+    seq.node_pos_data[seq.node_len] = 0
+    seq.node_payload_data[seq.node_len] = 0
+    seq.node_role_data[seq.node_len] = 0
+    return seq
+}
+
+pub fn add_with_role(seq BodyNodeSequence, kind i32, line i32, col i32, lexeme string, payload_kind i32, role_kind i32) BodyNodeSequence {
     if !seq.ok {
         return seq
     }
     if seq.nodes == 0 {
         seq.first_kind = kind
+    } else {
+        prev := seq.last_kind
+        seq.transition_digest = seq.transition_digest * 31 + prev * 10 + kind
+        if prev == local_node_kind() && kind == assignment_node_kind() {
+            seq.local_assign_edges += 1
+        }
+        if prev == assignment_node_kind() && kind == call_node_kind() {
+            seq.assign_call_edges += 1
+        }
+        if prev == call_node_kind() && kind == return_node_kind() {
+            seq.call_return_edges += 1
+        }
+        if prev == return_node_kind() && kind == local_node_kind() {
+            seq.return_local_edges += 1
+        }
+        if prev == if_node_kind() && kind == for_node_kind() {
+            seq.if_for_edges += 1
+        }
+        if prev == for_node_kind() && kind == return_node_kind() {
+            seq.for_return_edges += 1
+        }
     }
     seq.nodes += 1
+    seq.current_body_nodes += 1
     seq.last_kind = kind
     seq.line = line
     seq.col = col
     seq.digest = seq.digest * 31 + kind
     seq.digest = hash_name(seq.digest, lexeme)
+    seq.digest = seq.digest * 31 + payload_kind
+    seq.digest = seq.digest * 31 + role_kind
+    seq.payload_digest = seq.payload_digest * 31 + payload_kind
+    seq.payload_digest = hash_name(seq.payload_digest, lexeme)
+    seq.semantic_digest = seq.semantic_digest * 31 + role_kind
+    seq.semantic_digest = hash_name(seq.semantic_digest, lexeme)
+    seq = append_node(seq, kind, line, col, lexeme, payload_kind, role_kind)
 
     if kind == local_node_kind() {
         seq.local_nodes += 1
@@ -66,5 +267,68 @@ pub fn add(seq BodyNodeSequence, kind i32, line i32, col i32, lexeme string) Bod
     if kind == return_node_kind() {
         seq.return_nodes += 1
     }
+    if kind == if_node_kind() {
+        seq.if_nodes += 1
+    }
+    if kind == for_node_kind() {
+        seq.for_nodes += 1
+    }
+    if payload_kind == identifier_payload_kind() {
+        seq.identifier_payloads += 1
+    }
+    if payload_kind == literal_payload_kind() {
+        seq.literal_payloads += 1
+    }
+    if payload_kind == type_payload_kind() {
+        seq.type_payloads += 1
+    }
+    if payload_kind == control_payload_kind() {
+        seq.control_payloads += 1
+    }
+    if payload_kind == type_payload_kind() {
+        seq.type_refs += 1
+    }
+    if payload_kind == control_payload_kind() {
+        seq.control_refs += 1
+    }
+    if role_kind == local_symbol_role() {
+        seq.local_symbol_refs += 1
+    }
+    if role_kind == assignment_target_role() {
+        seq.assignment_target_refs += 1
+    }
+    if role_kind == call_target_role() {
+        seq.call_target_refs += 1
+    }
+    if role_kind == return_symbol_role() {
+        seq.return_symbol_refs += 1
+    }
+    if role_kind == return_literal_role() {
+        seq.return_literal_refs += 1
+    }
+    if role_kind == type_reference_role() {
+        seq.type_refs += 1
+    }
+    if role_kind == control_flow_role() {
+        seq.control_refs += 1
+    }
+    return seq
+}
+
+pub fn add_with_payload(seq BodyNodeSequence, kind i32, line i32, col i32, lexeme string, payload_kind i32) BodyNodeSequence {
+    return add_with_role(seq, kind, line, col, lexeme, payload_kind, no_semantic_role())
+}
+
+pub fn add(seq BodyNodeSequence, kind i32, line i32, col i32, lexeme string) BodyNodeSequence {
+    return add_with_payload(seq, kind, line, col, lexeme, no_payload_kind())
+}
+
+pub fn add_function_body(seq BodyNodeSequence) BodyNodeSequence {
+    if !seq.ok {
+        return seq
+    }
+    seq.selected_body = true
+    seq.function_bodies += 1
+    seq.current_body_nodes = 0
     return seq
 }

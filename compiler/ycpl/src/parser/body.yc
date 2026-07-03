@@ -8,17 +8,50 @@ fn is_assignment(kind i32) bool {
     return kind == tok.assign() || kind == tok.plus_assign() || kind == tok.minus_assign() || kind == tok.mul_assign() || kind == tok.div_assign() || kind == tok.mod_assign()
 }
 
-pub fn parse(path string, source string) BodyNodeSequence {
+fn is_literal(kind i32) bool {
+    return kind == tok.int_lit() || kind == tok.float_lit() || kind == tok.char_lit() || kind == tok.string_lit() || kind == tok.bool_lit() || kind == tok.none_lit()
+}
+
+fn return_payload_kind(kind i32) i32 {
+    if is_literal(kind) {
+        return astbody.literal_payload_kind()
+    }
+    if kind == tok.ident() {
+        return astbody.identifier_payload_kind()
+    }
+    return astbody.control_payload_kind()
+}
+
+fn return_semantic_role(kind i32) i32 {
+    if is_literal(kind) {
+        return astbody.return_literal_role()
+    }
+    if kind == tok.ident() {
+        return astbody.return_symbol_role()
+    }
+    return astbody.control_flow_role()
+}
+
+fn parse_at(path string, source string, target_index i32, target_count i32) BodyNodeSequence {
     lx := lexer.new(path, source)
     seq := astbody.empty()
     brace := 0
     prev_kind := tok.eof()
     prev_prev_kind := tok.eof()
+    prev_lexeme := ""
     pending_extern := false
     pending_intrinsic := false
     pending_function_body := false
     in_function_body := false
+    collect_body := false
+    body_index := 0
     function_body_depth := 0
+    pending_return := false
+    pending_return_line := 1
+    pending_return_col := 1
+    if target_count <= 0 {
+        target_count = 1
+    }
 
     for (; true; ) {
         lx = lexer.next(lx)
@@ -64,30 +97,84 @@ pub fn parse(path string, source string) BodyNodeSequence {
             in_function_body = true
             function_body_depth = brace
             pending_function_body = false
+            collect_body = target_index < 0 || (body_index >= target_index && body_index < target_index + target_count)
+            if collect_body {
+                seq = astbody.add_function_body(seq)
+            }
         }
 
-        if in_function_body {
+        if in_function_body && collect_body {
+            if pending_return {
+                if lx.kind == tok.newline() || lx.kind == tok.semicolon() || lx.kind == tok.rbrace() {
+                    seq = astbody.add_with_role(seq, astbody.return_node_kind(), pending_return_line, pending_return_col, "return", astbody.control_payload_kind(), astbody.control_flow_role())
+                    pending_return = false
+                } else {
+                    seq = astbody.add_with_role(seq, astbody.return_node_kind(), pending_return_line, pending_return_col, lx.lexeme, return_payload_kind(lx.kind), return_semantic_role(lx.kind))
+                    pending_return = false
+                }
+            }
             if lx.kind == tok.colon() && prev_kind == tok.ident() {
-                seq = astbody.add(seq, astbody.local_node_kind(), lx.tok_line, lx.tok_col, lx.lexeme)
+                seq = astbody.add_with_role(seq, astbody.local_node_kind(), lx.tok_line, lx.tok_col, prev_lexeme, astbody.type_payload_kind(), astbody.local_symbol_role())
             }
             if is_assignment(lx.kind) {
-                seq = astbody.add(seq, astbody.assignment_node_kind(), lx.tok_line, lx.tok_col, lx.lexeme)
+                seq = astbody.add_with_role(seq, astbody.assignment_node_kind(), lx.tok_line, lx.tok_col, prev_lexeme, astbody.identifier_payload_kind(), astbody.assignment_target_role())
             }
             if lx.kind == tok.lparen() && prev_kind == tok.ident() && prev_prev_kind != tok.kw_fn() {
-                seq = astbody.add(seq, astbody.call_node_kind(), lx.tok_line, lx.tok_col, lx.lexeme)
+                seq = astbody.add_with_role(seq, astbody.call_node_kind(), lx.tok_line, lx.tok_col, prev_lexeme, astbody.identifier_payload_kind(), astbody.call_target_role())
             }
             if lx.kind == tok.kw_return() {
-                seq = astbody.add(seq, astbody.return_node_kind(), lx.tok_line, lx.tok_col, lx.lexeme)
+                pending_return = true
+                pending_return_line = lx.tok_line
+                pending_return_col = lx.tok_col
+            }
+            if lx.kind == tok.kw_if() {
+                seq = astbody.add_with_role(seq, astbody.if_node_kind(), lx.tok_line, lx.tok_col, lx.lexeme, astbody.control_payload_kind(), astbody.control_flow_role())
+            }
+            if lx.kind == tok.kw_for() {
+                seq = astbody.add_with_role(seq, astbody.for_node_kind(), lx.tok_line, lx.tok_col, lx.lexeme, astbody.control_payload_kind(), astbody.control_flow_role())
             }
             if lx.kind == tok.rbrace() && brace < function_body_depth {
+                if pending_return {
+                    seq = astbody.add_with_role(seq, astbody.return_node_kind(), pending_return_line, pending_return_col, "return", astbody.control_payload_kind(), astbody.control_flow_role())
+                    pending_return = false
+                }
+                seq = astbody.finish_function_body(seq)
+                body_index += 1
+                if target_index >= 0 && body_index >= target_index + target_count {
+                    return seq
+                }
                 in_function_body = false
+                collect_body = false
+                function_body_depth = 0
+            }
+        } else if in_function_body {
+            if lx.kind == tok.rbrace() && brace < function_body_depth {
+                body_index += 1
+                in_function_body = false
+                collect_body = false
                 function_body_depth = 0
             }
         }
 
         prev_prev_kind = prev_kind
         prev_kind = lx.kind
+        prev_lexeme = lx.lexeme
     }
 
+    if target_index >= 0 && !seq.selected_body {
+        seq.function_bodies = body_index
+    }
     return seq
+}
+
+pub fn parse(path string, source string) BodyNodeSequence {
+    return parse_at(path, source, -1, 1)
+}
+
+pub fn parse_function(path string, source string, target_index i32) BodyNodeSequence {
+    return parse_at(path, source, target_index, 1)
+}
+
+pub fn parse_range(path string, source string, start_index i32, count i32) BodyNodeSequence {
+    return parse_at(path, source, start_index, count)
 }
