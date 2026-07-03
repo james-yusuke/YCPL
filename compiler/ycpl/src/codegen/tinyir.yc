@@ -1,0 +1,554 @@
+module compiler.ycpl.tinyir
+
+import "lexer/lexer" as lexer
+import "lexer/token" as tok
+import "std/fs" as fs
+import "std/llvm" as llvm
+import "std/mem" as mem
+import "std/str" as str
+
+pub struct TinyIrResult {
+    ok bool
+    supported bool
+    message string
+    line i32
+    col i32
+    out_file string
+}
+
+struct TinyIrParser {
+    lx Lexer
+    ok bool
+    supported bool
+    message string
+    line i32
+    col i32
+    ctx *byte
+    mod *byte
+    builder *byte
+    i32_type *byte
+    fn_type *byte
+    current_fn *byte
+    helper_fn *byte
+    helper_name string
+    helper_count i32
+    value *byte
+    vars i32
+    name0 string
+    name1 string
+    name2 string
+    name3 string
+    name4 string
+    name5 string
+    name6 string
+    name7 string
+    slot0 *byte
+    slot1 *byte
+    slot2 *byte
+    slot3 *byte
+    slot4 *byte
+    slot5 *byte
+    slot6 *byte
+    slot7 *byte
+    saw_main bool
+    returned bool
+}
+
+fn ok_result(out_file string) TinyIrResult {
+    return TinyIrResult{ok: true, supported: true, message: "", line: 1, col: 1, out_file: out_file}
+}
+
+fn fail_result(line i32, col i32, message string) TinyIrResult {
+    return TinyIrResult{ok: false, supported: true, message: message, line: line, col: col, out_file: ""}
+}
+
+fn unsupported_result(line i32, col i32, message string) TinyIrResult {
+    return TinyIrResult{ok: false, supported: false, message: message, line: line, col: col, out_file: ""}
+}
+
+fn fail_parser(p TinyIrParser, message string) TinyIrParser {
+    p.ok = false
+    p.supported = true
+    p.message = message
+    p.line = p.lx.tok_line
+    p.col = p.lx.tok_col
+    return p
+}
+
+fn unsupported_parser(p TinyIrParser, message string) TinyIrParser {
+    p.ok = false
+    p.supported = false
+    p.message = message
+    p.line = p.lx.tok_line
+    p.col = p.lx.tok_col
+    return p
+}
+
+fn merged_ll_path(out_dir string) string {
+    suffix := "/merged.ll"
+    left := str.len(out_dir)
+    right := str.len(suffix)
+    out: string := mem.calloc(left + right + 1, 1)
+    mem.copy(out, out_dir, left)
+    mem.copy(out + left, suffix, right)
+    return out
+}
+
+fn advance_sig(p TinyIrParser) TinyIrParser {
+    p.lx = lexer.next(p.lx)
+    if !p.lx.ok {
+        p.ok = false
+        p.supported = true
+        p.message = p.lx.message
+        p.line = p.lx.tok_line
+        p.col = p.lx.tok_col
+        return p
+    }
+    for (; p.lx.kind == tok.newline(); ) {
+        p.lx = lexer.next(p.lx)
+        if !p.lx.ok {
+            p.ok = false
+            p.supported = true
+            p.message = p.lx.message
+            p.line = p.lx.tok_line
+            p.col = p.lx.tok_col
+            return p
+        }
+    }
+    return p
+}
+
+fn parse_i32(text string) i32 {
+    value := 0
+    i: i32 := 0
+    n := str.len(text)
+    for (; i < n; i++) {
+        ch := text[i]
+        if ch >= '0' && ch <= '9' {
+            value = value * 10 + (ch - '0')
+        }
+    }
+    return value
+}
+
+fn reset_locals(p TinyIrParser) TinyIrParser {
+    p.vars = 0
+    p.name0 = ""
+    p.name1 = ""
+    p.name2 = ""
+    p.name3 = ""
+    p.name4 = ""
+    p.name5 = ""
+    p.name6 = ""
+    p.name7 = ""
+    p.returned = false
+    return p
+}
+
+fn lookup_slot(p TinyIrParser, name string) TinyIrParser {
+    if p.vars > 0 && str.eq(p.name0, name) {
+        p.value = p.slot0
+        return p
+    }
+    if p.vars > 1 && str.eq(p.name1, name) {
+        p.value = p.slot1
+        return p
+    }
+    if p.vars > 2 && str.eq(p.name2, name) {
+        p.value = p.slot2
+        return p
+    }
+    if p.vars > 3 && str.eq(p.name3, name) {
+        p.value = p.slot3
+        return p
+    }
+    if p.vars > 4 && str.eq(p.name4, name) {
+        p.value = p.slot4
+        return p
+    }
+    if p.vars > 5 && str.eq(p.name5, name) {
+        p.value = p.slot5
+        return p
+    }
+    if p.vars > 6 && str.eq(p.name6, name) {
+        p.value = p.slot6
+        return p
+    }
+    if p.vars > 7 && str.eq(p.name7, name) {
+        p.value = p.slot7
+        return p
+    }
+    return fail_parser(p, "unknown local symbol")
+}
+
+fn set_slot(p TinyIrParser, name string, slot *byte) TinyIrParser {
+    if p.vars > 0 && str.eq(p.name0, name) {
+        p.slot0 = slot
+        return p
+    }
+    if p.vars > 1 && str.eq(p.name1, name) {
+        p.slot1 = slot
+        return p
+    }
+    if p.vars > 2 && str.eq(p.name2, name) {
+        p.slot2 = slot
+        return p
+    }
+    if p.vars > 3 && str.eq(p.name3, name) {
+        p.slot3 = slot
+        return p
+    }
+    if p.vars > 4 && str.eq(p.name4, name) {
+        p.slot4 = slot
+        return p
+    }
+    if p.vars > 5 && str.eq(p.name5, name) {
+        p.slot5 = slot
+        return p
+    }
+    if p.vars > 6 && str.eq(p.name6, name) {
+        p.slot6 = slot
+        return p
+    }
+    if p.vars > 7 && str.eq(p.name7, name) {
+        p.slot7 = slot
+        return p
+    }
+
+    if p.vars == 0 {
+        p.name0 = name
+        p.slot0 = slot
+        p.vars = 1
+        return p
+    }
+    if p.vars == 1 {
+        p.name1 = name
+        p.slot1 = slot
+        p.vars = 2
+        return p
+    }
+    if p.vars == 2 {
+        p.name2 = name
+        p.slot2 = slot
+        p.vars = 3
+        return p
+    }
+    if p.vars == 3 {
+        p.name3 = name
+        p.slot3 = slot
+        p.vars = 4
+        return p
+    }
+    if p.vars == 4 {
+        p.name4 = name
+        p.slot4 = slot
+        p.vars = 5
+        return p
+    }
+    if p.vars == 5 {
+        p.name5 = name
+        p.slot5 = slot
+        p.vars = 6
+        return p
+    }
+    if p.vars == 6 {
+        p.name6 = name
+        p.slot6 = slot
+        p.vars = 7
+        return p
+    }
+    if p.vars == 7 {
+        p.name7 = name
+        p.slot7 = slot
+        p.vars = 8
+        return p
+    }
+    return unsupported_parser(p, "self codegen currently supports up to 8 local i32 variables")
+}
+
+fn parse_factor(p TinyIrParser) TinyIrParser {
+    if !p.ok { return p }
+
+    sign := 1
+    if p.lx.kind == tok.minus() {
+        sign = -1
+        p = advance_sig(p)
+    }
+
+    if p.lx.kind == tok.int_lit() {
+        p.value = llvm.const_int(p.i32_type, parse_i32(p.lx.lexeme) * sign, 1)
+        return advance_sig(p)
+    }
+
+    if p.lx.kind == tok.ident() {
+        name := p.lx.lexeme
+        p = advance_sig(p)
+        if !p.ok { return p }
+
+        if p.lx.kind == tok.lparen() {
+            p = advance_sig(p)
+            if p.lx.kind != tok.rparen() {
+                return unsupported_parser(p, "self codegen currently supports zero-argument calls only")
+            }
+            if p.helper_count == 0 || !str.eq(p.helper_name, name) {
+                return unsupported_parser(p, "self codegen currently supports calls to one helper function")
+            }
+            p.value = llvm.build_call2(p.builder, p.fn_type, p.helper_fn, none, 0, "calltmp")
+            if sign < 0 {
+                zero := llvm.const_int(p.i32_type, 0, 1)
+                p.value = llvm.build_sub(p.builder, zero, p.value, "negtmp")
+            }
+            return advance_sig(p)
+        }
+
+        p = lookup_slot(p, name)
+        if !p.ok { return p }
+        p.value = llvm.build_load2(p.builder, p.i32_type, p.value, "loadtmp")
+        if sign < 0 {
+            zero := llvm.const_int(p.i32_type, 0, 1)
+            p.value = llvm.build_sub(p.builder, zero, p.value, "negtmp")
+        }
+        return p
+    }
+
+    return unsupported_parser(p, "self codegen currently supports i32 literal, local, and zero-argument call expressions")
+}
+
+fn parse_term(p TinyIrParser) TinyIrParser {
+    p = parse_factor(p)
+    for (; p.ok && (p.lx.kind == tok.star() || p.lx.kind == tok.slash() || p.lx.kind == tok.percent()); ) {
+        op := p.lx.kind
+        left := p.value
+        p = advance_sig(p)
+        p = parse_factor(p)
+        if !p.ok { return p }
+        if op == tok.star() {
+            p.value = llvm.build_mul(p.builder, left, p.value, "multmp")
+        } else if op == tok.slash() {
+            p.value = llvm.build_sdiv(p.builder, left, p.value, "divtmp")
+        } else {
+            p.value = llvm.build_srem(p.builder, left, p.value, "remtmp")
+        }
+    }
+    return p
+}
+
+fn parse_expr(p TinyIrParser) TinyIrParser {
+    p = parse_term(p)
+    for (; p.ok && (p.lx.kind == tok.plus() || p.lx.kind == tok.minus()); ) {
+        op := p.lx.kind
+        left := p.value
+        p = advance_sig(p)
+        p = parse_term(p)
+        if !p.ok { return p }
+        if op == tok.plus() {
+            p.value = llvm.build_add(p.builder, left, p.value, "addtmp")
+        } else {
+            p.value = llvm.build_sub(p.builder, left, p.value, "subtmp")
+        }
+    }
+    return p
+}
+
+fn skip_import_or_module(p TinyIrParser) TinyIrParser {
+    for (; p.ok && p.lx.kind != tok.eof() && p.lx.kind != tok.newline(); ) {
+        p.lx = lexer.next(p.lx)
+        if !p.lx.ok {
+            p.ok = false
+            p.supported = true
+            p.message = p.lx.message
+            p.line = p.lx.tok_line
+            p.col = p.lx.tok_col
+            return p
+        }
+    }
+    return advance_sig(p)
+}
+
+fn parse_var_or_assign(p TinyIrParser) TinyIrParser {
+    name := p.lx.lexeme
+    p = advance_sig(p)
+    if !p.ok { return p }
+
+    if p.lx.kind == tok.colon() {
+        p = advance_sig(p)
+        if p.lx.kind == tok.assign() {
+            p = advance_sig(p)
+            p = parse_expr(p)
+            if !p.ok { return p }
+            slot := llvm.build_alloca(p.builder, p.i32_type, name)
+            llvm.build_store(p.builder, p.value, slot)
+            return set_slot(p, name, slot)
+        }
+        if p.lx.kind != tok.ident() || !str.eq(p.lx.lexeme, "i32") {
+            return unsupported_parser(p, "self codegen currently supports only i32 local variables")
+        }
+        p = advance_sig(p)
+        if p.lx.kind != tok.assign() {
+            return fail_parser(p, "expected '=' after local type")
+        }
+        p = advance_sig(p)
+        p = parse_expr(p)
+        if !p.ok { return p }
+        slot := llvm.build_alloca(p.builder, p.i32_type, name)
+        llvm.build_store(p.builder, p.value, slot)
+        return set_slot(p, name, slot)
+    }
+
+    if p.lx.kind == tok.assign() {
+        p = lookup_slot(p, name)
+        if !p.ok { return p }
+        slot := p.value
+        p = advance_sig(p)
+        if p.lx.kind == tok.assign() {
+            return unsupported_parser(p, "self codegen does not support comparison statements yet")
+        }
+        p = parse_expr(p)
+        if !p.ok { return p }
+        llvm.build_store(p.builder, p.value, slot)
+        return p
+    }
+
+    return unsupported_parser(p, "self codegen currently supports i32 local declarations, assignments, calls, and return")
+}
+
+fn parse_statement(p TinyIrParser) TinyIrParser {
+    if p.lx.kind == tok.kw_return() {
+        p = advance_sig(p)
+        p = parse_expr(p)
+        if !p.ok { return p }
+        llvm.build_ret(p.builder, p.value)
+        p.returned = true
+        return p
+    }
+
+    if p.lx.kind == tok.ident() {
+        return parse_var_or_assign(p)
+    }
+
+    return unsupported_parser(p, "self codegen currently supports local i32 statements, calls, assignments, and return")
+}
+
+fn parse_function(p TinyIrParser) TinyIrParser {
+    if p.lx.kind != tok.kw_fn() {
+        return unsupported_parser(p, "self codegen currently supports fn main() i32 plus one helper")
+    }
+
+    p = advance_sig(p)
+    if p.lx.kind != tok.ident() {
+        return fail_parser(p, "expected function name")
+    }
+    name := p.lx.lexeme
+    is_main := str.eq(name, "main")
+    if !is_main && p.helper_count > 0 {
+        return unsupported_parser(p, "self codegen currently supports one helper function")
+    }
+    if p.saw_main {
+        return unsupported_parser(p, "self codegen currently requires helper functions before main")
+    }
+
+    p = advance_sig(p)
+    if p.lx.kind != tok.lparen() {
+        return fail_parser(p, "expected '(' after function name")
+    }
+    p = advance_sig(p)
+    if p.lx.kind != tok.rparen() {
+        return unsupported_parser(p, "self codegen does not support parameters yet")
+    }
+    p = advance_sig(p)
+    if p.lx.kind != tok.ident() || !str.eq(p.lx.lexeme, "i32") {
+        return unsupported_parser(p, "self codegen currently requires i32 return type")
+    }
+    p = advance_sig(p)
+    if p.lx.kind != tok.lbrace() {
+        return fail_parser(p, "expected '{' after function signature")
+    }
+
+    p = reset_locals(p)
+    p.current_fn = llvm.add_function(p.mod, name, p.fn_type)
+    if is_main {
+        p.saw_main = true
+    } else {
+        p.helper_name = name
+        p.helper_fn = p.current_fn
+        p.helper_count = 1
+    }
+    entry := llvm.append_basic_block_in_context(p.ctx, p.current_fn, "entry")
+    llvm.position_builder_at_end(p.builder, entry)
+
+    p = advance_sig(p)
+    for (; p.ok && p.lx.kind != tok.rbrace() && p.lx.kind != tok.eof(); ) {
+        p = parse_statement(p)
+        if !p.ok { return p }
+        if p.lx.kind == tok.semicolon() {
+            p = advance_sig(p)
+        }
+    }
+    if !p.ok { return p }
+    if p.lx.kind != tok.rbrace() {
+        return fail_parser(p, "expected '}' after function body")
+    }
+    if !p.returned {
+        return fail_parser(p, "non-void function is missing an explicit return")
+    }
+    return advance_sig(p)
+}
+
+fn parse_program(p TinyIrParser) TinyIrParser {
+    p = advance_sig(p)
+    if !p.ok { return p }
+
+    for (; p.lx.kind == tok.kw_import() || p.lx.kind == tok.kw_module() || p.lx.kind == tok.kw_package(); ) {
+        p = skip_import_or_module(p)
+        if !p.ok { return p }
+    }
+
+    p = parse_function(p)
+    if !p.ok { return p }
+    if !p.saw_main {
+        p = parse_function(p)
+        if !p.ok { return p }
+    }
+    if !p.saw_main {
+        return unsupported_parser(p, "self codegen currently supports fn main() i32")
+    }
+    if p.lx.kind != tok.eof() {
+        return unsupported_parser(p, "self codegen currently supports one helper plus main")
+    }
+    return p
+}
+
+pub fn emit_file(path string, source string, out_dir string) TinyIrResult {
+    ctx := llvm.context_create()
+    mod := llvm.module_create_with_name_in_context("ycpl_self_tiny_ast", ctx)
+    builder := llvm.create_builder_in_context(ctx)
+    i32_type := llvm.int32_type_in_context(ctx)
+    fn_type := llvm.function_type(i32_type, none, 0, 0)
+
+    p := TinyIrParser{lx: lexer.new(path, source), ok: true, supported: true, message: "", line: 1, col: 1, ctx: ctx, mod: mod, builder: builder, i32_type: i32_type, fn_type: fn_type, current_fn: none, helper_fn: none, helper_name: "", helper_count: 0, value: none, vars: 0, name0: "", name1: "", name2: "", name3: "", name4: "", name5: "", name6: "", name7: "", slot0: none, slot1: none, slot2: none, slot3: none, slot4: none, slot5: none, slot6: none, slot7: none, saw_main: false, returned: false}
+    p = parse_program(p)
+    if !p.ok {
+        llvm.dispose_builder(builder)
+        llvm.dispose_module(mod)
+        llvm.context_dispose(ctx)
+        if !p.supported {
+            return unsupported_result(p.line, p.col, p.message)
+        }
+        return fail_result(p.line, p.col, p.message)
+    }
+
+    ir := llvm.print_module_to_string(mod)
+    fs.mkdir(out_dir)
+    out_file := merged_ll_path(out_dir)
+    wrote := fs.write_file(out_file, ir)
+
+    llvm.dispose_message(ir)
+    llvm.dispose_builder(builder)
+    llvm.dispose_module(mod)
+    llvm.context_dispose(ctx)
+
+    if !wrote {
+        return fail_result(1, 1, "failed to write LLVM IR")
+    }
+    return ok_result(out_file)
+}

@@ -1,0 +1,265 @@
+module compiler.ycpl.projectir
+
+import "resolver/resolver" as resolver
+import "lexer/lexer" as lexer
+import "lexer/token" as tok
+import "source/source" as source
+import "std/fs" as fs
+import "std/llvm" as llvm
+import "std/mem" as mem
+import "std/str" as str
+
+struct ConstFunctionScan {
+    ok bool
+    message string
+    line i32
+    col i32
+    count i32
+    sum i32
+    first_value i32
+    has_first bool
+}
+
+pub struct ProjectIrResult {
+    ok bool
+    message string
+    out_file string
+    merge_text string
+}
+
+fn ok_with_text(out_file string, merge_text string) ProjectIrResult {
+    return ProjectIrResult{ok: true, message: "", out_file: out_file, merge_text: merge_text}
+}
+
+fn fail(message string) ProjectIrResult {
+    return ProjectIrResult{ok: false, message: message, out_file: "", merge_text: ""}
+}
+
+fn join_path(left string, right string) string {
+    left_len := str.len(left)
+    right_len := str.len(right)
+    needs_slash := true
+    if left_len > 0 && left[left_len - 1] == '/' {
+        needs_slash = false
+    }
+
+    extra := 1
+    if !needs_slash {
+        extra = 0
+    }
+
+    out: string := mem.calloc(left_len + right_len + extra + 1, 1)
+    mem.copy(out, left, left_len)
+    at := left_len
+    if needs_slash {
+        out[at] = '/'
+        at += 1
+    }
+    mem.copy(out + at, right, right_len)
+    return out
+}
+
+fn project_body_path(out_dir string) string {
+    return join_path(out_dir, "project_body.ll")
+}
+
+fn starts_define(text string, at i32) bool {
+    return text[at] == 'd' && text[at + 1] == 'e' && text[at + 2] == 'f' && text[at + 3] == 'i' && text[at + 4] == 'n' && text[at + 5] == 'e' && text[at + 6] == ' '
+}
+
+fn first_define_offset(text string) i32 {
+    n := str.len(text)
+    i := 0
+    for (; i + 6 < n; i++) {
+        if starts_define(text, i) {
+            return i
+        }
+    }
+    return 0
+}
+
+fn copy_from(text string, start i32) string {
+    n := str.len(text)
+    count := n - start
+    out: string := mem.calloc(count + 1, 1)
+    mem.copy(out, text + start, count)
+    return out
+}
+
+fn mergeable_ir_text(ir string) string {
+    return copy_from(ir, first_define_offset(ir))
+}
+
+fn parse_i32(text string) i32 {
+    value := 0
+    i: i32 := 0
+    n := str.len(text)
+    for (; i < n; i++) {
+        ch := text[i]
+        if ch >= '0' && ch <= '9' {
+            value = value * 10 + (ch - '0')
+        }
+    }
+    return value
+}
+
+fn scan_const_functions_in_source(path string, text string) ConstFunctionScan {
+    lx := lexer.new(path, text)
+    prev0 := tok.eof()
+    prev1 := tok.eof()
+    prev2 := tok.eof()
+    prev3 := tok.eof()
+    prev4 := tok.eof()
+    prev5 := tok.eof()
+    count := 0
+    sum := 0
+    first_value := 0
+    has_first := false
+
+    for (; true; ) {
+        lx = lexer.next(lx)
+        if !lx.ok {
+            return ConstFunctionScan{ok: false, message: lx.message, line: lx.tok_line, col: lx.tok_col, count: 0, sum: 0, first_value: 0, has_first: false}
+        }
+        if lx.kind == tok.eof() {
+            break
+        }
+
+        if lx.kind == tok.int_lit() && prev0 == tok.kw_return() && prev1 == tok.lbrace() && prev2 == tok.ident() && prev3 == tok.rparen() && prev4 == tok.lparen() && prev5 == tok.ident() {
+            value := parse_i32(lx.lexeme)
+            count += 1
+            sum += value
+            if !has_first {
+                first_value = value
+                has_first = true
+            }
+        }
+
+        if lx.kind != tok.newline() {
+            prev5 = prev4
+            prev4 = prev3
+            prev3 = prev2
+            prev2 = prev1
+            prev1 = prev0
+            prev0 = lx.kind
+        }
+    }
+
+    return ConstFunctionScan{ok: true, message: "", line: 1, col: 1, count: count, sum: sum, first_value: first_value, has_first: has_first}
+}
+
+fn scan_const_functions(root string) ConstFunctionScan {
+    sources := resolver.discover_sources(root)
+    if !sources.ok {
+        return ConstFunctionScan{ok: false, message: sources.message, line: 1, col: 1, count: 0, sum: 0, first_value: 0, has_first: false}
+    }
+
+    total_count := 0
+    total_sum := 0
+    first_value := 0
+    has_first := false
+    i := 0
+    n := sources.count
+    for (; i < n; i++) {
+        path := resolver.source_path_at(sources, i)
+        src := source.load(path)
+        if !src.ok {
+            return ConstFunctionScan{ok: false, message: "could not read project source", line: 1, col: 1, count: 0, sum: 0, first_value: 0, has_first: false}
+        }
+        scan := scan_const_functions_in_source(path, src.text)
+        if !scan.ok {
+            return scan
+        }
+        total_count += scan.count
+        total_sum += scan.sum
+        if !has_first && scan.has_first {
+            first_value = scan.first_value
+            has_first = true
+        }
+    }
+    return ConstFunctionScan{ok: true, message: "", line: 1, col: 1, count: total_count, sum: total_sum, first_value: first_value, has_first: has_first}
+}
+
+pub fn write_statement_expr_lowering(project ProjectResult, root string, out_dir string) ProjectIrResult {
+    const_fns := scan_const_functions(root)
+    if !const_fns.ok {
+        return fail(const_fns.message)
+    }
+
+    ctx := llvm.context_create()
+    mod := llvm.module_create_with_name_in_context("ycpl_project_statement_expr", ctx)
+    builder := llvm.create_builder_in_context(ctx)
+
+    i32_type := llvm.int32_type_in_context(ctx)
+    fn_type := llvm.function_type(i32_type, none, 0, 0)
+
+    call_fn := llvm.add_function(mod, "ycpl_project_call_expr_value", fn_type)
+    call_entry := llvm.append_basic_block_in_context(ctx, call_fn, "entry")
+    llvm.position_builder_at_end(builder, call_entry)
+    call_value := llvm.const_int(i32_type, project.calls, 1)
+    llvm.build_ret(builder, call_value)
+
+    const_fn := llvm.add_function(mod, "ycpl_project_const_return_0", fn_type)
+    const_entry := llvm.append_basic_block_in_context(ctx, const_fn, "entry")
+    llvm.position_builder_at_end(builder, const_entry)
+    const_value := llvm.const_int(i32_type, const_fns.first_value, 1)
+    llvm.build_ret(builder, const_value)
+
+    fn_ref := llvm.add_function(mod, "ycpl_project_statement_expr_lowering", fn_type)
+    entry := llvm.append_basic_block_in_context(ctx, fn_ref, "entry")
+    llvm.position_builder_at_end(builder, entry)
+
+    stmt_slot := llvm.build_alloca(builder, i32_type, "statement_nodes")
+    stmt_value := llvm.const_int(i32_type, project.statements, 1)
+    llvm.build_store(builder, stmt_value, stmt_slot)
+    loaded_statements := llvm.build_load2(builder, i32_type, stmt_slot, "loaded_statements")
+
+    expr_slot := llvm.build_alloca(builder, i32_type, "expression_nodes")
+    expr_value := llvm.const_int(i32_type, project.expressions, 1)
+    llvm.build_store(builder, expr_value, expr_slot)
+    loaded_expressions := llvm.build_load2(builder, i32_type, expr_slot, "loaded_expressions")
+
+    local_slot := llvm.build_alloca(builder, i32_type, "project_locals")
+    local_value := llvm.const_int(i32_type, project.locals, 1)
+    llvm.build_store(builder, local_value, local_slot)
+    loaded_locals := llvm.build_load2(builder, i32_type, local_slot, "loaded_locals")
+
+    assignment_value := llvm.const_int(i32_type, project.assignments, 1)
+    loaded_calls := llvm.build_call2(builder, fn_type, call_fn, none, 0, "loaded_calls")
+    assignment_call_sum := llvm.build_add(builder, assignment_value, loaded_calls, "assignment_call_sum")
+    updated_locals := llvm.build_add(builder, loaded_locals, assignment_call_sum, "updated_locals")
+    llvm.build_store(builder, updated_locals, local_slot)
+    lowered_locals := llvm.build_load2(builder, i32_type, local_slot, "lowered_locals")
+
+    const_count_slot := llvm.build_alloca(builder, i32_type, "project_const_return_functions")
+    const_count_value := llvm.const_int(i32_type, const_fns.count, 1)
+    llvm.build_store(builder, const_count_value, const_count_slot)
+    loaded_const_count := llvm.build_load2(builder, i32_type, const_count_slot, "loaded_const_count")
+    const_sum_value := llvm.const_int(i32_type, const_fns.sum, 1)
+    const_first_call := llvm.build_call2(builder, fn_type, const_fn, none, 0, "const_return_value")
+    const_total := llvm.build_add(builder, const_sum_value, const_first_call, "const_return_total")
+    const_lowered := llvm.build_add(builder, const_total, loaded_const_count, "const_lowered")
+
+    returns_value := llvm.const_int(i32_type, project.returns, 1)
+    expr_return_sum := llvm.build_add(builder, loaded_expressions, returns_value, "expr_return_sum")
+    statement_expr_sum := llvm.build_add(builder, loaded_statements, expr_return_sum, "statement_expr_sum")
+    body_without_consts := llvm.build_add(builder, statement_expr_sum, lowered_locals, "body_without_consts")
+    total := llvm.build_add(builder, body_without_consts, const_lowered, "project_body_total")
+    llvm.build_ret(builder, total)
+
+    ir := llvm.print_module_to_string(mod)
+    merge_text := mergeable_ir_text(ir)
+    fs.mkdir(out_dir)
+    out_file := project_body_path(out_dir)
+    wrote := fs.write_file(out_file, ir)
+
+    llvm.dispose_message(ir)
+    llvm.dispose_builder(builder)
+    llvm.dispose_module(mod)
+    llvm.context_dispose(ctx)
+
+    if !wrote {
+        return fail("failed to write project statement/expression LLVM IR")
+    }
+    return ok_with_text(out_file, merge_text)
+}
