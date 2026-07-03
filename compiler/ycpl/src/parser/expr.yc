@@ -1,0 +1,183 @@
+module compiler.ycpl.parser.expr
+
+import "ast/expr" as expr
+import "lexer/lexer" as lexer
+import "lexer/token" as tok
+
+fn is_literal(kind i32) bool {
+    return kind == tok.int_lit() || kind == tok.float_lit() || kind == tok.char_lit() || kind == tok.string_lit() || kind == tok.bool_lit() || kind == tok.none_lit()
+}
+
+fn is_binary_operator(kind i32) bool {
+    if kind == tok.plus() || kind == tok.minus() || kind == tok.star() || kind == tok.slash() || kind == tok.percent() {
+        return true
+    }
+    if kind == tok.eq() || kind == tok.neq() || kind == tok.lt() || kind == tok.gt() || kind == tok.le() || kind == tok.ge() {
+        return true
+    }
+    if kind == tok.and_and() || kind == tok.or_or() || kind == tok.shl() || kind == tok.shr() || kind == tok.pipe() || kind == tok.caret() {
+        return true
+    }
+    return false
+}
+
+fn is_unary_operator(kind i32, prev_kind i32) bool {
+    if kind == tok.bang() || kind == tok.tilde() {
+        return true
+    }
+    if kind == tok.amp() {
+        return true
+    }
+    if kind == tok.star() || kind == tok.minus() {
+        if prev_kind == tok.assign() || prev_kind == tok.lparen() || prev_kind == tok.comma() || prev_kind == tok.kw_return() || prev_kind == tok.colon() || prev_kind == tok.newline() {
+            return true
+        }
+    }
+    return false
+}
+
+fn parse_at(path string, source string, target_index i32, target_count i32) ExpressionTable {
+    lx := lexer.new(path, source)
+    table := expr.empty()
+    brace := 0
+    prev_kind := tok.eof()
+    prev_prev_kind := tok.eof()
+    prev_lexeme := ""
+    prev_line := 1
+    prev_col := 1
+    pending_extern := false
+    pending_intrinsic := false
+    pending_function_body := false
+    in_function_body := false
+    collect_body := false
+    body_index := 0
+    function_body_depth := 0
+    if target_count <= 0 {
+        target_count = 1
+    }
+
+    for (; true; ) {
+        lx = lexer.next(lx)
+        if !lx.ok {
+            return expr.fail(lx.tok_line, lx.tok_col, lx.message)
+        }
+        if lx.kind == tok.eof() {
+            break
+        }
+
+        if lx.kind == tok.lbrace() {
+            brace += 1
+        }
+        if lx.kind == tok.rbrace() {
+            brace -= 1
+        }
+        if brace < 0 {
+            return expr.fail(lx.tok_line, lx.tok_col, "unexpected '}'")
+        }
+
+        if lx.kind == tok.kw_extern() {
+            pending_extern = true
+        }
+        if lx.kind == tok.kw_intrinsic() {
+            pending_intrinsic = true
+        }
+        if lx.kind == tok.kw_fn() {
+            body_candidate := true
+            if pending_extern {
+                body_candidate = false
+            }
+            if pending_intrinsic {
+                body_candidate = false
+            }
+            if body_candidate {
+                pending_function_body = true
+            }
+            pending_extern = false
+            pending_intrinsic = false
+        }
+
+        if lx.kind == tok.lbrace() && pending_function_body {
+            in_function_body = true
+            function_body_depth = brace
+            collect_body = target_index < 0 || (body_index >= target_index && body_index < target_index + target_count)
+            if collect_body && target_index >= 0 {
+                table.selected_body = true
+            }
+            pending_function_body = false
+        }
+
+        should_collect := target_index < 0 || (in_function_body && collect_body)
+        function_expr_added := false
+        if should_collect && lx.kind == tok.ident() {
+            table = expr.add_identifier(table, lx.tok_line, lx.tok_col, lx.lexeme)
+            function_expr_added = true
+        }
+        if should_collect && is_literal(lx.kind) {
+            table = expr.add_literal(table, lx.tok_line, lx.tok_col, lx.lexeme, lx.kind)
+            function_expr_added = true
+        }
+        if should_collect && lx.kind == tok.lparen() && prev_kind == tok.ident() && prev_prev_kind != tok.kw_fn() {
+            table = expr.add_call(table, prev_line, prev_col, prev_lexeme)
+            function_expr_added = true
+        }
+        if should_collect && lx.kind == tok.dot() {
+            table = expr.add_member(table, lx.tok_line, lx.tok_col, lx.lexeme)
+            function_expr_added = true
+        }
+        if should_collect && lx.kind == tok.lbrack() {
+            table = expr.add_index(table, lx.tok_line, lx.tok_col, lx.lexeme)
+            function_expr_added = true
+        }
+        if should_collect && is_binary_operator(lx.kind) {
+            table = expr.add_binary(table, lx.tok_line, lx.tok_col, lx.lexeme, lx.kind)
+            function_expr_added = true
+        }
+        if should_collect && is_unary_operator(lx.kind, prev_kind) {
+            table = expr.add_unary(table, lx.tok_line, lx.tok_col, lx.lexeme, lx.kind)
+            function_expr_added = true
+        }
+        if in_function_body && collect_body && function_expr_added {
+            table = expr.note_function_expr(table)
+        }
+
+        if in_function_body && lx.kind == tok.rbrace() && brace < function_body_depth {
+            if collect_body {
+                table = expr.finish_function_expr_slot(table)
+                body_index += 1
+                if target_index >= 0 && body_index >= target_index + target_count {
+                    return table
+                }
+            } else {
+                table.function_bodies += 1
+                body_index += 1
+            }
+            in_function_body = false
+            collect_body = false
+            function_body_depth = 0
+        }
+
+        if lx.kind != tok.newline() {
+            prev_prev_kind = prev_kind
+            prev_kind = lx.kind
+            prev_lexeme = lx.lexeme
+            prev_line = lx.tok_line
+            prev_col = lx.tok_col
+        }
+    }
+    if target_index >= 0 && !table.selected_body {
+        table.function_bodies = body_index
+    }
+    return table
+}
+
+pub fn parse(path string, source string) ExpressionTable {
+    return parse_at(path, source, -1, 1)
+}
+
+pub fn parse_function(path string, source string, target_index i32) ExpressionTable {
+    return parse_at(path, source, target_index, 1)
+}
+
+pub fn parse_range(path string, source string, start_index i32, count i32) ExpressionTable {
+    return parse_at(path, source, start_index, count)
+}

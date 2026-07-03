@@ -72,18 +72,40 @@ stage-2 self-host gate
 ├─ compiler/ycpl source discovery は nested src/**/*.yc file を traversal
 ├─ resolver は shell-backed traversal の前に unsafe project path を拒否
 ├─ project parse/check は AST 由来の count、body node digest、return digest、main presence を出す
+├─ project parse/check は body node transition digest と local/assign/call/return edge count を出す
+├─ body if/for node は std/llvm 経由で conditional branch と loop block に lower
 ├─ tiny single-file codegen は local declaration、assignment、call、arithmetic、return を LLVM C API wrapper で lower
 ├─ YCPL_NO_BOOTSTRAP=1 の project build-ir は valid LLVM IR を生成
 ├─ project build-ir は std/llvm の alloca/store/load/call/ret wrapper で local_return.ll を生成
 ├─ project build-ir は std/llvm の statement/expression lowering wrapper で project_body.ll を生成
-├─ merged.ll は local、assignment、call、return count 用の LLVM-wrapper-generated node probe を含む
+├─ merged.ll は local、assignment、call、return、transition、if/for control flow 用の LLVM-wrapper-generated node probe を含む
 ├─ merged.ll は LLVM-wrapper-generated project statement/expression lowering を呼び出す
+├─ project_body.ll は local/assignment/call/return body node を専用 alloca/load/store/call lowering に分岐
 ├─ project_body.ll は source-derived zero-argument i32 constant-return function を lower
+├─ project_body.ll は parser-owned per-function body slot と全関数 aggregate body data を alloca/call/conditional/loop IR に lower
+├─ project parse/check と生成 IR は per-function body slot table の count/max/digest を gate する
+├─ project parse/check は body-node arena 由来の identifier/literal/type/control payload table count と digest を出す
+├─ project parse/check は local symbol、assignment target、call target、return symbol/literal、type ref、control ref の semantic role count を出す
+├─ project parse/check は function、struct、std import、alias、visibility、digest の declaration/import/module symbol summary を出す
+├─ project parse/check は function signature と call-site arity summary を parser count と照合する
+├─ project parse/check は function signature と call-site の parser-owned semantic node table を保持する
+├─ project parse/check は primary/call/member/index/binary/unary expression の parser-owned expression node table を保持する
+├─ 生成 project IR は expression table count/digest を gate し、project_body.ll 経由で lower する
+├─ project parse/check と project_body.ll は per-function expression slot count、max slot size、digest を保持する
+├─ project_body.ll は per-function body-node lowering と per-function expression node/slot/digest lowering を結合する
+├─ project_body.ll は identifier/literal/call/member/index/binary/unary expression node kind を専用 LLVM lowering path に分岐する
+├─ project_body.ll は binary operator tag を保持し、LLVM add/sub/mul/sdiv/srem/icmp 命令へ lower する
+├─ project_body.ll は 1024-cap / 600+ node の expression sequence lowering pass 用に function_expr_lowered_nodes と function_expression_sequence_lowered を保持する
+├─ 生成された stage2/stage3 IR は ycpl_stage_expr_lowered_floor で expression lowering floor を gate する
+├─ project_body.ll は compiler/ycpl body slot 0 から 31 までの per-function lowering function を生成する
+├─ project_body.ll は compiler/ycpl body slot 0 から 383 までの range bucket lowering function を生成する
+├─ project_body.ll は metadata/source position/payload table/semantic role 付き可変長 statement/expression body-node arena を node-sequence alloca/branch/loop IR に lower
 ├─ project parse/check は typed AST shape count と typed digest を出す
-├─ 生成 project IR は function、body-node、typed AST、main-presence、return-expression global を使う
+├─ 生成 project IR は function、body-node、expression-table、typed AST、signature node table、symbol signature/arity、main-presence、return-expression global を使う
 ├─ YCPL_NO_BOOTSTRAP=1 の project build は native AST smoke binary を生成
 ├─ 生成された stage2 binary は stage3 LLVM IR を出力
-├─ 生成された stage2 binary は native stage3 smoke output を build
+├─ 生成された stage2 binary は native stage3 compiler-smoke output を build
+├─ 生成された stage3 binary は parse/check/build-ir compiler/ycpl に対応し、llc-valid な stage4 LLVM IR を出力する
 ├─ 生成された stage2 binary は source 内容で tiny examples を実行可能 IR に lower
 └─ compiler として等価な native ycc-ycpl は次の実装ステップ
 ```

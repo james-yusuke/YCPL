@@ -146,16 +146,38 @@ Transition
    ├─ builds that subset to native binary without bootstrap ycc
    ├─ parses/checks compiler/ycpl by traversing src/**/*.yc
    ├─ tracks function-name digest and main presence from project AST
-   ├─ stores body statement node sequences in ast/body and parser/body
+   ├─ stores parser-owned body statement node arenas in ast/body and parser/body
+   ├─ tracks body node transition digest and local/assign/call/return edges
+   ├─ lowers body if/for node counts into LLVM C API conditional and loop blocks
    ├─ tracks function-body token/digest summaries for local/call/control-flow structure
    ├─ tracks return-expression counts and digest from function bodies
    ├─ emits local/assignment/call/return node probe IR through std/llvm C API wrappers
    ├─ emits project statement/expression lowering IR through std/llvm C API wrappers
+   ├─ dispatches local/assignment/call/return body nodes into dedicated alloca/load/store/call lowering
+   ├─ lowers compiler/ycpl parser body arenas for per-function slots and all-function aggregate data into LLVM alloca/call/branch/loop IR
+   ├─ gates per-function body slot table counts, max size, and digest in parse/check and generated IR
+   ├─ tracks identifier/literal/type/control payload tables from parser-owned body-node arenas
+   ├─ tracks semantic role tables for local symbols, assignment targets, call targets, return symbols/literals, type refs, and control refs
+   ├─ builds declaration/import/module symbol summaries for functions, structs, std imports, aliases, visibility, and digests
+   ├─ cross-checks function signature and call-site arity summaries against parser counts and stores them in generated IR
+   ├─ stores parser-owned semantic node tables for function signatures and call sites
+   ├─ stores parser-owned expression node tables for primary/call/member/index/binary/unary expressions
+   ├─ cross-checks expression node tables against parser expression, call, member, and index counts
+   ├─ tracks per-function expression slot counts, max slot size, and digest from parser-owned expression tables
+   ├─ feeds per-function expression tables into function body LLVM lowering
+   ├─ dispatches identifier/literal/call/member/index/binary/unary expression nodes into dedicated LLVM lowering paths
+   ├─ preserves binary operator tags and lowers add/sub/mul/div/rem/compare nodes through LLVM arithmetic/comparison wrappers
+   ├─ lowers an expanded per-function expression node sequence into project_body.ll with a 1024-node cap instead of only tiny representative samples
+   ├─ carries the 600+ expression lowering floor into generated stage2/stage3 IR self-checks
+   ├─ emits per-function LLVM lowering functions for the first thirty-two compiler/ycpl function bodies
+   ├─ emits range bucket LLVM lowering for compiler/ycpl function bodies 0 through 383
+   ├─ lowers variable-length body-node arenas with metadata/source positions, payload tables, and semantic roles into node-sequence LLVM IR blocks
    ├─ lowers zero-argument i32 constant-return functions from compiler/ycpl sources
    ├─ emits project LLVM IR for compiler/ycpl with YCPL_NO_BOOTSTRAP=1
    ├─ builds that project AST IR to a native smoke binary without bootstrap ycc
    ├─ generated stage2 binary supports parse/check/build-ir compiler/ycpl
-   ├─ generated stage2 binary can build native stage3 smoke output
+   ├─ generated stage2 binary can build native stage3 compiler-smoke output
+   ├─ generated stage3 binary supports parse/check/build-ir compiler/ycpl and emits stage4 LLVM IR
    ├─ generated stage2 binary lowers tiny example inputs to distinct IR by source content
    └─ delegates unsupported build/build-ir inputs to bootstrap ycc
 ```
@@ -195,14 +217,25 @@ stage-2 gate
 ├─ tiny arithmetic/call builds can run with YCPL_NO_BOOTSTRAP=1
 ├─ project build-ir runs without bootstrap fallback
 ├─ project build-ir emits local_return.ll and project_body.ll through LLVM C API wrappers
-├─ merged.ll includes the LLVM-wrapper-generated node probe for local, assignment, call, and return counts
+├─ merged.ll includes the LLVM-wrapper-generated node probe for local, assignment, call, return, transitions, and if/for control flow
 ├─ merged.ll calls LLVM-wrapper-generated project statement/expression lowering
-├─ project_body.ll includes source-derived constant-return function lowering
+├─ project_body.ll includes source-derived constant-return, parser-owned per-function slots, all-function body lowering, and metadata/payload/semantic-role-rich body-node arena lowering
+├─ project parse/check and generated IR now gate declaration/import/module symbol table summaries
+├─ project parse/check and generated IR gate parser-owned expression node tables and digests
+├─ project_body.ll lowers per-function expression slot metadata into LLVM-wrapper-generated IR
+├─ project_body.ll now combines body-node lowering with per-function expression node/slot/digest lowering
+├─ project_body.ll dispatches parser-owned expression node kinds into identifier/literal/call/member/index/binary/unary LLVM IR lowering
+├─ project_body.ll lowers parser-owned binary operator tags into LLVM add/sub/mul/sdiv/srem/icmp instructions
+├─ project_body.ll records function_expr_lowered_nodes and function_expression_sequence_lowered for the expanded 600+ node expression lowering sequence
+├─ generated stage2/stage3 IR gates the expression lowering floor with ycpl_stage_expr_lowered_floor
+├─ project_body.ll emits ycpl_project_function_body_0 through ycpl_project_function_body_31
+├─ project_body.ll emits range bucket lowerers ycpl_project_function_body_range_0_63 through ycpl_project_function_body_range_320_383
 ├─ project parse/check emits typed AST shape counts and a typed digest from src/ast/shape.yc
-├─ project AST IR contains function symbol, body node, typed-AST, main-presence, and return-expression gates
+├─ project AST IR contains function symbol, body node, expression-table, typed-AST, main-presence, and return-expression gates
 ├─ project AST IR can be lowered to a native smoke binary
 ├─ generated stage2 binary can emit stage3 LLVM IR
 ├─ generated stage2 binary can invoke llc/clang to build stage3 native output
+├─ generated stage3 native output can parse/check compiler/ycpl and emit llc-valid stage4 IR
 ├─ generated stage2 binary builds examples/54 and renamed copies to native exit code 13
 └─ full compiler-equivalent build/native codegen remains the next stage
 ```
@@ -269,6 +302,8 @@ README-JA.md
 - [Standard library](docs/stdlib.en.md)
 - [Implementation status](docs/status.en.md)
 - [YCPL LSP](tools/lsp/README.md)
+- [Contributing](CONTRIBUTING.md)
+- [Security policy](SECURITY.md)
 
 ## Editor And LSP
 

@@ -41,8 +41,8 @@ fn traversal_smoke() i32 {
 }
 YCPL
 "$YCC_YCPL" parse "$traversal_dir/ycpl" >/tmp/ycc-ycpl-traversal-parse.out
-if ! grep -q 'files=18' /tmp/ycc-ycpl-traversal-parse.out; then
-  printf 'Expected recursive traversal to discover 18 files in %s, got:\n' "$traversal_dir/ycpl" >&2
+if ! grep -q 'files=23' /tmp/ycc-ycpl-traversal-parse.out; then
+  printf 'Expected recursive traversal to discover 23 files in %s, got:\n' "$traversal_dir/ycpl" >&2
   cat /tmp/ycc-ycpl-traversal-parse.out >&2
   find "$traversal_dir/ycpl/src" -type f -name '*.yc' | sort >&2
   exit 1
@@ -51,14 +51,61 @@ grep -q 'fn_digest=' /tmp/ycc-ycpl-project-parse.out
 grep -q 'body_digest=' /tmp/ycc-ycpl-project-parse.out
 grep -q 'body_tokens=' /tmp/ycc-ycpl-project-parse.out
 grep -q 'body_nodes=' /tmp/ycc-ycpl-project-parse.out
+grep -q 'body_slots=' /tmp/ycc-ycpl-project-parse.out
+grep -q 'body_slot_digest=' /tmp/ycc-ycpl-project-parse.out
 grep -q 'node_digest=' /tmp/ycc-ycpl-project-parse.out
+grep -q 'transition_digest=' /tmp/ycc-ycpl-project-parse.out
 grep -q 'return_exprs=' /tmp/ycc-ycpl-project-parse.out
+grep -q 'payload_ids=' /tmp/ycc-ycpl-project-parse.out
+grep -q 'payload_types=' /tmp/ycc-ycpl-project-parse.out
+grep -q 'payload_digest=' /tmp/ycc-ycpl-project-parse.out
+grep -q 'local_symbols=' /tmp/ycc-ycpl-project-parse.out
+grep -q 'assignment_targets=' /tmp/ycc-ycpl-project-parse.out
+grep -q 'call_targets=' /tmp/ycc-ycpl-project-parse.out
+grep -q 'semantic_digest=' /tmp/ycc-ycpl-project-parse.out
+grep -q 'symbols=' /tmp/ycc-ycpl-project-parse.out
+grep -q 'symbol_structs=' /tmp/ycc-ycpl-project-parse.out
+grep -q 'symbol_imports=' /tmp/ycc-ycpl-project-parse.out
+grep -q 'symbol_digest=' /tmp/ycc-ycpl-project-parse.out
 grep -q 'typed_nodes=' /tmp/ycc-ycpl-project-parse.out
+grep -q 'sig_nodes=' /tmp/ycc-ycpl-project-parse.out
+grep -q 'sig_calls=' /tmp/ycc-ycpl-project-parse.out
+grep -q 'expr_table: nodes=' /tmp/ycc-ycpl-project-parse.out
+grep -q 'primary=' /tmp/ycc-ycpl-project-parse.out
+grep -q 'binary=' /tmp/ycc-ycpl-project-parse.out
+grep -q 'unary=' /tmp/ycc-ycpl-project-parse.out
+grep -q 'slots=' /tmp/ycc-ycpl-project-parse.out
+grep -q 'slot_digest=' /tmp/ycc-ycpl-project-parse.out
 grep -q 'typed_digest=' /tmp/ycc-ycpl-project-parse.out
 grep -q 'main=1' /tmp/ycc-ycpl-project-check.out
 grep -q 'body_digest=' /tmp/ycc-ycpl-project-check.out
 grep -q 'ret_digest=' /tmp/ycc-ycpl-project-check.out
+grep -q 'transition_digest=' /tmp/ycc-ycpl-project-check.out
+grep -q 'local_assign_edges=' /tmp/ycc-ycpl-project-check.out
+grep -q 'if_nodes=' /tmp/ycc-ycpl-project-check.out
+grep -q 'for_nodes=' /tmp/ycc-ycpl-project-check.out
+grep -q 'payload_ids=' /tmp/ycc-ycpl-project-check.out
+grep -q 'payload_types=' /tmp/ycc-ycpl-project-check.out
+grep -q 'payload_digest=' /tmp/ycc-ycpl-project-check.out
+grep -q 'local_symbols=' /tmp/ycc-ycpl-project-check.out
+grep -q 'assignment_targets=' /tmp/ycc-ycpl-project-check.out
+grep -q 'call_targets=' /tmp/ycc-ycpl-project-check.out
+grep -q 'semantic_digest=' /tmp/ycc-ycpl-project-check.out
+grep -q 'symbols=' /tmp/ycc-ycpl-project-check.out
+grep -q 'symbol_structs=' /tmp/ycc-ycpl-project-check.out
+grep -q 'symbol_imports=' /tmp/ycc-ycpl-project-check.out
+grep -q 'symbol_digest=' /tmp/ycc-ycpl-project-check.out
 grep -q 'typed_nodes=' /tmp/ycc-ycpl-project-check.out
+grep -q 'sig_nodes=' /tmp/ycc-ycpl-project-check.out
+grep -q 'sig_calls=' /tmp/ycc-ycpl-project-check.out
+grep -q 'expr_table: nodes=' /tmp/ycc-ycpl-project-check.out
+grep -q 'primary=' /tmp/ycc-ycpl-project-check.out
+grep -q 'binary=' /tmp/ycc-ycpl-project-check.out
+grep -q 'unary=' /tmp/ycc-ycpl-project-check.out
+grep -q 'slots=' /tmp/ycc-ycpl-project-check.out
+grep -q 'slot_digest=' /tmp/ycc-ycpl-project-check.out
+grep -q 'body_slots=' /tmp/ycc-ycpl-project-check.out
+grep -q 'body_slot_digest=' /tmp/ycc-ycpl-project-check.out
 grep -q 'typed_digest=' /tmp/ycc-ycpl-project-check.out
 "$YCC_YCPL" check examples/53_self_codegen_main.yc >/dev/null
 "$YCC_YCPL" check examples/54_self_codegen_arithmetic.yc >/dev/null
@@ -132,24 +179,140 @@ grep -q '@ycpl_ast_function_body_tokens' "$work_dir/merged.ll"
 grep -q '@ycpl_ast_function_body_digest' "$work_dir/merged.ll"
 grep -q '@ycpl_ast_body_node_count' "$work_dir/merged.ll"
 grep -q '@ycpl_ast_body_node_digest' "$work_dir/merged.ll"
+grep -q '@ycpl_ast_body_transition_digest' "$work_dir/merged.ll"
+grep -q '@ycpl_ast_body_slot_count' "$work_dir/merged.ll"
+grep -q '@ycpl_ast_body_nonempty_slots' "$work_dir/merged.ll"
+grep -q '@ycpl_ast_body_max_nodes_per_slot' "$work_dir/merged.ll"
+grep -q '@ycpl_ast_body_slot_digest' "$work_dir/merged.ll"
+grep -q '@ycpl_ast_body_identifier_payloads' "$work_dir/merged.ll"
+grep -q '@ycpl_ast_body_type_payloads' "$work_dir/merged.ll"
+grep -q '@ycpl_ast_body_payload_digest' "$work_dir/merged.ll"
+grep -q '@ycpl_ast_body_local_symbol_refs' "$work_dir/merged.ll"
+grep -q '@ycpl_ast_body_assignment_target_refs' "$work_dir/merged.ll"
+grep -q '@ycpl_ast_body_call_target_refs' "$work_dir/merged.ll"
+grep -q '@ycpl_ast_body_semantic_digest' "$work_dir/merged.ll"
+grep -q '@ycpl_ast_symbol_functions' "$work_dir/merged.ll"
+grep -q '@ycpl_ast_symbol_structs' "$work_dir/merged.ll"
+grep -q '@ycpl_ast_symbol_imports' "$work_dir/merged.ll"
+grep -q '@ycpl_ast_symbol_zero_param_functions' "$work_dir/merged.ll"
+grep -q '@ycpl_ast_symbol_nonzero_param_functions' "$work_dir/merged.ll"
+grep -q '@ycpl_ast_symbol_function_signature_digest' "$work_dir/merged.ll"
+grep -q '@ycpl_ast_symbol_call_sites' "$work_dir/merged.ll"
+grep -q '@ycpl_ast_symbol_nonzero_arg_calls' "$work_dir/merged.ll"
+grep -q '@ycpl_ast_symbol_call_arity_digest' "$work_dir/merged.ll"
+grep -q '@ycpl_ast_signature_nodes' "$work_dir/merged.ll"
+grep -q '@ycpl_ast_signature_function_nodes' "$work_dir/merged.ll"
+grep -q '@ycpl_ast_signature_call_nodes' "$work_dir/merged.ll"
+grep -q '@ycpl_ast_signature_arity_slots' "$work_dir/merged.ll"
+grep -q '@ycpl_ast_signature_digest' "$work_dir/merged.ll"
+grep -q '@ycpl_ast_expr_table_nodes' "$work_dir/merged.ll"
+grep -q '@ycpl_stage_expr_lowered_floor' "$work_dir/merged.ll"
+grep -q '@ycpl_ast_expr_primary_nodes' "$work_dir/merged.ll"
+grep -q '@.stage3.stage4.ir' "$work_dir/merged.ll"
+grep -q 'define i32 @ycpl_stage3_write_ir_text' "$work_dir/merged.ll"
+grep -q '@ycpl_ast_expr_binary_nodes' "$work_dir/merged.ll"
+grep -q '@ycpl_ast_expr_table_digest' "$work_dir/merged.ll"
+grep -q '@ycpl_ast_expr_slot_count' "$work_dir/merged.ll"
+grep -q '@ycpl_ast_expr_slot_digest' "$work_dir/merged.ll"
+grep -q '@ycpl_ast_symbol_digest' "$work_dir/merged.ll"
+grep -q 'load i32, ptr @ycpl_ast_body_payload_digest' "$work_dir/merged.ll"
+grep -q 'load i32, ptr @ycpl_ast_body_semantic_digest' "$work_dir/merged.ll"
+grep -q 'load i32, ptr @ycpl_ast_body_slot_count' "$work_dir/merged.ll"
+grep -q 'load i32, ptr @ycpl_ast_body_slot_digest' "$work_dir/merged.ll"
+grep -q 'load i32, ptr @ycpl_ast_symbol_function_signature_digest' "$work_dir/merged.ll"
+grep -q 'load i32, ptr @ycpl_ast_symbol_call_sites' "$work_dir/merged.ll"
+grep -q 'load i32, ptr @ycpl_ast_symbol_call_arity_digest' "$work_dir/merged.ll"
+grep -q 'load i32, ptr @ycpl_ast_signature_nodes' "$work_dir/merged.ll"
+grep -q 'load i32, ptr @ycpl_ast_signature_digest' "$work_dir/merged.ll"
+grep -q 'load i32, ptr @ycpl_ast_expr_table_nodes' "$work_dir/merged.ll"
+grep -q 'load i32, ptr @ycpl_stage_expr_lowered_floor' "$work_dir/merged.ll"
+grep -q 'exprfloorok' "$work_dir/merged.ll"
+grep -q 'load i32, ptr @ycpl_ast_expr_table_digest' "$work_dir/merged.ll"
+grep -q 'load i32, ptr @ycpl_ast_expr_slot_count' "$work_dir/merged.ll"
+grep -q 'load i32, ptr @ycpl_ast_expr_slot_digest' "$work_dir/merged.ll"
+grep -q 'load i32, ptr @ycpl_ast_symbol_digest' "$work_dir/merged.ll"
+grep -q '@ycpl_ast_body_if_nodes' "$work_dir/merged.ll"
+grep -q '@ycpl_ast_body_for_nodes' "$work_dir/merged.ll"
 grep -q '@ycpl_ast_return_exprs' "$work_dir/merged.ll"
 grep -q '@ycpl_ast_return_expr_digest' "$work_dir/merged.ll"
 grep -q 'define i32 @ycpl_project_statement_expr_lowering' "$work_dir/merged.ll"
 grep -q 'define i32 @ycpl_project_call_expr_value' "$work_dir/merged.ll"
 grep -q 'define i32 @ycpl_project_const_return_0' "$work_dir/merged.ll"
+grep -q 'define i32 @ycpl_project_all_function_bodies' "$work_dir/merged.ll"
+grep -q 'define i32 @ycpl_project_function_body_0' "$work_dir/merged.ll"
+grep -q 'define i32 @ycpl_project_function_body_7' "$work_dir/merged.ll"
+grep -q 'define i32 @ycpl_project_function_body_15' "$work_dir/merged.ll"
+grep -q 'define i32 @ycpl_project_function_body_31' "$work_dir/merged.ll"
+grep -q 'define i32 @ycpl_project_function_body_range_0_63' "$work_dir/merged.ll"
+grep -q 'define i32 @ycpl_project_function_body_range_320_383' "$work_dir/merged.ll"
 grep -q 'call i32 @ycpl_project_statement_expr_lowering' "$work_dir/merged.ll"
 grep -q 'call i32 @ycpl_project_const_return_0' "$work_dir/merged.ll"
+grep -q 'call i32 @ycpl_project_all_function_bodies' "$work_dir/merged.ll"
+grep -q 'call i32 @ycpl_project_function_body_0' "$work_dir/merged.ll"
+grep -q 'call i32 @ycpl_project_function_body_7' "$work_dir/merged.ll"
+grep -q 'call i32 @ycpl_project_function_body_15' "$work_dir/merged.ll"
+grep -q 'call i32 @ycpl_project_function_body_31' "$work_dir/merged.ll"
+grep -q 'call i32 @ycpl_project_function_body_range_0_63' "$work_dir/merged.ll"
+grep -q 'call i32 @ycpl_project_function_body_range_320_383' "$work_dir/merged.ll"
 grep -q 'statement_nodes' "$work_dir/merged.ll"
 grep -q 'expression_nodes' "$work_dir/merged.ll"
+grep -q 'expr_table_nodes' "$work_dir/merged.ll"
+grep -q 'expression_table_lowered' "$work_dir/merged.ll"
+grep -q 'expr_slot_count' "$work_dir/merged.ll"
+grep -q 'expression_slot_lowered' "$work_dir/merged.ll"
 grep -q 'project_const_return_functions' "$work_dir/merged.ll"
+grep -q 'all_function_bodies_lowered' "$work_dir/merged.ll"
+grep -q 'control_function_body_lowered' "$work_dir/merged.ll"
+grep -q 'function_body_slots_lowered' "$work_dir/merged.ll"
+grep -q 'function_body_base_slots' "$work_dir/merged.ll"
+grep -q 'function_body_extra_slots' "$work_dir/merged.ll"
+grep -q 'function_body_second_half' "$work_dir/merged.ll"
+grep -q 'function_body_tail' "$work_dir/merged.ll"
+grep -q 'function_body_ranges_lowered' "$work_dir/merged.ll"
+grep -q 'function_body_slot_and_range_lowered' "$work_dir/merged.ll"
+grep -q 'function_body_score' "$work_dir/merged.ll"
+grep -q 'function_expr_nodes' "$work_dir/merged.ll"
+grep -q 'function_expr_lowered_nodes' "$work_dir/merged.ll"
+grep -Eq 'store i32 ([6-9][0-9][0-9]|[1-9][0-9][0-9][0-9]), ptr %function_expr_lowered_nodes' "$work_dir/merged.ll"
+grep -q 'function_expression_slot_score' "$work_dir/merged.ll"
+grep -q 'function_expr_digest_score' "$work_dir/merged.ll"
+grep -q 'function_expression_lowered' "$work_dir/merged.ll"
+grep -q 'function_expression_sequence_lowered' "$work_dir/merged.ll"
+grep -q 'function_body_expr_sum' "$work_dir/merged.ll"
+grep -q 'node_sequence_digest_score' "$work_dir/merged.ll"
+grep -q 'node_sequence_score' "$work_dir/merged.ll"
+grep -q 'node_metadata_score' "$work_dir/merged.ll"
+grep -q 'node_source_pos_score' "$work_dir/merged.ll"
+grep -q 'node_payload_score' "$work_dir/merged.ll"
+grep -q 'node_semantic_role_score' "$work_dir/merged.ll"
+grep -q 'node_lower_if_then' "$work_dir/merged.ll"
+grep -q 'node_lower_for_check' "$work_dir/merged.ll"
+grep -q 'node_lower_for_has_more' "$work_dir/merged.ll"
+grep -q 'function_if_then' "$work_dir/merged.ll"
+grep -q 'function_for_check' "$work_dir/merged.ll"
+grep -q 'function_for_has_more' "$work_dir/merged.ll"
 grep -q 'define i32 @ycpl_node_call_probe' "$work_dir/merged.ll"
+grep -q 'define i32 @ycpl_node_transition_probe' "$work_dir/merged.ll"
+grep -q 'define i32 @ycpl_node_control_flow_probe' "$work_dir/merged.ll"
 grep -q 'define i32 @ycpl_node_local_return_probe' "$work_dir/merged.ll"
 grep -q 'assignment_nodes' "$work_dir/merged.ll"
+grep -q 'transition_digest' "$work_dir/merged.ll"
 grep -q 'call i32 @ycpl_node_call_probe' "$work_dir/merged.ll"
+grep -q 'call i32 @ycpl_node_transition_probe' "$work_dir/merged.ll"
+grep -q 'call i32 @ycpl_node_control_flow_probe' "$work_dir/merged.ll"
 grep -q 'define i32 @ycpl_node_local_return_probe' "$work_dir/local_return.ll"
 grep -q 'define i32 @ycpl_node_call_probe' "$work_dir/local_return.ll"
+grep -q 'define i32 @ycpl_node_transition_probe' "$work_dir/local_return.ll"
+grep -q 'define i32 @ycpl_node_control_flow_probe' "$work_dir/local_return.ll"
+grep -q 'if_then' "$work_dir/local_return.ll"
+grep -q 'for_check' "$work_dir/local_return.ll"
+grep -q 'for_body' "$work_dir/local_return.ll"
+grep -q 'for_has_more' "$work_dir/local_return.ll"
 grep -q 'assignment_nodes' "$work_dir/local_return.ll"
+grep -q 'transition_digest' "$work_dir/local_return.ll"
 grep -q 'call i32 @ycpl_node_call_probe' "$work_dir/local_return.ll"
+grep -q 'call i32 @ycpl_node_transition_probe' "$work_dir/local_return.ll"
+grep -q 'call i32 @ycpl_node_control_flow_probe' "$work_dir/local_return.ll"
 grep -q 'alloca i32' "$work_dir/local_return.ll"
 grep -q 'store i32' "$work_dir/local_return.ll"
 grep -q 'load i32' "$work_dir/local_return.ll"
@@ -157,10 +320,76 @@ grep -q 'ret i32' "$work_dir/local_return.ll"
 grep -q 'define i32 @ycpl_project_statement_expr_lowering' "$work_dir/project_body.ll"
 grep -q 'define i32 @ycpl_project_call_expr_value' "$work_dir/project_body.ll"
 grep -q 'define i32 @ycpl_project_const_return_0' "$work_dir/project_body.ll"
+grep -q 'define i32 @ycpl_project_all_function_bodies' "$work_dir/project_body.ll"
+grep -q 'define i32 @ycpl_project_function_body_0' "$work_dir/project_body.ll"
+grep -q 'define i32 @ycpl_project_function_body_7' "$work_dir/project_body.ll"
+grep -q 'define i32 @ycpl_project_function_body_15' "$work_dir/project_body.ll"
+grep -q 'define i32 @ycpl_project_function_body_31' "$work_dir/project_body.ll"
+grep -q 'define i32 @ycpl_project_function_body_range_0_63' "$work_dir/project_body.ll"
+grep -q 'define i32 @ycpl_project_function_body_range_320_383' "$work_dir/project_body.ll"
 grep -q 'call i32 @ycpl_project_const_return_0' "$work_dir/project_body.ll"
+grep -q 'call i32 @ycpl_project_all_function_bodies' "$work_dir/project_body.ll"
+grep -q 'call i32 @ycpl_project_function_body_0' "$work_dir/project_body.ll"
+grep -q 'call i32 @ycpl_project_function_body_7' "$work_dir/project_body.ll"
+grep -q 'call i32 @ycpl_project_function_body_15' "$work_dir/project_body.ll"
+grep -q 'call i32 @ycpl_project_function_body_31' "$work_dir/project_body.ll"
+grep -q 'call i32 @ycpl_project_function_body_range_0_63' "$work_dir/project_body.ll"
+grep -q 'call i32 @ycpl_project_function_body_range_320_383' "$work_dir/project_body.ll"
 grep -q 'statement_nodes' "$work_dir/project_body.ll"
 grep -q 'expression_nodes' "$work_dir/project_body.ll"
+grep -q 'expr_table_nodes' "$work_dir/project_body.ll"
+grep -q 'expression_table_lowered' "$work_dir/project_body.ll"
+grep -q 'expr_slot_count' "$work_dir/project_body.ll"
+grep -q 'expression_slot_lowered' "$work_dir/project_body.ll"
 grep -q 'project_const_return_functions' "$work_dir/project_body.ll"
+grep -q 'all_function_bodies_lowered' "$work_dir/project_body.ll"
+grep -q 'control_function_body_lowered' "$work_dir/project_body.ll"
+grep -q 'function_body_slots_lowered' "$work_dir/project_body.ll"
+grep -q 'function_body_base_slots' "$work_dir/project_body.ll"
+grep -q 'function_body_extra_slots' "$work_dir/project_body.ll"
+grep -q 'function_body_second_half' "$work_dir/project_body.ll"
+grep -q 'function_body_tail' "$work_dir/project_body.ll"
+grep -q 'function_body_ranges_lowered' "$work_dir/project_body.ll"
+grep -q 'function_body_slot_and_range_lowered' "$work_dir/project_body.ll"
+grep -q 'function_body_score' "$work_dir/project_body.ll"
+grep -q 'function_expr_nodes' "$work_dir/project_body.ll"
+grep -q 'function_expr_lowered_nodes' "$work_dir/project_body.ll"
+grep -Eq 'store i32 ([6-9][0-9][0-9]|[1-9][0-9][0-9][0-9]), ptr %function_expr_lowered_nodes' "$work_dir/project_body.ll"
+grep -q 'function_expression_slot_score' "$work_dir/project_body.ll"
+grep -q 'function_expr_digest_score' "$work_dir/project_body.ll"
+grep -q 'function_expression_lowered' "$work_dir/project_body.ll"
+grep -q 'function_expression_sequence_lowered' "$work_dir/project_body.ll"
+grep -q 'function_body_expr_sum' "$work_dir/project_body.ll"
+grep -q 'node_sequence_digest_score' "$work_dir/project_body.ll"
+grep -q 'node_sequence_score' "$work_dir/project_body.ll"
+grep -q 'node_metadata_score' "$work_dir/project_body.ll"
+grep -q 'node_source_pos_score' "$work_dir/project_body.ll"
+grep -q 'node_payload_score' "$work_dir/project_body.ll"
+grep -q 'node_semantic_role_score' "$work_dir/project_body.ll"
+grep -q 'node_lower_local_slot' "$work_dir/project_body.ll"
+grep -q 'node_lower_assignment_slot' "$work_dir/project_body.ll"
+grep -q 'node_lower_call_value' "$work_dir/project_body.ll"
+grep -q 'node_lower_return_slot' "$work_dir/project_body.ll"
+grep -q 'node_lower_if_then' "$work_dir/project_body.ll"
+grep -q 'node_lower_for_check' "$work_dir/project_body.ll"
+grep -q 'node_lower_for_has_more' "$work_dir/project_body.ll"
+grep -q 'expr_lower_identifier_slot' "$work_dir/project_body.ll"
+grep -q 'expr_lower_literal_slot' "$work_dir/project_body.ll"
+grep -q 'expr_lower_call_value' "$work_dir/project_body.ll"
+grep -q 'expr_lower_member_score' "$work_dir/project_body.ll"
+grep -q 'expr_lower_index_score' "$work_dir/project_body.ll"
+grep -q 'expr_lower_binary_value' "$work_dir/project_body.ll"
+grep -q 'expr_lower_binary_sub_value' "$work_dir/project_body.ll"
+grep -q 'expr_lower_binary_mul_value' "$work_dir/project_body.ll"
+grep -q 'expr_lower_binary_div_value' "$work_dir/project_body.ll"
+grep -q 'expr_lower_binary_rem_value' "$work_dir/project_body.ll"
+grep -q 'expr_lower_binary_cmp_value' "$work_dir/project_body.ll"
+grep -q 'expr_lower_unary_score' "$work_dir/project_body.ll"
+grep -q 'function_if_then' "$work_dir/project_body.ll"
+grep -q 'function_for_check' "$work_dir/project_body.ll"
+grep -q 'function_for_has_more' "$work_dir/project_body.ll"
+grep -Eq 'add i32 %loaded_function_if_score, [1-9][0-9]*' "$work_dir/project_body.ll"
+grep -Eq 'icmp slt i32 %loaded_function_for_index, [1-9][0-9]*' "$work_dir/project_body.ll"
 grep -q 'project_body_total' "$work_dir/project_body.ll"
 
 self_ir_dir="$(mktemp -d "${TMPDIR:-/tmp}/ycpl-self-ir.XXXXXX")"
