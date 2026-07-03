@@ -1,0 +1,93 @@
+module compiler.ycpl.parser.body
+
+import "ast/body" as astbody
+import "lexer/lexer" as lexer
+import "lexer/token" as tok
+
+fn is_assignment(kind i32) bool {
+    return kind == tok.assign() || kind == tok.plus_assign() || kind == tok.minus_assign() || kind == tok.mul_assign() || kind == tok.div_assign() || kind == tok.mod_assign()
+}
+
+pub fn parse(path string, source string) BodyNodeSequence {
+    lx := lexer.new(path, source)
+    seq := astbody.empty()
+    brace := 0
+    prev_kind := tok.eof()
+    prev_prev_kind := tok.eof()
+    pending_extern := false
+    pending_intrinsic := false
+    pending_function_body := false
+    in_function_body := false
+    function_body_depth := 0
+
+    for (; true; ) {
+        lx = lexer.next(lx)
+        if !lx.ok {
+            return astbody.fail(lx.tok_line, lx.tok_col, lx.message)
+        }
+        if lx.kind == tok.eof() {
+            break
+        }
+
+        if lx.kind == tok.lbrace() {
+            brace += 1
+        }
+        if lx.kind == tok.rbrace() {
+            brace -= 1
+        }
+        if brace < 0 {
+            return astbody.fail(lx.tok_line, lx.tok_col, "unexpected '}'")
+        }
+
+        if lx.kind == tok.kw_extern() {
+            pending_extern = true
+        }
+        if lx.kind == tok.kw_intrinsic() {
+            pending_intrinsic = true
+        }
+        if lx.kind == tok.kw_fn() {
+            body_candidate := true
+            if pending_extern {
+                body_candidate = false
+            }
+            if pending_intrinsic {
+                body_candidate = false
+            }
+            if body_candidate {
+                pending_function_body = true
+            }
+            pending_extern = false
+            pending_intrinsic = false
+        }
+
+        if lx.kind == tok.lbrace() && pending_function_body {
+            in_function_body = true
+            function_body_depth = brace
+            pending_function_body = false
+        }
+
+        if in_function_body {
+            if lx.kind == tok.colon() && prev_kind == tok.ident() {
+                seq = astbody.add(seq, astbody.local_node_kind(), lx.tok_line, lx.tok_col, lx.lexeme)
+            }
+            if is_assignment(lx.kind) {
+                seq = astbody.add(seq, astbody.assignment_node_kind(), lx.tok_line, lx.tok_col, lx.lexeme)
+            }
+            if lx.kind == tok.lparen() && prev_kind == tok.ident() && prev_prev_kind != tok.kw_fn() {
+                seq = astbody.add(seq, astbody.call_node_kind(), lx.tok_line, lx.tok_col, lx.lexeme)
+            }
+            if lx.kind == tok.kw_return() {
+                seq = astbody.add(seq, astbody.return_node_kind(), lx.tok_line, lx.tok_col, lx.lexeme)
+            }
+            if lx.kind == tok.rbrace() && brace < function_body_depth {
+                in_function_body = false
+                function_body_depth = 0
+            }
+        }
+
+        prev_prev_kind = prev_kind
+        prev_kind = lx.kind
+    }
+
+    return seq
+}

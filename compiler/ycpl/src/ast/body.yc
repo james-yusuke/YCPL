@@ -1,0 +1,70 @@
+module compiler.ycpl.ast.body
+
+import "std/str" as str
+
+pub fn local_node_kind() i32 { return 1 }
+pub fn assignment_node_kind() i32 { return 2 }
+pub fn call_node_kind() i32 { return 3 }
+pub fn return_node_kind() i32 { return 4 }
+
+pub struct BodyNodeSequence {
+    ok bool
+    message string
+    line i32
+    col i32
+    nodes i32
+    local_nodes i32
+    assignment_nodes i32
+    call_nodes i32
+    return_nodes i32
+    first_kind i32
+    last_kind i32
+    digest i32
+}
+
+pub fn empty() BodyNodeSequence {
+    return BodyNodeSequence{ok: true, message: "", line: 1, col: 1, nodes: 0, local_nodes: 0, assignment_nodes: 0, call_nodes: 0, return_nodes: 0, first_kind: 0, last_kind: 0, digest: 17}
+}
+
+pub fn fail(line i32, col i32, message string) BodyNodeSequence {
+    return BodyNodeSequence{ok: false, message: message, line: line, col: col, nodes: 0, local_nodes: 0, assignment_nodes: 0, call_nodes: 0, return_nodes: 0, first_kind: 0, last_kind: 0, digest: 17}
+}
+
+fn hash_name(seed i32, name string) i32 {
+    h := seed
+    i := 0
+    n := str.len(name)
+    for (; i < n; i++) {
+        h = h * 33 + name[i]
+    }
+    return h
+}
+
+pub fn add(seq BodyNodeSequence, kind i32, line i32, col i32, lexeme string) BodyNodeSequence {
+    if !seq.ok {
+        return seq
+    }
+    if seq.nodes == 0 {
+        seq.first_kind = kind
+    }
+    seq.nodes += 1
+    seq.last_kind = kind
+    seq.line = line
+    seq.col = col
+    seq.digest = seq.digest * 31 + kind
+    seq.digest = hash_name(seq.digest, lexeme)
+
+    if kind == local_node_kind() {
+        seq.local_nodes += 1
+    }
+    if kind == assignment_node_kind() {
+        seq.assignment_nodes += 1
+    }
+    if kind == call_node_kind() {
+        seq.call_nodes += 1
+    }
+    if kind == return_node_kind() {
+        seq.return_nodes += 1
+    }
+    return seq
+}
