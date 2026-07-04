@@ -162,42 +162,30 @@ namespace lex
             {
                 if (peek_char(1) == '/')
                 {
-
-                    Position p{line, column};
-
                     advance();
                     advance();
-                    std::string lex = "//";
                     while (!is_at_end() && peek_char() != '\n')
                     {
-                        lex.push_back(advance());
+                        advance();
                     }
-                    Position q{line, column};
-
                     continue;
                 }
                 else if (peek_char(1) == '*')
                 {
-
-                    Position p{line, column};
                     advance();
                     advance();
                     int depth = 1;
-                    std::string lex = "/*";
                     while (!is_at_end() && depth > 0)
                     {
                         char ch = advance();
-                        lex.push_back(ch);
                         if (ch == '/' && peek_char() == '*')
                         {
                             advance();
-                            lex.push_back('*');
                             ++depth;
                         }
                         else if (ch == '*' && peek_char() == '/')
                         {
                             advance();
-                            lex.push_back('/');
                             --depth;
                         }
                     }
@@ -443,7 +431,7 @@ namespace lex
     {
         size_t st = current;
 
-        char c = advance();
+        advance();
         while (is_ident_part(peek_char()))
             advance();
         size_t ed = current;

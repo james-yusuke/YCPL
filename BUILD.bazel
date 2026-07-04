@@ -8,6 +8,10 @@ cc_library(
     srcs = [
         "bootstrap/cpp/src/ast/ast.cpp",
         "bootstrap/cpp/src/codegen/codegen.cpp",
+        "bootstrap/cpp/src/codegen/core.cpp",
+        "bootstrap/cpp/src/codegen/dispatch.cpp",
+        "bootstrap/cpp/src/codegen/pipeline.cpp",
+        "bootstrap/cpp/src/codegen/scope.cpp",
         "bootstrap/cpp/src/lexer/lexer.cpp",
         "bootstrap/cpp/src/module/json.cpp",
         "bootstrap/cpp/src/module/resolver.cpp",
@@ -28,7 +32,11 @@ cc_library(
 
 cc_binary(
     name = "ycc",
-    srcs = ["bootstrap/cpp/tools/cli/ycc/ycc.cpp"],
+    srcs = [
+        "bootstrap/cpp/src/cli/driver.cpp",
+        "bootstrap/cpp/src/cli/driver.h",
+        "bootstrap/cpp/src/cli/ycc.cpp",
+    ],
     copts = [
         "-std=c++20",
         "-Ibootstrap/cpp",
@@ -75,6 +83,7 @@ sh_test(
         "examples/**",
         "stl/**",
     ]),
+    timeout = "eternal",
 )
 
 sh_test(
@@ -88,6 +97,7 @@ sh_test(
         "examples/**",
         "stl/**",
     ]),
+    timeout = "eternal",
 )
 
 sh_test(

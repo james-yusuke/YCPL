@@ -1,0 +1,8 @@
+fn dyn_seed() i32 {
+    return 29
+}
+
+fn main() i32 {
+    x := dyn_seed()
+    return x
+}

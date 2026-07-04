@@ -1,0 +1,15 @@
+fn ready() bool {
+    return true
+}
+
+fn main() i32 {
+    total := 0
+    flag := ready()
+    if flag == true {
+        total = total + 5
+    }
+    if ready() {
+        total = total + 8
+    }
+    return total
+}

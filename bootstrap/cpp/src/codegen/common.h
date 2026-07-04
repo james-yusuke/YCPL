@@ -24,22 +24,6 @@ namespace codegen
             return llvm::IntegerType::get(context, 64);
         }
 
-        inline llvm::StructType *getOrCreateArrayStruct(llvm::LLVMContext &context)
-        {
-            static llvm::StructType *cached = nullptr;
-            if (cached)
-                return cached;
-
-            cached = llvm::StructType::create(context, "Array_internal");
-            cached->setBody({
-                getI8PtrTy(context),
-                getI64Ty(context),
-                getI64Ty(context),
-                getI64Ty(context),
-            });
-            return cached;
-        }
-
         inline llvm::Value *constInt64(llvm::IRBuilder<> &B, uint64_t v)
         {
             return llvm::ConstantInt::get(getI64Ty(B.getContext()), v);

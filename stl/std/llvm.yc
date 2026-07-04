@@ -25,6 +25,7 @@ extern fn c_append_basic_block_in_context(ctx *byte, function_ref *byte, name st
 extern fn c_get_param(function_ref *byte, index i32) *byte as "LLVMGetParam"
 
 extern fn c_const_int(int_type *byte, value i64, sign_extend i32) *byte as "LLVMConstInt"
+extern fn c_const_pointer_null(pointer_type *byte) *byte as "LLVMConstPointerNull"
 extern fn c_build_alloca(builder_ref *byte, type_ref *byte, name string) *byte as "LLVMBuildAlloca"
 extern fn c_build_load2(builder_ref *byte, type_ref *byte, pointer_ref *byte, name string) *byte as "LLVMBuildLoad2"
 extern fn c_build_store(builder_ref *byte, value_ref *byte, pointer_ref *byte) *byte as "LLVMBuildStore"
@@ -35,6 +36,7 @@ extern fn c_build_sub(builder_ref *byte, lhs *byte, rhs *byte, name string) *byt
 extern fn c_build_mul(builder_ref *byte, lhs *byte, rhs *byte, name string) *byte as "LLVMBuildMul"
 extern fn c_build_sdiv(builder_ref *byte, lhs *byte, rhs *byte, name string) *byte as "LLVMBuildSDiv"
 extern fn c_build_srem(builder_ref *byte, lhs *byte, rhs *byte, name string) *byte as "LLVMBuildSRem"
+extern fn c_build_sext(builder_ref *byte, value_ref *byte, dest_type *byte, name string) *byte as "LLVMBuildSExt"
 extern fn c_build_icmp(builder_ref *byte, predicate i32, lhs *byte, rhs *byte, name string) *byte as "LLVMBuildICmp"
 extern fn c_build_br(builder_ref *byte, dest *byte) *byte as "LLVMBuildBr"
 extern fn c_build_cond_br(builder_ref *byte, cond *byte, then_block *byte, else_block *byte) *byte as "LLVMBuildCondBr"
@@ -43,6 +45,41 @@ extern fn c_build_struct_gep2(builder_ref *byte, type_ref *byte, pointer_ref *by
 extern fn c_build_gep2(builder_ref *byte, type_ref *byte, pointer_ref *byte, indices *byte, index_count i32, name string) *byte as "LLVMBuildGEP2"
 extern fn c_build_global_string_ptr(builder_ref *byte, text string, name string) *byte as "LLVMBuildGlobalStringPtr"
 extern fn c_verify_module(mod_ref *byte, action i32, out_message *string) i32 as "LLVMVerifyModule"
+
+struct RefArgs2 {
+    arg0 *byte
+    arg1 *byte
+}
+
+struct RefArgs3 {
+    arg0 *byte
+    arg1 *byte
+    arg2 *byte
+}
+
+struct RefArgs4 {
+    arg0 *byte
+    arg1 *byte
+    arg2 *byte
+    arg3 *byte
+}
+
+struct RefArgs5 {
+    arg0 *byte
+    arg1 *byte
+    arg2 *byte
+    arg3 *byte
+    arg4 *byte
+}
+
+struct RefArgs6 {
+    arg0 *byte
+    arg1 *byte
+    arg2 *byte
+    arg3 *byte
+    arg4 *byte
+    arg5 *byte
+}
 
 pub fn context_create() *byte {
     return c_context_create()
@@ -108,6 +145,36 @@ pub fn function_type(return_type *byte, param_types *byte, param_count i32, is_v
     return c_function_type(return_type, param_types, param_count, is_var_arg)
 }
 
+pub fn function_type1(return_type *byte, param0 *byte, is_var_arg i32) *byte {
+    param := param0
+    return c_function_type(return_type, &param, 1, is_var_arg)
+}
+
+pub fn function_type2(return_type *byte, param0 *byte, param1 *byte, is_var_arg i32) *byte {
+    args := RefArgs2{arg0: param0, arg1: param1}
+    return c_function_type(return_type, &args, 2, is_var_arg)
+}
+
+pub fn function_type3(return_type *byte, param0 *byte, param1 *byte, param2 *byte, is_var_arg i32) *byte {
+    args := RefArgs3{arg0: param0, arg1: param1, arg2: param2}
+    return c_function_type(return_type, &args, 3, is_var_arg)
+}
+
+pub fn function_type4(return_type *byte, param0 *byte, param1 *byte, param2 *byte, param3 *byte, is_var_arg i32) *byte {
+    args := RefArgs4{arg0: param0, arg1: param1, arg2: param2, arg3: param3}
+    return c_function_type(return_type, &args, 4, is_var_arg)
+}
+
+pub fn function_type5(return_type *byte, param0 *byte, param1 *byte, param2 *byte, param3 *byte, param4 *byte, is_var_arg i32) *byte {
+    args := RefArgs5{arg0: param0, arg1: param1, arg2: param2, arg3: param3, arg4: param4}
+    return c_function_type(return_type, &args, 5, is_var_arg)
+}
+
+pub fn function_type6(return_type *byte, param0 *byte, param1 *byte, param2 *byte, param3 *byte, param4 *byte, param5 *byte, is_var_arg i32) *byte {
+    args := RefArgs6{arg0: param0, arg1: param1, arg2: param2, arg3: param3, arg4: param4, arg5: param5}
+    return c_function_type(return_type, &args, 6, is_var_arg)
+}
+
 pub fn add_function(mod *byte, name string, function_type *byte) *byte {
     return c_add_function(mod, name, function_type)
 }
@@ -122,6 +189,10 @@ pub fn get_param(function *byte, index i32) *byte {
 
 pub fn const_int(int_type *byte, value i64, sign_extend i32) *byte {
     return c_const_int(int_type, value, sign_extend)
+}
+
+pub fn const_pointer_null(pointer_type *byte) *byte {
+    return c_const_pointer_null(pointer_type)
 }
 
 pub fn int_eq() i32 { return 32 }
@@ -173,6 +244,10 @@ pub fn build_srem(builder *byte, lhs *byte, rhs *byte, name string) *byte {
     return c_build_srem(builder, lhs, rhs, name)
 }
 
+pub fn build_sext(builder *byte, value *byte, dest_type *byte, name string) *byte {
+    return c_build_sext(builder, value, dest_type, name)
+}
+
 pub fn build_icmp(builder *byte, predicate i32, lhs *byte, rhs *byte, name string) *byte {
     return c_build_icmp(builder, predicate, lhs, rhs, name)
 }
@@ -187,6 +262,36 @@ pub fn build_cond_br(builder *byte, cond *byte, then_block *byte, else_block *by
 
 pub fn build_call2(builder *byte, function_type *byte, function *byte, args *byte, arg_count i32, name string) *byte {
     return c_build_call2(builder, function_type, function, args, arg_count, name)
+}
+
+pub fn build_call1(builder *byte, function_type *byte, function *byte, arg0 *byte, name string) *byte {
+    arg := arg0
+    return c_build_call2(builder, function_type, function, &arg, 1, name)
+}
+
+pub fn build_call_args2(builder *byte, function_type *byte, function *byte, arg0 *byte, arg1 *byte, name string) *byte {
+    args := RefArgs2{arg0: arg0, arg1: arg1}
+    return c_build_call2(builder, function_type, function, &args, 2, name)
+}
+
+pub fn build_call_args3(builder *byte, function_type *byte, function *byte, arg0 *byte, arg1 *byte, arg2 *byte, name string) *byte {
+    args := RefArgs3{arg0: arg0, arg1: arg1, arg2: arg2}
+    return c_build_call2(builder, function_type, function, &args, 3, name)
+}
+
+pub fn build_call_args4(builder *byte, function_type *byte, function *byte, arg0 *byte, arg1 *byte, arg2 *byte, arg3 *byte, name string) *byte {
+    args := RefArgs4{arg0: arg0, arg1: arg1, arg2: arg2, arg3: arg3}
+    return c_build_call2(builder, function_type, function, &args, 4, name)
+}
+
+pub fn build_call_args5(builder *byte, function_type *byte, function *byte, arg0 *byte, arg1 *byte, arg2 *byte, arg3 *byte, arg4 *byte, name string) *byte {
+    args := RefArgs5{arg0: arg0, arg1: arg1, arg2: arg2, arg3: arg3, arg4: arg4}
+    return c_build_call2(builder, function_type, function, &args, 5, name)
+}
+
+pub fn build_call_args6(builder *byte, function_type *byte, function *byte, arg0 *byte, arg1 *byte, arg2 *byte, arg3 *byte, arg4 *byte, arg5 *byte, name string) *byte {
+    args := RefArgs6{arg0: arg0, arg1: arg1, arg2: arg2, arg3: arg3, arg4: arg4, arg5: arg5}
+    return c_build_call2(builder, function_type, function, &args, 6, name)
 }
 
 pub fn build_struct_gep2(builder *byte, type_ref *byte, pointer *byte, index i32, name string) *byte {
