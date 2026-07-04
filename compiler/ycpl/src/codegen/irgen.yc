@@ -3291,10 +3291,14 @@ pub fn emit_project(root string, out_dir string) IrResult {
         return fail_supported(1, 1, project_body.message)
     }
 
-    b = builder_text(b, "\n; project statement/expression lowering generated through std/llvm wrappers\n")
-    b = builder_text(b, project_body.merge_text)
-    b = builder_text(b, "\n; node sequence probe generated through std/llvm wrappers\n")
-    b = builder_text(b, local_return.merge_text)
+    merge_cap := b.len + str.len(project_body.merge_text) + str.len(local_return.merge_text) + 4096
+    merged := builder_new(merge_cap)
+    merged = builder_text(merged, b.data)
+    merged = builder_text(merged, "\n; project statement/expression lowering generated through std/llvm wrappers\n")
+    merged = builder_text(merged, project_body.merge_text)
+    merged = builder_text(merged, "\n; node sequence probe generated through std/llvm wrappers\n")
+    merged = builder_text(merged, local_return.merge_text)
+    b = merged
     if !b.ok {
         return fail_supported(1, 1, "project LLVM IR builder overflow")
     }

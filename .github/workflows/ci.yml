@@ -51,6 +51,19 @@ jobs:
       - name: Install LLVM 22 for CMake fallback
         run: scripts/setup-llvm.sh 22
 
+      - name: Export LLVM 22 environment
+        run: |
+          eval "$(scripts/setup-llvm.sh 22 --print-env)"
+          {
+            echo "LLVM_CONFIG=$LLVM_CONFIG"
+            echo "LLVM_BINDIR=$LLVM_BINDIR"
+            echo "LLVM_DIR=$LLVM_DIR"
+            echo "LLC=$LLVM_BINDIR/llc"
+            echo "CLANG=$LLVM_BINDIR/clang"
+            echo "LINKFLAGS=--no-pie"
+          } >> "$GITHUB_ENV"
+          echo "$LLVM_BINDIR" >> "$GITHUB_PATH"
+
       - name: Summarize pull request changes
         if: github.event_name == 'pull_request'
         run: |
@@ -86,12 +99,32 @@ jobs:
             bazel-${{ runner.os }}-
 
       - name: Build with Bazel
-        run: bazel build //...
+        run: |
+          bazel build \
+            --action_env=LLVM_CONFIG \
+            --action_env=LLVM_BINDIR \
+            --action_env=LLC \
+            --action_env=CLANG \
+            --action_env=LINKFLAGS \
+            //...
 
       - name: Check YCPL compiler gates
         run: |
-          bazel build //:ycc //:ycc-ycpl
-          bazel test --test_timeout=1800 //:examples_test //:lsp_protocol_test //:ycc_ycpl_test //:self_host_stage_test
+          bazel build \
+            --action_env=LLVM_CONFIG \
+            --action_env=LLVM_BINDIR \
+            --action_env=LLC \
+            --action_env=CLANG \
+            --action_env=LINKFLAGS \
+            //:ycc //:ycc-ycpl
+          bazel test \
+            --action_env=LLVM_CONFIG \
+            --action_env=LLVM_BINDIR \
+            --action_env=LLC \
+            --action_env=CLANG \
+            --action_env=LINKFLAGS \
+            --test_timeout=1800 \
+            //:examples_test //:lsp_protocol_test //:ycc_ycpl_test //:self_host_stage_test
 
       - name: Check YCPL selfhost smoke commands
         run: |
@@ -192,7 +225,15 @@ jobs:
           check_exit_13 /tmp/ycpl-ci-forward/merged
 
       - name: Test with Bazel
-        run: bazel test --test_timeout=1800 //...
+        run: |
+          bazel test \
+            --action_env=LLVM_CONFIG \
+            --action_env=LLVM_BINDIR \
+            --action_env=LLC \
+            --action_env=CLANG \
+            --action_env=LINKFLAGS \
+            --test_timeout=1800 \
+            //...
 
       - name: Run compiler regression examples
         run: examples/run_tests.sh
