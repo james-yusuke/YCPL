@@ -1,0 +1,12 @@
+extern fn llvm_context_create() *byte as "LLVMContextCreate"
+extern fn llvm_context_dispose(ctx *byte) as "LLVMContextDispose"
+
+fn cleanup(ctx *byte) {
+    llvm_context_dispose(ctx)
+}
+
+fn main() i32 {
+    ctx := llvm_context_create()
+    cleanup(ctx)
+    return 13
+}

@@ -91,6 +91,10 @@ add_library(ycclib
     bootstrap/cpp/src/lexer/lexer.cpp
     bootstrap/cpp/src/parser/parser.cpp
     bootstrap/cpp/src/codegen/codegen.cpp
+    bootstrap/cpp/src/codegen/core.cpp
+    bootstrap/cpp/src/codegen/dispatch.cpp
+    bootstrap/cpp/src/codegen/pipeline.cpp
+    bootstrap/cpp/src/codegen/scope.cpp
     bootstrap/cpp/src/ast/ast.cpp
     bootstrap/cpp/src/module/json.cpp
     bootstrap/cpp/src/module/resolver.cpp
@@ -107,7 +111,8 @@ if(LLVM_LIBRARY_DIRS)
 endif()
 
 add_executable(ycc
-    bootstrap/cpp/tools/cli/ycc/ycc.cpp
+    bootstrap/cpp/src/cli/driver.cpp
+    bootstrap/cpp/src/cli/ycc.cpp
 )
 
 target_link_libraries(ycc PRIVATE ycclib)

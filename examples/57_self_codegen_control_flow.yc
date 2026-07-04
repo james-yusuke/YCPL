@@ -1,0 +1,10 @@
+fn main() i32 {
+    total := 0
+    if total == 0 {
+        total = total + 3
+    }
+    for (i := 0; i < 5; i = i + 1) {
+        total = total + 2
+    }
+    return total
+}

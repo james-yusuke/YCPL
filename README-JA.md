@@ -50,7 +50,7 @@ YCPL
 
 ```text
 Repository
-├─ bootstrap/cpp/   C++ bootstrap compiler 実装
+├─ bootstrap/cpp/   C++ bootstrap compiler。src/cli と codegen subsystem を分離
 ├─ compiler/ycpl/   YCPL 製 compiler、lex/parse milestone
 ├─ stl/std/         YCPL 標準ライブラリ
 ├─ examples/        .yc サンプルと回帰テスト
@@ -142,7 +142,8 @@ cd examples/04_module_project && ../../bazel-bin/ycc build
    ├─ YCPL で実装
    ├─ YCPL source を lex/parse
    ├─ 小さな self-codegen subset を型検査
-   ├─ i32 main、local、assignment、call、arithmetic、return は LLVM IR を直接生成
+   ├─ i32 main、local、assignment、複数の 0/1/2 引数 i32 helper call、arithmetic、return は LLVM IR を直接生成
+   ├─ function signature を先に宣言し、main から後続 helper を呼べる
    ├─ その subset は bootstrap ycc なしで native binary まで生成
    ├─ src/**/*.yc traversal で compiler/ycpl を parse/check
    ├─ project AST 由来の function-name digest と main presence を保持
@@ -154,6 +155,8 @@ cd examples/04_module_project && ../../bazel-bin/ycc build
    ├─ std/llvm C API wrapper 経由で local/assignment/call/return node probe IR を生成
    ├─ std/llvm C API wrapper 経由で project statement/expression lowering IR を生成
    ├─ local/assignment/call/return body node を専用 alloca/load/store/call lowering に分岐
+   ├─ lower 済み local/assignment/call/return node state を各 generated function-body の戻り値へ合成
+   ├─ semantic role を symbol-env、value-state、control-state、assignment/call/return value-flow IR へ lower
    ├─ compiler/ycpl の parser body arena を per-function slot と全関数 aggregate data として LLVM alloca/call/branch/loop IR に lower
    ├─ per-function body slot table の count/max/digest を parse/check と生成 IR で gate
    ├─ parser-owned body-node arena から identifier/literal/type/control payload table を保持
@@ -167,18 +170,27 @@ cd examples/04_module_project && ../../bazel-bin/ycc build
    ├─ per-function expression table を function body LLVM lowering に投入
    ├─ identifier/literal/call/member/index/binary/unary expression node を専用 LLVM lowering path に分岐
    ├─ binary operator tag を保持し、add/sub/mul/div/rem/compare node を LLVM arithmetic/comparison wrapper で lower
+   ├─ expression node value-state を蓄積し、function-body environment lowering に合成
+   ├─ expression value-state を assignment、return、body value-state lowering へ戻して反映
+   ├─ per-function expression node を statement-owned body-node count から lower し、残りの tail expression を後続で処理
+   ├─ parser-owned statement-expression link count、tail expression count、digest を project parse/check と生成 IR gate に公開
+   ├─ else/break/continue/for-in body node を記録し、control-surface LLVM wrapper path に lower
    ├─ 小さな代表 sample だけではなく、1024-node cap の拡張 per-function expression node sequence を project_body.ll に lower
    ├─ 600+ expression lowering floor を生成 stage2/stage3 IR の自己検査へ引き継ぐ
-   ├─ compiler/ycpl の先頭 32 個の function body に対して per-function LLVM lowering function を生成
-   ├─ compiler/ycpl の function body 0 から 383 までを range bucket LLVM lowering として生成
+   ├─ compiler/ycpl の先頭 64 個の function body に対して per-function LLVM lowering function を生成
+   ├─ compiler/ycpl の function body 0 から 447 までを range bucket LLVM lowering として生成
+   ├─ 先頭 64 個以降も ycpl_project_function_body_400 などの individual per-function LLVM lowerer として生成
    ├─ metadata/source position/payload table/semantic role 付き可変長 body-node arena を node-sequence LLVM IR block に lower
    ├─ compiler/ycpl source 内の zero-argument i32 constant-return function を lower
    ├─ YCPL_NO_BOOTSTRAP=1 で compiler/ycpl の project LLVM IR を生成
    ├─ project AST IR を bootstrap ycc なしで native smoke binary に変換
    ├─ 生成された stage2 binary は parse/check/build-ir compiler/ycpl に対応
    ├─ 生成された stage2 binary は native stage3 compiler-smoke output を build 可能
-   ├─ 生成された stage3 binary は parse/check/build-ir compiler/ycpl に対応し stage4 LLVM IR を出力可能
-   ├─ 生成された stage2 binary は source 内容で tiny example input を別々の IR に lower
+   ├─ 生成された stage3 binary は parse/check/build-ir/build compiler/ycpl に対応し stage4 LLVM IR/native output を出力可能
+   ├─ 生成された stage4 binary は parse/check/build-ir/build compiler/ycpl に対応し stage5 LLVM IR/native output を出力可能
+   ├─ 生成された stage3 binary は source 内容で tiny arithmetic、call/assignment、control-flow、else/helper、1 引数 i32 helper-call、multi-helper chain、2 引数 helper-call、forward helper-call input を別々の IR/native output に lower
+   ├─ 生成された stage2 binary は source 内容で tiny arithmetic、call/assignment、control-flow、else/helper、1 引数 i32 helper-call、multi-helper chain、2 引数 helper-call、forward helper-call input を別々の IR に lower
+   ├─ 生成された stage2/stage3 binary は未対応 file build-ir input を project compiler IR として成功扱いしない
    └─ 未対応の build/build-ir input は bootstrap ycc に委譲
 ```
 
@@ -201,6 +213,12 @@ bazel-bin/ycc-ycpl check examples/53_self_codegen_main.yc
 bazel-bin/ycc-ycpl build-ir-self examples/53_self_codegen_main.yc -o /tmp/ycpl-self-tiny
 bazel-bin/ycc-ycpl build examples/54_self_codegen_arithmetic.yc -o /tmp/ycpl-self-native
 bazel-bin/ycc-ycpl build examples/56_self_codegen_call_assignment.yc -o /tmp/ycpl-self-call
+bazel-bin/ycc-ycpl build examples/57_self_codegen_control_flow.yc -o /tmp/ycpl-self-control
+bazel-bin/ycc-ycpl build examples/58_self_codegen_else_helper.yc -o /tmp/ycpl-self-else
+bazel-bin/ycc-ycpl build examples/59_self_codegen_param_call.yc -o /tmp/ycpl-self-param
+bazel-bin/ycc-ycpl build examples/60_self_codegen_helper_chain.yc -o /tmp/ycpl-self-chain
+bazel-bin/ycc-ycpl build examples/61_self_codegen_two_arg_call.yc -o /tmp/ycpl-self-twoarg
+bazel-bin/ycc-ycpl build examples/62_self_codegen_forward_call.yc -o /tmp/ycpl-self-forward
 bazel-bin/ycc-ycpl parse compiler/ycpl
 bazel-bin/ycc-ycpl check compiler/ycpl
 bazel-bin/ycc-ycpl build-ir compiler/ycpl -o /tmp/ycpl-self-ir
@@ -214,29 +232,37 @@ YCPL_NO_BOOTSTRAP=1 bazel-bin/ycc-ycpl build compiler/ycpl -o /tmp/ycpl-strict-n
 stage-2 gate
 ├─ compiler/ycpl project parse/check は ycc-ycpl 側で処理
 ├─ src/ast や src/codegen のような nested source folder は src/**/*.yc traversal で検出
-├─ tiny arithmetic/call build は YCPL_NO_BOOTSTRAP=1 で実行可能
+├─ tiny arithmetic/call/control-flow/else-helper/1 引数 i32 helper-call/multi-helper chain/2 引数 helper-call/forward helper-call build は YCPL_NO_BOOTSTRAP=1 で実行可能
 ├─ project build-ir は bootstrap fallback なしで実行
 ├─ project build-ir は LLVM C API wrapper 経由で local_return.ll と project_body.ll を生成
 ├─ merged.ll は local、assignment、call、return、transition、if/for control flow 用の LLVM-wrapper-generated node probe を含む
 ├─ merged.ll は LLVM-wrapper-generated project statement/expression lowering を呼び出す
 ├─ project_body.ll は source-derived constant-return、parser-owned per-function slot、全関数 body lowering、metadata/payload-table/semantic-role 付き body-node arena lowering を含む
+├─ project_body.ll は local/assignment/call/return node state を function ごとに accumulator へ lower し、function_body_lowered_total で返す
+├─ project_body.ll は semantic-role data を symbol environment、value state、control state、assignment/call/return value-flow IR へ lower
 ├─ project parse/check と生成 IR は declaration/import/module symbol table summary を gate
 ├─ project parse/check と生成 IR は parser-owned expression node table と digest を gate
 ├─ project_body.ll は per-function expression slot metadata を LLVM-wrapper-generated IR に lower
 ├─ project_body.ll は body-node lowering と per-function expression node/slot/digest lowering を結合
 ├─ project_body.ll は parser-owned expression node kind を identifier/literal/call/member/index/binary/unary LLVM IR lowering に分岐
 ├─ project_body.ll は parser-owned binary operator tag を LLVM add/sub/mul/sdiv/srem/icmp 命令へ lower
+├─ project_body.ll は function_expr_value_state を蓄積し、function_expr_lowered_value_state を function_body_expr_value_environment へ合成
+├─ project_body.ll は parser-owned else/break/continue/for-in control-surface node を lower
 ├─ project_body.ll は 600+ node の拡張 expression lowering sequence 用に function_expr_lowered_nodes と function_expression_sequence_lowered を記録
 ├─ 生成された stage2/stage3 IR は ycpl_stage_expr_lowered_floor で expression lowering floor を gate
-├─ project_body.ll は ycpl_project_function_body_0 から ycpl_project_function_body_31 までを生成
-├─ project_body.ll は ycpl_project_function_body_range_0_63 から ycpl_project_function_body_range_320_383 までの range bucket lowerer を生成
+├─ project_body.ll は ycpl_project_function_body_0 から ycpl_project_function_body_63 に加え、ycpl_project_function_body_400 など 64+ の dynamic per-function lowerer を生成
+├─ project_body.ll は ycpl_project_function_body_range_0_63 から ycpl_project_function_body_range_384_447 までの range bucket lowerer を生成
+├─ project_body.ll は dynamic per-function call を function_body_all_individual_lowered へ合成
 ├─ project parse/check は src/ast/shape.yc 由来の typed AST shape count と typed digest を出す
 ├─ project AST IR は function symbol、body node、expression-table、typed AST、main presence、return-expression gate を含む
 ├─ project AST IR は native smoke binary まで変換可能
 ├─ 生成された stage2 binary は stage3 LLVM IR を出力可能
 ├─ 生成された stage2 binary は llc/clang で stage3 native output を build 可能
-├─ 生成された stage3 native output は compiler/ycpl を parse/check し、llc-valid な stage4 IR を出力可能
-├─ 生成された stage2 binary は examples/54 と renamed copy を exit code 13 の native に build
+├─ 生成された stage3 native output は compiler/ycpl を parse/check し、llc-valid な stage4 IR/native output を出力可能
+├─ 生成された stage4 native output は compiler/ycpl を parse/check し、llc-valid な stage5 IR/native output を出力可能
+├─ 生成された stage3 native output は tiny arithmetic、call/assignment、control-flow、else/helper、1 引数 i32 helper-call、multi-helper chain、2 引数 helper-call、forward helper-call input を exit code 13 の native に lower
+├─ 生成された stage2/stage3 native output は未対応 file build-ir input を project compiler IR として成功扱いしない
+├─ 生成された stage2 binary は examples/54、examples/59、examples/60、examples/61、examples/62、renamed copy を exit code 13 の native に build
 └─ compiler として等価な build/native codegen は次段で対応
 ```
 

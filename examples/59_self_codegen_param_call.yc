@@ -1,0 +1,9 @@
+fn inc(x i32) i32 {
+    return x + 6
+}
+
+fn main() i32 {
+    base := 7
+    total := inc(base)
+    return total
+}

@@ -1,0 +1,7 @@
+fn main() i32 {
+    sum := 1
+    for (i := 0; i < 4; i = i + 1) {
+        sum = sum + 3
+    }
+    return sum
+}

@@ -2,10 +2,20 @@ name: CI
 
 on:
   pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+  merge_group:
   workflow_dispatch:
 
 permissions:
   contents: read
+
+concurrency:
+  group: ycpl-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   verify:
@@ -78,8 +88,111 @@ jobs:
       - name: Build with Bazel
         run: bazel build //...
 
+      - name: Check YCPL compiler gates
+        run: |
+          bazel build //:ycc //:ycc-ycpl
+          bazel test --test_timeout=1800 //:examples_test //:lsp_protocol_test //:ycc_ycpl_test //:self_host_stage_test
+
+      - name: Check YCPL selfhost smoke commands
+        run: |
+          bazel-bin/ycc-ycpl parse compiler/ycpl
+          bazel-bin/ycc-ycpl check compiler/ycpl
+          YCPL_NO_BOOTSTRAP=1 bazel-bin/ycc-ycpl build-ir compiler/ycpl -o /tmp/ycpl-ci-self-ir
+          test -f /tmp/ycpl-ci-self-ir/merged.ll
+          grep -q 'define i32 @main' /tmp/ycpl-ci-self-ir/merged.ll
+          grep -q '@.stage3.stage4.ir' /tmp/ycpl-ci-self-ir/merged.ll
+          grep -q '@.stage3.tinyelse.ir' /tmp/ycpl-ci-self-ir/merged.ll
+          grep -q '@.stage3.tinycontrol.ir' /tmp/ycpl-ci-self-ir/merged.ll
+          grep -q '@.stage3.tinychain.ir' /tmp/ycpl-ci-self-ir/merged.ll
+          grep -q '@.stage3.tinytwoarg.ir' /tmp/ycpl-ci-self-ir/merged.ll
+          grep -q '@.stage3.tinyparam.ir' /tmp/ycpl-ci-self-ir/merged.ll
+          grep -q '@.stage3.tinycall.ir' /tmp/ycpl-ci-self-ir/merged.ll
+          grep -q '@.ycpl.tinychain.ir' /tmp/ycpl-ci-self-ir/merged.ll
+          grep -q '@.ycpl.tinytwoarg.ir' /tmp/ycpl-ci-self-ir/merged.ll
+          grep -q '@.ycpl.tinyparam.ir' /tmp/ycpl-ci-self-ir/merged.ll
+          grep -q 'YCPL stage5 AST IR' /tmp/ycpl-ci-self-ir/merged.ll
+          grep -q 'define ptr @ycpl_stage3_select_ir' /tmp/ycpl-ci-self-ir/merged.ll
+          grep -q 'define i32 @ycpl_project_function_body_63' /tmp/ycpl-ci-self-ir/merged.ll
+          grep -q 'define i32 @ycpl_project_function_body_400' /tmp/ycpl-ci-self-ir/merged.ll
+          grep -q 'define i32 @ycpl_project_function_body_range_384_447' /tmp/ycpl-ci-self-ir/merged.ll
+          grep -q 'function_body_first64_slots_lowered' /tmp/ycpl-ci-self-ir/merged.ll
+          grep -q 'function_body_all_individual_lowered' /tmp/ycpl-ci-self-ir/merged.ll
+          grep -q 'function_body_dynamic_lowered_400' /tmp/ycpl-ci-self-ir/merged.ll
+          grep -q 'function_body_range6_lowered' /tmp/ycpl-ci-self-ir/merged.ll
+          grep -q 'function_body_local_state' /tmp/ycpl-ci-self-ir/merged.ll
+          grep -q 'function_body_assignment_state' /tmp/ycpl-ci-self-ir/merged.ll
+          grep -q 'function_body_call_state' /tmp/ycpl-ci-self-ir/merged.ll
+          grep -q 'function_body_return_state' /tmp/ycpl-ci-self-ir/merged.ll
+          grep -q 'function_body_symbol_env' /tmp/ycpl-ci-self-ir/merged.ll
+          grep -q 'function_body_value_state' /tmp/ycpl-ci-self-ir/merged.ll
+          grep -q 'function_body_control_state' /tmp/ycpl-ci-self-ir/merged.ll
+          grep -q 'function_body_assignment_value_flow' /tmp/ycpl-ci-self-ir/merged.ll
+          grep -q 'function_body_call_value_flow' /tmp/ycpl-ci-self-ir/merged.ll
+          grep -q 'function_body_return_value_flow' /tmp/ycpl-ci-self-ir/merged.ll
+          grep -q 'function_body_lowered_environment_state' /tmp/ycpl-ci-self-ir/merged.ll
+          grep -q 'function_body_lowered_statement_state' /tmp/ycpl-ci-self-ir/merged.ll
+          grep -q 'function_body_lowered_total' /tmp/ycpl-ci-self-ir/merged.ll
+          grep -q 'function_expr_value_state' /tmp/ycpl-ci-self-ir/merged.ll
+          grep -q 'function_expr_literal_value_state' /tmp/ycpl-ci-self-ir/merged.ll
+          grep -q 'function_expr_call_value_state' /tmp/ycpl-ci-self-ir/merged.ll
+          grep -q 'function_expr_binary_value_state' /tmp/ycpl-ci-self-ir/merged.ll
+          grep -q 'function_expr_binary_value_cmp' /tmp/ycpl-ci-self-ir/merged.ll
+          grep -q 'function_expr_lowered_value_state' /tmp/ycpl-ci-self-ir/merged.ll
+          grep -q 'function_body_expr_value_environment' /tmp/ycpl-ci-self-ir/merged.ll
+          grep -q 'function_expr_value_for_statement' /tmp/ycpl-ci-self-ir/merged.ll
+          grep -q 'function_body_assignment_expr_value' /tmp/ycpl-ci-self-ir/merged.ll
+          grep -q 'function_body_return_expr_value' /tmp/ycpl-ci-self-ir/merged.ll
+          grep -q 'function_body_value_expr_value' /tmp/ycpl-ci-self-ir/merged.ll
+          grep -q 'function_statement_expr_value' /tmp/ycpl-ci-self-ir/merged.ll
+          grep -q 'function_body_statement_expr_value_flow' /tmp/ycpl-ci-self-ir/merged.ll
+          grep -q 'function_statement_expr_ownership_score' /tmp/ycpl-ci-self-ir/merged.ll
+          grep -q 'function_body_owned_expr_sum' /tmp/ycpl-ci-self-ir/merged.ll
+          grep -q 'function_tail_expr_value' /tmp/ycpl-ci-self-ir/merged.ll
+          grep -q 'function_body_tail_expr_value_flow' /tmp/ycpl-ci-self-ir/merged.ll
+          grep -q '@ycpl_ast_stmt_expr_links' /tmp/ycpl-ci-self-ir/merged.ll
+          grep -q '@ycpl_ast_stmt_expr_tail_nodes' /tmp/ycpl-ci-self-ir/merged.ll
+          grep -q '@ycpl_ast_stmt_expr_digest' /tmp/ycpl-ci-self-ir/merged.ll
+          grep -q 'load i32, ptr @ycpl_ast_stmt_expr_links' /tmp/ycpl-ci-self-ir/merged.ll
+          grep -q 'load i32, ptr @ycpl_ast_stmt_expr_digest' /tmp/ycpl-ci-self-ir/merged.ll
+          grep -q 'ret ptr null' /tmp/ycpl-ci-self-ir/merged.ll
+          grep -q 'icmp eq ptr %irtext, null' /tmp/ycpl-ci-self-ir/merged.ll
+
+      - name: Check YCPL merge readiness
+        run: |
+          set -euo pipefail
+
+          check_exit_13() {
+            local bin="$1"
+            set +e
+            "$bin"
+            local status="$?"
+            set -e
+            if [ "$status" -ne 13 ]; then
+              echo "Expected $bin to exit 13, got $status" >&2
+              exit 1
+            fi
+          }
+
+          YCPL_NO_BOOTSTRAP=1 bazel-bin/ycc-ycpl build examples/57_self_codegen_control_flow.yc -o /tmp/ycpl-ci-control
+          check_exit_13 /tmp/ycpl-ci-control/merged
+
+          YCPL_NO_BOOTSTRAP=1 bazel-bin/ycc-ycpl build examples/58_self_codegen_else_helper.yc -o /tmp/ycpl-ci-else
+          check_exit_13 /tmp/ycpl-ci-else/merged
+
+          YCPL_NO_BOOTSTRAP=1 bazel-bin/ycc-ycpl build examples/59_self_codegen_param_call.yc -o /tmp/ycpl-ci-param
+          check_exit_13 /tmp/ycpl-ci-param/merged
+
+          YCPL_NO_BOOTSTRAP=1 bazel-bin/ycc-ycpl build examples/60_self_codegen_helper_chain.yc -o /tmp/ycpl-ci-chain
+          check_exit_13 /tmp/ycpl-ci-chain/merged
+
+          YCPL_NO_BOOTSTRAP=1 bazel-bin/ycc-ycpl build examples/61_self_codegen_two_arg_call.yc -o /tmp/ycpl-ci-twoarg
+          check_exit_13 /tmp/ycpl-ci-twoarg/merged
+
+          YCPL_NO_BOOTSTRAP=1 bazel-bin/ycc-ycpl build examples/62_self_codegen_forward_call.yc -o /tmp/ycpl-ci-forward
+          check_exit_13 /tmp/ycpl-ci-forward/merged
+
       - name: Test with Bazel
-        run: bazel test //...
+        run: bazel test --test_timeout=1800 //...
 
       - name: Run compiler regression examples
         run: examples/run_tests.sh
@@ -104,7 +217,10 @@ jobs:
             echo "| Compiler configure | \`cmake -S . -B build -DLLVM_DIR=/usr/lib/llvm-22/cmake\` |"
             echo "| Compiler build | \`cmake --build build\` |"
             echo "| Bazel build | \`bazel build //...\` |"
-            echo "| Bazel test | \`bazel test //...\` |"
+            echo "| YCPL compiler gates | \`bazel test --test_timeout=1800 //:examples_test //:lsp_protocol_test //:ycc_ycpl_test //:self_host_stage_test\` |"
+            echo "| YCPL selfhost smoke | \`YCPL_NO_BOOTSTRAP=1 bazel-bin/ycc-ycpl build-ir compiler/ycpl -o /tmp/ycpl-ci-self-ir\` |"
+            echo "| YCPL merge readiness | \`YCPL_NO_BOOTSTRAP=1 bazel-bin/ycc-ycpl build examples/57..62 -o /tmp/ycpl-ci-*\` |"
+            echo "| Bazel test | \`bazel test --test_timeout=1800 //...\` |"
             echo "| Compiler examples | \`examples/run_tests.sh\` |"
             echo "| VSCode extension | \`npm ci --prefix editors/vscode && npm run check --prefix editors/vscode\` |"
             echo "| LSP protocol | \`tools/lsp/run_tests.sh\` |"

@@ -1,0 +1,10 @@
+fn label() string {
+    return "ycpl"
+}
+
+fn main() i32 {
+    message: string = label()
+    other := "compiler"
+    message = other
+    return 13
+}

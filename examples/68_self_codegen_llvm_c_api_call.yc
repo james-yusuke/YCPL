@@ -1,0 +1,8 @@
+extern fn llvm_context_create() *byte as "LLVMContextCreate"
+extern fn llvm_module_create_with_name_in_context(name string, ctx *byte) *byte as "LLVMModuleCreateWithNameInContext"
+
+fn main() i32 {
+    ctx := llvm_context_create()
+    module_ref := llvm_module_create_with_name_in_context("ycpl", ctx)
+    return 13
+}

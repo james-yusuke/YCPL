@@ -1,5 +1,7 @@
 #pragma once
 #include "../ast/ast.h"
+#include "arrays/layout.h"
+#include "common.h"
 #include <llvm/IR/IRBuilder.h>
 #include <llvm/IR/LLVMContext.h>
 #include <llvm/IR/Module.h>
@@ -9,6 +11,7 @@
 #include <map>
 #include <memory>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 namespace codegen
@@ -29,6 +32,7 @@ namespace codegen
         llvm::Module *get_module() { return module.get(); }
 
     private:
+        // Core LLVM state, owned for the lifetime of one compilation.
         llvm::LLVMContext context;
         std::unique_ptr<llvm::Module> module;
         llvm::IRBuilder<> builder;
@@ -37,17 +41,20 @@ namespace codegen
 
         bool irdebug = false;
 
+        // Lexical scopes and local type/const metadata.
         std::vector<std::map<std::string, llvm::Value *>> locals_stack;
         std::vector<std::map<std::string, std::string>> locals_stack_type;
         std::vector<std::map<std::string, bool>> locals_stack_const;
         std::unordered_map<std::string, llvm::Type *> localPointedType;
         std::unordered_map<std::string, llvm::Type *> globalPointedType;
 
+        // Function and loop state shared by expression/statement lowering.
         std::map<std::string, llvm::Function *> function_protos;
 
         std::vector<llvm::BasicBlock *> break_targets;
         std::vector<llvm::BasicBlock *> continue_targets;
 
+        // Struct registry prepared before function body generation.
         std::unordered_map<std::string, llvm::StructType *> struct_types;
         std::unordered_map<std::string, const ast::StructDecl *> struct_decls;
 
@@ -77,10 +84,21 @@ namespace codegen
 
         llvm::Value *castToSameIntType(llvm::Value *v, llvm::Type *targetType);
 
+        llvm::Value *coerce_to_i64(llvm::Value *value, const std::string &label);
+        llvm::Value *coerce_to_i32(llvm::Value *value, const std::string &label);
+        llvm::Value *coerce_to_double(llvm::Value *value, const std::string &label);
+        llvm::Value *coerce_to_i8ptr(llvm::Value *value, const std::string &label);
+
+        llvm::Value *array_header_ptr_from_value(llvm::Value *value, const std::string &label);
+        llvm::Value *array_header_ptr_from_storage_or_value(llvm::Value *value, const std::string &label);
+        llvm::Value *array_header_ptr_from_expr(const ast::Expr *expr, const std::string &label);
+        llvm::Value *array_header_field_ptr(llvm::Value *arrayHeaderPtr, detail::RuntimeArrayField field, const std::string &label);
+        llvm::Value *checked_array_element_data_ptr_from_values(llvm::Value *collectionValue, llvm::Value *indexValue, llvm::Value **elementSizeOut, const std::string &label);
+        llvm::Value *checked_array_element_data_ptr(const ast::Expr *arrayExpr, const ast::Expr *indexExpr, llvm::Value **elementSizeOut);
+
         llvm::Value *create_entry_alloca(llvm::Function *func, llvm::Type *type, const std::string &name);
 
-        /* LLVM IR code generation functions for AST nodes */
-
+        // Expression lowering.
         llvm::Value *codegen_expr(const ast::Expr *e);
         llvm::Value *codegen_literal(const ast::Literal *lit);
         llvm::Value *codegen_byte_array(const ast::ByteArrayLiteral *bal);
@@ -93,6 +111,8 @@ namespace codegen
         llvm::Value *codegen_index(const ast::IndexExpr *ie);
         llvm::Value *codegen_postfix(const ast::PostfixExpr *pe);
         llvm::Value *codegen_index_addr(const ast::IndexExpr *ie);
+
+        // Statement and control-flow lowering.
         llvm::Value *codegen_ifstmt(const ast::IfStmt *ifs);
         llvm::Value *codegen_forstmt(const ast::ForStmt *fs2);
         llvm::Value *codegen_forinstmt(const ast::ForInStmt *fs);
@@ -107,7 +127,7 @@ namespace codegen
         llvm::Value *codegen_vardecl(const ast::VarDecl *vd);
         llvm::Value *codegen_forcstmt(const ast::ForCStyleStmt *fcs);
 
-        llvm::Type *type_eval();
+        // Type and function lowering.
         llvm::Type *get_llvm_type_from_str(const std::string &typeStr, llvm::LLVMContext &ctx);
 
         llvm::Value *codegen_stmt(const ast::Stmt *s);
@@ -119,6 +139,7 @@ namespace codegen
 
         llvm::Type *resolve_type_from_ast(const ast::Type *at);
 
+        // Runtime helpers and local symbol table helpers.
         llvm::FunctionCallee get_printf();
         llvm::Value *make_global_string(const std::string &str, const std::string &name = "");
         void push_scope();
@@ -134,6 +155,7 @@ namespace codegen
         void predeclare_functions(const std::vector<const ast::FuncDecl *> &funcs);
         llvm::Function *get_or_declare_c_function(const std::string &name);
 
+        // Error state.
         void error(const std::string &msg);
         bool failed = false;
     };

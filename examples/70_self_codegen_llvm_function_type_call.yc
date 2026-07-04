@@ -1,0 +1,10 @@
+extern fn llvm_context_create() *byte as "LLVMContextCreate"
+extern fn llvm_int32_type_in_context(ctx *byte) *byte as "LLVMInt32TypeInContext"
+extern fn llvm_function_type(return_type *byte, param_types *byte, param_count i32, is_var_arg i32) *byte as "LLVMFunctionType"
+
+fn main() i32 {
+    ctx := llvm_context_create()
+    i32_type := llvm_int32_type_in_context(ctx)
+    main_type := llvm_function_type(i32_type, none, 0, 0)
+    return 13
+}
