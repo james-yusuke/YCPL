@@ -1,0 +1,11 @@
+extern fn llvm_build_icmp(builder *byte, predicate i32, lhs *byte, rhs *byte, name string) *byte as "LLVMBuildICmp"
+extern fn llvm_build_call2(builder *byte, function_type *byte, function_ref *byte, args *byte, arg_count i32, name string) *byte as "LLVMBuildCall2"
+
+fn main() i32 {
+    builder := none
+    lhs := none
+    rhs := none
+    cmp := llvm_build_icmp(builder, 32, lhs, rhs, "cmp")
+    call_tmp := llvm_build_call2(builder, none, none, none, 0, "call")
+    return 13
+}

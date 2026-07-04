@@ -1,0 +1,14 @@
+fn main() i32 {
+    total := 0
+    flag: bool = total == 0
+    if flag {
+        total = total + 5
+    }
+    flag = !flag
+    if flag {
+        total = total + 100
+    } else {
+        total = total + 8
+    }
+    return total
+}

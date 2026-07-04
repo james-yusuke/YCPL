@@ -1,0 +1,14 @@
+fn seed() i32 {
+    return 2
+}
+
+fn bump(x i32) i32 {
+    extra := seed()
+    return x + extra + 4
+}
+
+fn main() i32 {
+    base := 7
+    total := bump(base)
+    return total
+}

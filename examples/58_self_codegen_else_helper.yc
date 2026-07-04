@@ -1,0 +1,16 @@
+fn base() i32 {
+    return 4
+}
+
+fn main() i32 {
+    total := base()
+    if total > 10 {
+        total = total + 100
+    } else {
+        total = total + 3
+    }
+    for (i := 0; i < 3; i = i + 1) {
+        total = total + 2
+    }
+    return total
+}
