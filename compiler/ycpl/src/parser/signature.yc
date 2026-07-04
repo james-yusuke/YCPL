@@ -3,9 +3,39 @@ module compiler.ycpl.parser.signature
 import "ast/signature" as sig
 import "lexer/lexer" as lexer
 import "lexer/token" as tok
+import "std/str" as str
 
 fn is_type_token(kind i32) bool {
     return kind == tok.ident() || kind == tok.star() || kind == tok.lbrack() || kind == tok.rbrack() || kind == tok.kw_byte()
+}
+
+fn type_kind_from_name(name string) i32 {
+    if str.eq(name, "i32") || str.eq(name, "i64") || str.eq(name, "byte") {
+        return 1
+    }
+    if str.eq(name, "bool") {
+        return 2
+    }
+    if str.eq(name, "string") {
+        return 3
+    }
+    if str.eq(name, "none") || str.eq(name, "void") {
+        return 4
+    }
+    return 0
+}
+
+fn type_kind_from_token(kind i32, text string, pointer_pending bool) i32 {
+    if pointer_pending {
+        return 5
+    }
+    if kind == tok.kw_byte() {
+        return 1
+    }
+    if kind == tok.ident() {
+        return type_kind_from_name(text)
+    }
+    return 0
 }
 
 pub fn parse(path string, source string) SignatureTable {
@@ -19,6 +49,8 @@ pub fn parse(path string, source string) SignatureTable {
     function_param_tokens := 0
     await_return_type := false
     function_has_return := false
+    function_return_type_kind := 0
+    pointer_return_type := false
     function_name := ""
     function_line := 1
     function_col := 1
@@ -43,13 +75,22 @@ pub fn parse(path string, source string) SignatureTable {
         }
 
         if await_return_type {
+            if lx.kind == tok.star() {
+                pointer_return_type = true
+            }
             if is_type_token(lx.kind) {
                 function_has_return = true
+                detected_return_type := type_kind_from_token(lx.kind, lx.lexeme, pointer_return_type)
+                if detected_return_type > 0 && function_return_type_kind == 0 {
+                    function_return_type_kind = detected_return_type
+                }
             }
             if lx.kind == tok.lbrace() || lx.kind == tok.newline() || lx.kind == tok.kw_as() {
-                table = sig.add_function(table, function_line, function_col, function_name, function_params, function_has_return)
+                table = sig.add_function_typed(table, function_line, function_col, function_name, function_params, function_has_return, function_return_type_kind)
                 await_return_type = false
                 function_has_return = false
+                function_return_type_kind = 0
+                pointer_return_type = false
                 function_name = ""
                 function_params = 0
             }
@@ -104,6 +145,8 @@ pub fn parse(path string, source string) SignatureTable {
                     function_param_tokens = 0
                     await_return_type = true
                     function_has_return = false
+                    function_return_type_kind = 0
+                    pointer_return_type = false
                 } else {
                     function_param_tokens += 1
                 }
@@ -154,7 +197,7 @@ pub fn parse(path string, source string) SignatureTable {
     }
 
     if await_return_type {
-        table = sig.add_function(table, function_line, function_col, function_name, function_params, function_has_return)
+        table = sig.add_function_typed(table, function_line, function_col, function_name, function_params, function_has_return, function_return_type_kind)
     }
     return table
 }

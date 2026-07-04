@@ -1,0 +1,5 @@
+fn main() i32 {
+    x := 4
+    x = 31
+    return x
+}

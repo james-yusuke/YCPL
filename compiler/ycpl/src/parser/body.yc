@@ -8,6 +8,10 @@ fn is_assignment(kind i32) bool {
     return kind == tok.assign() || kind == tok.plus_assign() || kind == tok.minus_assign() || kind == tok.mul_assign() || kind == tok.div_assign() || kind == tok.mod_assign()
 }
 
+fn is_declare_assign(kind i32, lexeme string) bool {
+    return kind == tok.assign() && lexeme[0] == ':'
+}
+
 fn is_literal(kind i32) bool {
     return kind == tok.int_lit() || kind == tok.float_lit() || kind == tok.char_lit() || kind == tok.string_lit() || kind == tok.bool_lit() || kind == tok.none_lit()
 }
@@ -174,7 +178,10 @@ fn parse_at(path string, source string, target_index i32, target_count i32) Body
                 seq = astbody.add_with_role(seq, astbody.local_node_kind(), lx.tok_line, lx.tok_col, prev_lexeme, astbody.type_payload_kind(), astbody.local_symbol_role())
                 expression_owner_open = false
             }
-            if is_assignment(lx.kind) {
+            if is_declare_assign(lx.kind, lx.lexeme) && prev_kind == tok.ident() {
+                seq = astbody.add_with_role(seq, astbody.local_node_kind(), lx.tok_line, lx.tok_col, prev_lexeme, astbody.identifier_payload_kind(), astbody.local_symbol_role())
+                expression_owner_open = true
+            } else if is_assignment(lx.kind) {
                 seq = astbody.add_with_role(seq, astbody.assignment_node_kind(), lx.tok_line, lx.tok_col, prev_lexeme, astbody.identifier_payload_kind(), astbody.assignment_target_role())
                 expression_owner_open = true
             }

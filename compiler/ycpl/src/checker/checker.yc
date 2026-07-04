@@ -502,6 +502,10 @@ fn set_var(p TinyParser, name string, value i32, type_kind i32) TinyParser {
     return unsupported_parser(p, "self codegen currently supports up to 8 local variables")
 }
 
+fn is_declare_assign(kind i32, lexeme string) bool {
+    return kind == tok.assign() && lexeme[0] == ':'
+}
+
 fn lookup_helper(p TinyParser, name string) TinyParser {
     if p.helper_count > 0 && str.eq(p.helper0_name, name) {
         p.helper_name = p.helper0_name
@@ -1214,6 +1218,16 @@ fn parse_var_or_assign(p TinyParser) TinyParser {
     name := p.lx.lexeme
     p = advance_sig(p)
     if !p.ok { return p }
+
+    if is_declare_assign(p.lx.kind, p.lx.lexeme) {
+        p = advance_sig(p)
+        p = parse_expr_or_comparison(p)
+        if !p.ok { return p }
+        if p.value_type == tiny_void_type_kind() {
+            return unsupported_parser(p, "self checker cannot store void expression in a local")
+        }
+        return set_var(p, name, p.value, p.value_type)
+    }
 
     if p.lx.kind == tok.colon() {
         p = advance_sig(p)

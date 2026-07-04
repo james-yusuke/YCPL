@@ -262,6 +262,10 @@ pub fn next(lx Lexer) Lexer {
     if ch == ']' { return make_token(lx, tok.rbrack(), start, line, col) }
     if ch == ',' { return make_token(lx, tok.comma(), start, line, col) }
     if ch == '.' { return make_token(lx, tok.dot(), start, line, col) }
+    if ch == ':' && peek(lx, 0) == '=' {
+        lx = advance(lx)
+        return make_token(lx, tok.assign(), start, line, col)
+    }
     if ch == ':' { return make_token(lx, tok.colon(), start, line, col) }
     if ch == ';' { return make_token(lx, tok.semicolon(), start, line, col) }
     if ch == '?' { return make_token(lx, tok.question(), start, line, col) }

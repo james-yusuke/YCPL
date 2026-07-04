@@ -36,6 +36,10 @@ fn hash_name(seed i32, name string) i32 {
     return h
 }
 
+fn is_declare_assign(kind i32, lexeme string) bool {
+    return kind == tok.assign() && lexeme[0] == ':'
+}
+
 fn ok(tokens i32, program Program) ParseResult {
     return ParseResult{ok: true, message: "", line: 1, col: 1, tokens: tokens, decls: program.decls, functions: program.functions, structs: program.structs, imports: program.imports, max_depth: program.max_depth, program: program}
 }
@@ -202,7 +206,10 @@ pub fn parse(path string, source string) ParseResult {
             locals += 1
             statements += 1
         }
-        if lx.kind == tok.assign() || lx.kind == tok.plus_assign() || lx.kind == tok.minus_assign() || lx.kind == tok.mul_assign() || lx.kind == tok.div_assign() || lx.kind == tok.mod_assign() {
+        if is_declare_assign(lx.kind, lx.lexeme) && prev_kind == tok.ident() {
+            locals += 1
+            statements += 1
+        } else if lx.kind == tok.assign() || lx.kind == tok.plus_assign() || lx.kind == tok.minus_assign() || lx.kind == tok.mul_assign() || lx.kind == tok.div_assign() || lx.kind == tok.mod_assign() {
             assignments += 1
             statements += 1
         }
@@ -233,7 +240,7 @@ pub fn parse(path string, source string) ParseResult {
             function_body_tokens += 1
             function_body_digest = function_body_digest * 31 + lx.kind
             function_body_digest = hash_name(function_body_digest, lx.lexeme)
-            if lx.kind == tok.colon() && prev_kind == tok.ident() {
+            if (lx.kind == tok.colon() || is_declare_assign(lx.kind, lx.lexeme)) && prev_kind == tok.ident() {
                 local_decl_digest = local_decl_digest * 31 + prev_kind
                 local_decl_digest = hash_name(local_decl_digest, lx.lexeme)
             }
