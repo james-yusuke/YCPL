@@ -120,7 +120,13 @@ stage-2 self-host gate
 ├─ project_body.ll lowers expression nodes from per-function statement-owned body-node counts, then lowers remaining tail expressions
 ├─ project_body.ll lowers each statement-owned expression count into per-node owner state and value-flow IR
 ├─ statement-owned expression typed values now flow into local/assignment/call/return state according to the owning body node semantic role
+├─ statement-owned expressions now fold into a per-statement AST value before local/assignment/call/return/control lowering, reducing the remaining summary-only body lowering path
+├─ per-statement AST values now feed direct local/assignment/call/return LLVM alloca/store/load/call paths instead of only updating aggregate state
+├─ per-statement AST values now combine with parser/resolver expression type tags and flow into resolved local/assignment/call/return state lowering
 ├─ statement-owned expression typed values also flow into i32/bool/string/pointer/none/unknown type-category state and are folded into the function-body environment
+├─ statement/expression role/type flow lowering now lives in the `codegen/bodyflow.yc` module, with `projectir.yc` calling it through the module boundary
+├─ identifier/literal/call/member/index/binary/unary expression lowering now lives in the `codegen/exprlower.yc` module; index expressions emit LLVM slice-header len/cap, bounds-check branch, and array-type GEP/load IR, while member expressions use parsed member-name hash plus project field-table index to drive bounded LLVM struct GEP/load IR
+├─ local/assignment/call/return/if/for/else/break/continue/for-in body statement lowering now lives in the `codegen/stmtlower.yc` module, leaving `projectir.yc` focused on per-function orchestration
 ├─ the YCPL lexer/parser/checker/tinyir now match the C++ bootstrap by treating `:=` as one ASSIGN token/lexeme and routing local initializers into local statement-expression lowering
 ├─ project parse/check and generated IR expose parser-owned statement-expression link counts, tail expression counts, and digest
 ├─ project_body.ll now tracks function_expr_lowered_nodes and function_expression_sequence_lowered for a 1024-cap, 600+ node expression sequence lowering pass
