@@ -1,0 +1,108 @@
+(* YCPL EBNF. This document tracks the editor-facing language grammar. *)
+
+source_file        = { newline } [ module_decl { newline } ] { import_decl { newline } } { top_level_decl { newline } } ;
+
+module_decl        = ( "module" | "package" ) qualified_name ;
+import_decl        = "import" string_literal [ "as" identifier ] ;
+
+top_level_decl     = function_decl
+                   | extern_function_decl
+                   | intrinsic_function_decl
+                   | struct_decl
+                   | const_decl ;
+
+visibility         = "pub" ;
+function_decl      = [ visibility ] "fn" identifier "(" [ parameter_list ] ")" [ type ] block ;
+extern_function_decl
+                   = [ visibility ] "extern" "fn" identifier "(" [ parameter_list ] ")" [ type ] [ "as" string_literal ] ;
+intrinsic_function_decl
+                   = [ visibility ] "intrinsic" "fn" identifier "(" [ parameter_list ] ")" [ type ] ;
+
+parameter_list     = parameter { "," parameter } ;
+parameter          = identifier type ;
+
+struct_decl        = [ visibility ] "struct" identifier "{" { field_decl newline } "}" ;
+field_decl         = [ visibility ] identifier type ;
+
+const_decl         = "const" identifier [ ":" type ] ":=" expression ;
+
+block              = "{" { statement newline } "}" ;
+statement          = var_decl
+                   | const_decl
+                   | assignment
+                   | if_statement
+                   | for_statement
+                   | return_statement
+                   | break_statement
+                   | continue_statement
+                   | expression ;
+
+var_decl           = [ "mut" ] identifier [ ":" type ] ":=" expression ;
+assignment         = expression assignment_operator expression ;
+assignment_operator
+                   = "=" | "+=" | "-=" | "*=" | "/=" | "%=" ;
+
+if_statement       = "if" expression block [ "else" ( block | if_statement ) ] ;
+for_statement      = "for" ( for_c_style | for_in | expression? ) block ;
+for_c_style        = statement? ";" expression? ";" statement? ;
+for_in             = identifier "in" expression ;
+return_statement   = "return" [ expression ] ;
+break_statement    = "break" ;
+continue_statement = "continue" ;
+
+expression         = logical_or ;
+logical_or         = logical_and { "||" logical_and } ;
+logical_and        = equality { "&&" equality } ;
+equality           = comparison { ( "==" | "!=" ) comparison } ;
+comparison         = additive { ( "<" | "<=" | ">" | ">=" ) additive } ;
+additive           = multiplicative { ( "+" | "-" ) multiplicative } ;
+multiplicative     = unary { ( "*" | "/" | "%" ) unary } ;
+unary              = [ "!" | "-" | "+" | "*" | "&" ] postfix ;
+postfix            = primary { call_suffix | index_suffix | member_suffix } ;
+call_suffix        = "(" [ argument_list ] ")" ;
+index_suffix       = "[" expression "]" ;
+member_suffix      = "." identifier ;
+argument_list      = expression { "," expression } ;
+
+primary            = identifier
+                   | literal
+                   | array_literal
+                   | struct_literal
+                   | "(" expression ")" ;
+
+array_literal      = "[" [ argument_list ] "]" ;
+struct_literal     = identifier "{" [ field_initializer { "," field_initializer } [ "," ] ] "}" ;
+field_initializer  = identifier ":" expression ;
+
+type               = primitive_type
+                   | qualified_name
+                   | "*" type
+                   | "[]" type ;
+primitive_type     = "i32" | "i64" | "bool" | "char" | "byte" | "string" | "float" | "double" | "void" | "size_t" | "Type" | "T" | "any" ;
+
+literal            = integer_literal
+                   | float_literal
+                   | char_literal
+                   | string_literal
+                   | raw_string_literal
+                   | "true"
+                   | "false"
+                   | "none" ;
+
+qualified_name     = identifier { "." identifier } ;
+identifier         = identifier_start { identifier_continue } ;
+identifier_start   = "A".."Z" | "a".."z" | "_" ;
+identifier_continue
+                   = identifier_start | "0".."9" ;
+
+integer_literal    = decimal_literal | hex_literal | binary_literal ;
+decimal_literal    = "0" | "1".."9" { "0".."9" } ;
+hex_literal        = "0x" hex_digit { hex_digit } ;
+binary_literal     = "0b" ( "0" | "1" ) { "0" | "1" } ;
+float_literal      = decimal_literal "." { "0".."9" } ;
+char_literal       = "'" character "'" ;
+string_literal     = '"' { character } '"' ;
+raw_string_literal = "`" { character } "`" ;
+character          = ? any Unicode scalar value, with escapes in normal strings/chars ? ;
+hex_digit          = "0".."9" | "A".."F" | "a".."f" ;
+newline            = "\n" | "\r\n" ;

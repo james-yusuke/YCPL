@@ -2,6 +2,8 @@
 
 [Japanese](language.ja.md) | [Docs index](README.en.md)
 
+Formal grammar: [YCPL EBNF](grammar/ycpl.ebnf)
+
 ```text
 .yc file
 ├─ optional module/package declaration
@@ -29,10 +31,15 @@ top-level statement     -> rejected by codegen
 Identifiers start with a letter or `_`, followed by letters, digits, or `_`.
 
 ```text
-module package import pub extern intrinsic fn struct enum interface const mut
-if else match for in return break continue as is go defer select switch
-true false none or type importas byte
+module package import pub extern intrinsic fn struct const mut
+if else for in return break continue as
+true false none byte
 ```
+
+Reserved tokens such as `enum`, `interface`, `match`, `switch`, `select`,
+`go`, `defer`, `is`, `or`, `type`, and `importas` are intentionally not part of
+the supported grammar yet. They are documented in
+[Implementation status](status.en.md#reserved-but-not-implemented).
 
 ## Modules And Imports
 

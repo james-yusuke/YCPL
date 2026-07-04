@@ -94,42 +94,5 @@
   "indentationRules": {
     "increaseIndentPattern": "^((?!.*//).)*(\\{[^}\"'`]*|\\([^\\)\"'`]*|\\[[^\\]\"'`]*)$",
     "decreaseIndentPattern": "^\\s*(\\}|\\)|\\])"
-  },
-  "onEnterRules": [
-    {
-      "beforeText": "^\\s*/\\*[^*]*$",
-      "afterText": "^\\s*\\*/$",
-      "action": {
-        "indent": "indentOutdent",
-        "appendText": " * "
-      }
-    },
-    {
-      "beforeText": "^\\s*/\\*(?!\\*/)([^*]|\\*(?!/))*$",
-      "action": {
-        "indent": "none",
-        "appendText": " * "
-      }
-    },
-    {
-      "beforeText": "^(.*\\*/)?\\s*\\*/\\s*$",
-      "action": {
-        "indent": "none",
-        "removeText": 1
-      }
-    },
-    {
-      "beforeText": "^.*\\{\\s*$",
-      "afterText": "^\\s*\\}",
-      "action": {
-        "indent": "indentOutdent"
-      }
-    },
-    {
-      "beforeText": "^.*\\{\\s*$",
-      "action": {
-        "indent": "indent"
-      }
-    }
-  ]
+  }
 }

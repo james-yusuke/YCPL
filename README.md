@@ -55,7 +55,7 @@ Repository
 ├─ stl/std/         YCPL standard library modules
 ├─ examples/        .yc smoke/regression programs
 ├─ tools/lsp/       LSP written in YCPL
-├─ editors/vscode/  language extension
+├─ editors/vscode/  VS Code extension and TypeScript LSP packages
 └─ docs/            English/Japanese documentation
 ```
 
@@ -337,20 +337,24 @@ README-JA.md
 VSCode
   |
   v
-YCPL extension -- watches --> **/*.yc
+editors/vscode/extension -- LSP --> editors/vscode/language-server
   |
   v
-tools/lsp/build/YCPL-lsp
+workspace index / diagnostics / symbols / semantic tokens
   |
   v
-hover / completion / symbols / semantic tokens / formatting / rename
+hover / completion / references / formatting / rename / code actions
 ```
 
 ```sh
-npm ci --prefix editors/vscode
-tools/lsp/build.sh
-tools/lsp/run_tests.sh
+npm ci --prefix editors/vscode/language-server
+npm run check --prefix editors/vscode/language-server
+npm ci --prefix editors/vscode/extension
+npm run check --prefix editors/vscode/extension
 ```
+
+The older YCPL-written protocol server remains under `tools/lsp/` and is still
+covered by `tools/lsp/run_tests.sh`.
 
 ## Test Map
 
