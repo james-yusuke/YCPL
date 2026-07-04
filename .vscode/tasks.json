@@ -1,0 +1,62 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "YCPL: install VSCode extension deps",
+      "type": "shell",
+      "command": "npm ci --prefix editors/vscode/extension",
+      "problemMatcher": []
+    },
+    {
+      "label": "YCPL: install language server deps",
+      "type": "shell",
+      "command": "npm ci --prefix editors/vscode/language-server",
+      "problemMatcher": []
+    },
+    {
+      "label": "YCPL: build language server",
+      "type": "shell",
+      "command": "npm run build --prefix editors/vscode/language-server",
+      "problemMatcher": []
+    },
+    {
+      "label": "YCPL: build VSCode extension",
+      "type": "shell",
+      "command": "npm run build --prefix editors/vscode/extension",
+      "problemMatcher": []
+    },
+    {
+      "label": "YCPL: build VSCode extension and LSP",
+      "dependsOrder": "sequence",
+      "dependsOn": [
+        "YCPL: build language server",
+        "YCPL: build VSCode extension"
+      ],
+      "problemMatcher": []
+    },
+    {
+      "label": "YCPL: check TypeScript LSP",
+      "type": "shell",
+      "command": "npm run check --prefix editors/vscode/language-server",
+      "problemMatcher": []
+    },
+    {
+      "label": "YCPL: check VSCode extension",
+      "type": "shell",
+      "command": "npm run check --prefix editors/vscode/extension",
+      "problemMatcher": []
+    },
+    {
+      "label": "YCPL: build LSP",
+      "type": "shell",
+      "command": "tools/lsp/build.sh",
+      "problemMatcher": []
+    },
+    {
+      "label": "YCPL: test LSP protocol",
+      "type": "shell",
+      "command": "tools/lsp/run_tests.sh",
+      "problemMatcher": []
+    }
+  ]
+}
