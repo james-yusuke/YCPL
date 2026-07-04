@@ -1,0 +1,13 @@
+extern fn llvm_build_alloca(builder *byte, type_ref *byte, name string) *byte as "LLVMBuildAlloca"
+extern fn llvm_build_store(builder *byte, value *byte, pointer *byte) *byte as "LLVMBuildStore"
+extern fn llvm_build_load2(builder *byte, type_ref *byte, pointer *byte, name string) *byte as "LLVMBuildLoad2"
+
+fn main() i32 {
+    builder := none
+    i32_type := none
+    value := none
+    slot := llvm_build_alloca(builder, i32_type, "slot")
+    llvm_build_store(builder, value, slot)
+    loaded := llvm_build_load2(builder, i32_type, slot, "loaded")
+    return 13
+}

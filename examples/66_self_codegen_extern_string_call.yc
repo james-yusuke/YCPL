@@ -1,0 +1,10 @@
+extern fn c_strcmp(a string, b string) i32 as "strcmp"
+
+fn label() string {
+    return "ycpl"
+}
+
+fn main() i32 {
+    delta := c_strcmp("ycpl", label())
+    return 13
+}

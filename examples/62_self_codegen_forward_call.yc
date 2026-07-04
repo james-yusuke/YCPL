@@ -1,0 +1,10 @@
+fn main() i32 {
+    left := 5
+    right := 5
+    total := add_pair(left, right)
+    return total
+}
+
+fn add_pair(a i32, b i32) i32 {
+    return a + b + 3
+}

@@ -30,6 +30,21 @@ module compiler.ycpl.generated.deep.smoke
 fn traversal_smoke() i32 {
     return 7
 }
+
+fn traversal_flow_surface(items []i32) i32 {
+    total := 0
+    for item in items {
+        if item == 0 {
+            continue
+        } else {
+            total = total + item
+        }
+        if total > 10 {
+            break
+        }
+    }
+    return total
+}
 YCPL
 "$YCC_YCPL" parse "$traversal_dir/ycpl" >/tmp/ycpl-stage-traversal-parse.out
 if ! grep -q 'files=23' /tmp/ycpl-stage-traversal-parse.out; then
@@ -38,6 +53,12 @@ if ! grep -q 'files=23' /tmp/ycpl-stage-traversal-parse.out; then
   find "$traversal_dir/ycpl/src" -type f -name '*.yc' | sort >&2
   exit 1
 fi
+traversal_ir_dir="$(mktemp -d "${TMPDIR:-/tmp}/ycpl-stage-traversal-ir.XXXXXX")"
+YCPL_NO_BOOTSTRAP=1 "$YCC_YCPL" build-ir "$traversal_dir/ycpl" -o "$traversal_ir_dir" >/tmp/ycpl-stage-traversal-ir.out
+grep -q 'node_lower_else_body' "$traversal_ir_dir/project_body.ll"
+grep -q 'node_lower_break_slot' "$traversal_ir_dir/project_body.ll"
+grep -q 'node_lower_continue_slot' "$traversal_ir_dir/project_body.ll"
+grep -q 'node_lower_for_in_check' "$traversal_ir_dir/project_body.ll"
 grep -q 'files=22' /tmp/ycpl-stage-parse.out
 grep -q 'files=22' /tmp/ycpl-stage-check.out
 grep -q 'fn_digest=' /tmp/ycpl-stage-parse.out
@@ -69,6 +90,8 @@ grep -q 'binary=' /tmp/ycpl-stage-parse.out
 grep -q 'unary=' /tmp/ycpl-stage-parse.out
 grep -q 'slots=' /tmp/ycpl-stage-parse.out
 grep -q 'slot_digest=' /tmp/ycpl-stage-parse.out
+grep -q 'stmt_expr: links=' /tmp/ycpl-stage-parse.out
+grep -q 'tail=' /tmp/ycpl-stage-parse.out
 grep -q 'typed_digest=' /tmp/ycpl-stage-parse.out
 grep -q 'main=1' /tmp/ycpl-stage-check.out
 grep -q 'body_digest=' /tmp/ycpl-stage-check.out
@@ -97,6 +120,8 @@ grep -q 'binary=' /tmp/ycpl-stage-check.out
 grep -q 'unary=' /tmp/ycpl-stage-check.out
 grep -q 'slots=' /tmp/ycpl-stage-check.out
 grep -q 'slot_digest=' /tmp/ycpl-stage-check.out
+grep -q 'stmt_expr: links=' /tmp/ycpl-stage-check.out
+grep -q 'tail=' /tmp/ycpl-stage-check.out
 grep -q 'body_slots=' /tmp/ycpl-stage-check.out
 grep -q 'body_slot_digest=' /tmp/ycpl-stage-check.out
 grep -q 'typed_digest=' /tmp/ycpl-stage-check.out
@@ -118,6 +143,8 @@ if [ ! -f "$strict_ir_dir/project_body.ll" ]; then
   cat /tmp/ycpl-strict-ir.out >&2
   exit 1
 fi
+grep -q 'ret ptr null' "$strict_ir_dir/merged.ll"
+grep -q 'icmp eq ptr %irtext, null' "$strict_ir_dir/merged.ll"
 grep -q 'define i32 @main' "$strict_ir_dir/merged.ll"
 grep -q 'define i32 @ycpl_ast_fn_' "$strict_ir_dir/merged.ll"
 grep -q 'declare i32 @puts' "$strict_ir_dir/merged.ll"
@@ -169,6 +196,9 @@ grep -q '@ycpl_ast_expr_binary_nodes' "$strict_ir_dir/merged.ll"
 grep -q '@ycpl_ast_expr_table_digest' "$strict_ir_dir/merged.ll"
 grep -q '@ycpl_ast_expr_slot_count' "$strict_ir_dir/merged.ll"
 grep -q '@ycpl_ast_expr_slot_digest' "$strict_ir_dir/merged.ll"
+grep -q '@ycpl_ast_stmt_expr_links' "$strict_ir_dir/merged.ll"
+grep -q '@ycpl_ast_stmt_expr_tail_nodes' "$strict_ir_dir/merged.ll"
+grep -q '@ycpl_ast_stmt_expr_digest' "$strict_ir_dir/merged.ll"
 grep -q '@ycpl_ast_symbol_digest' "$strict_ir_dir/merged.ll"
 grep -q 'load i32, ptr @ycpl_ast_body_payload_digest' "$strict_ir_dir/merged.ll"
 grep -q 'load i32, ptr @ycpl_ast_body_semantic_digest' "$strict_ir_dir/merged.ll"
@@ -185,6 +215,8 @@ grep -q 'exprfloorok' "$strict_ir_dir/merged.ll"
 grep -q 'load i32, ptr @ycpl_ast_expr_table_digest' "$strict_ir_dir/merged.ll"
 grep -q 'load i32, ptr @ycpl_ast_expr_slot_count' "$strict_ir_dir/merged.ll"
 grep -q 'load i32, ptr @ycpl_ast_expr_slot_digest' "$strict_ir_dir/merged.ll"
+grep -q 'load i32, ptr @ycpl_ast_stmt_expr_links' "$strict_ir_dir/merged.ll"
+grep -q 'load i32, ptr @ycpl_ast_stmt_expr_digest' "$strict_ir_dir/merged.ll"
 grep -q 'load i32, ptr @ycpl_ast_symbol_digest' "$strict_ir_dir/merged.ll"
 grep -q '@ycpl_ast_body_if_nodes' "$strict_ir_dir/merged.ll"
 grep -q '@ycpl_ast_body_for_nodes' "$strict_ir_dir/merged.ll"
@@ -196,20 +228,32 @@ grep -q 'define i32 @ycpl_project_call_expr_value' "$strict_ir_dir/merged.ll"
 grep -q 'define i32 @ycpl_project_const_return_0' "$strict_ir_dir/merged.ll"
 grep -q 'define i32 @ycpl_project_all_function_bodies' "$strict_ir_dir/merged.ll"
 grep -q 'define i32 @ycpl_project_function_body_0' "$strict_ir_dir/merged.ll"
+grep -q 'define i32 @ycpl_project_dynamic_first_body_0' "$strict_ir_dir/merged.ll"
 grep -q 'define i32 @ycpl_project_function_body_7' "$strict_ir_dir/merged.ll"
 grep -q 'define i32 @ycpl_project_function_body_15' "$strict_ir_dir/merged.ll"
 grep -q 'define i32 @ycpl_project_function_body_31' "$strict_ir_dir/merged.ll"
+grep -q 'define i32 @ycpl_project_function_body_63' "$strict_ir_dir/merged.ll"
+grep -q 'define i32 @ycpl_project_function_body_400' "$strict_ir_dir/merged.ll"
 grep -q 'define i32 @ycpl_project_function_body_range_0_63' "$strict_ir_dir/merged.ll"
+grep -q 'define i32 @ycpl_project_dynamic_range_body_0' "$strict_ir_dir/merged.ll"
 grep -q 'define i32 @ycpl_project_function_body_range_320_383' "$strict_ir_dir/merged.ll"
+grep -q 'define i32 @ycpl_project_function_body_range_384_447' "$strict_ir_dir/merged.ll"
+grep -q 'define i32 @ycpl_project_dynamic_range_body_6' "$strict_ir_dir/merged.ll"
 grep -q 'call i32 @ycpl_project_statement_expr_lowering' "$strict_ir_dir/merged.ll"
 grep -q 'call i32 @ycpl_project_const_return_0' "$strict_ir_dir/merged.ll"
 grep -q 'call i32 @ycpl_project_all_function_bodies' "$strict_ir_dir/merged.ll"
 grep -q 'call i32 @ycpl_project_function_body_0' "$strict_ir_dir/merged.ll"
+grep -q 'call i32 @ycpl_project_dynamic_first_body_0' "$strict_ir_dir/merged.ll"
 grep -q 'call i32 @ycpl_project_function_body_7' "$strict_ir_dir/merged.ll"
 grep -q 'call i32 @ycpl_project_function_body_15' "$strict_ir_dir/merged.ll"
 grep -q 'call i32 @ycpl_project_function_body_31' "$strict_ir_dir/merged.ll"
+grep -q 'call i32 @ycpl_project_function_body_63' "$strict_ir_dir/merged.ll"
+grep -q 'call i32 @ycpl_project_function_body_400' "$strict_ir_dir/merged.ll"
 grep -q 'call i32 @ycpl_project_function_body_range_0_63' "$strict_ir_dir/merged.ll"
+grep -q 'call i32 @ycpl_project_dynamic_range_body_0' "$strict_ir_dir/merged.ll"
 grep -q 'call i32 @ycpl_project_function_body_range_320_383' "$strict_ir_dir/merged.ll"
+grep -q 'call i32 @ycpl_project_function_body_range_384_447' "$strict_ir_dir/merged.ll"
+grep -q 'call i32 @ycpl_project_dynamic_range_body_6' "$strict_ir_dir/merged.ll"
 grep -q 'statement_nodes' "$strict_ir_dir/merged.ll"
 grep -q 'expression_nodes' "$strict_ir_dir/merged.ll"
 grep -q 'expr_table_nodes' "$strict_ir_dir/merged.ll"
@@ -222,13 +266,42 @@ grep -q 'control_function_body_lowered' "$strict_ir_dir/merged.ll"
 grep -q 'function_body_slots_lowered' "$strict_ir_dir/merged.ll"
 grep -q 'function_body_base_slots' "$strict_ir_dir/merged.ll"
 grep -q 'function_body_extra_slots' "$strict_ir_dir/merged.ll"
+grep -q 'function_body_extended_slots' "$strict_ir_dir/merged.ll"
+grep -q 'function_body_first64_slots_lowered' "$strict_ir_dir/merged.ll"
+grep -q 'function_body_all_individual_lowered' "$strict_ir_dir/merged.ll"
+grep -q 'function_body_dynamic_first_lowered_0' "$strict_ir_dir/merged.ll"
+grep -q 'function_body_dynamic_selfhost_gate' "$strict_ir_dir/merged.ll"
+grep -q 'function_body_dynamic_lowered_400' "$strict_ir_dir/merged.ll"
+grep -q 'function_body_dynamic_range_lowered_0' "$strict_ir_dir/merged.ll"
+grep -q 'function_body_dynamic_range_total_6' "$strict_ir_dir/merged.ll"
+grep -q 'function_body_dynamic_range_buckets_lowered' "$strict_ir_dir/merged.ll"
+grep -q 'function_body_dynamic_range_gate' "$strict_ir_dir/merged.ll"
 grep -q 'function_body_second_half' "$strict_ir_dir/merged.ll"
 grep -q 'function_body_tail' "$strict_ir_dir/merged.ll"
+grep -q 'function_body_range6_lowered' "$strict_ir_dir/merged.ll"
+grep -q 'function_body_range_tail' "$strict_ir_dir/merged.ll"
 grep -q 'function_body_ranges_lowered' "$strict_ir_dir/merged.ll"
 grep -q 'function_body_slot_and_range_lowered' "$strict_ir_dir/merged.ll"
 grep -q 'function_body_score' "$strict_ir_dir/merged.ll"
 grep -q 'function_expr_nodes' "$strict_ir_dir/merged.ll"
 grep -q 'function_expr_lowered_nodes' "$strict_ir_dir/merged.ll"
+grep -q 'function_expr_value_state' "$strict_ir_dir/merged.ll"
+grep -q 'function_expr_literal_value_state' "$strict_ir_dir/merged.ll"
+grep -q 'function_expr_call_value_state' "$strict_ir_dir/merged.ll"
+grep -q 'function_expr_binary_value_state' "$strict_ir_dir/merged.ll"
+grep -q 'function_expr_binary_value_cmp' "$strict_ir_dir/merged.ll"
+grep -q 'function_expr_lowered_value_state' "$strict_ir_dir/merged.ll"
+grep -q 'function_body_expr_value_environment' "$strict_ir_dir/merged.ll"
+grep -q 'function_expr_value_for_statement' "$strict_ir_dir/merged.ll"
+grep -q 'function_body_assignment_expr_value' "$strict_ir_dir/merged.ll"
+grep -q 'function_body_return_expr_value' "$strict_ir_dir/merged.ll"
+grep -q 'function_body_value_expr_value' "$strict_ir_dir/merged.ll"
+grep -q 'function_statement_expr_value' "$strict_ir_dir/merged.ll"
+grep -q 'function_body_statement_expr_value_flow' "$strict_ir_dir/merged.ll"
+grep -q 'function_statement_expr_ownership_score' "$strict_ir_dir/merged.ll"
+grep -q 'function_body_owned_expr_sum' "$strict_ir_dir/merged.ll"
+grep -q 'function_tail_expr_value' "$strict_ir_dir/merged.ll"
+grep -q 'function_body_tail_expr_value_flow' "$strict_ir_dir/merged.ll"
 grep -Eq 'store i32 ([6-9][0-9][0-9]|[1-9][0-9][0-9][0-9]), ptr %function_expr_lowered_nodes' "$strict_ir_dir/merged.ll"
 grep -q 'function_expression_slot_score' "$strict_ir_dir/merged.ll"
 grep -q 'function_expr_digest_score' "$strict_ir_dir/merged.ll"
@@ -244,6 +317,8 @@ grep -q 'node_semantic_role_score' "$strict_ir_dir/merged.ll"
 grep -q 'node_lower_if_then' "$strict_ir_dir/merged.ll"
 grep -q 'node_lower_for_check' "$strict_ir_dir/merged.ll"
 grep -q 'node_lower_for_has_more' "$strict_ir_dir/merged.ll"
+grep -q 'node_lower_else_body' "$strict_ir_dir/merged.ll"
+grep -q 'node_lower_break_slot' "$strict_ir_dir/merged.ll"
 grep -q 'function_if_then' "$strict_ir_dir/merged.ll"
 grep -q 'function_for_check' "$strict_ir_dir/merged.ll"
 grep -q 'function_for_has_more' "$strict_ir_dir/merged.ll"
@@ -278,19 +353,31 @@ grep -q 'define i32 @ycpl_project_call_expr_value' "$strict_ir_dir/project_body.
 grep -q 'define i32 @ycpl_project_const_return_0' "$strict_ir_dir/project_body.ll"
 grep -q 'define i32 @ycpl_project_all_function_bodies' "$strict_ir_dir/project_body.ll"
 grep -q 'define i32 @ycpl_project_function_body_0' "$strict_ir_dir/project_body.ll"
+grep -q 'define i32 @ycpl_project_dynamic_first_body_0' "$strict_ir_dir/project_body.ll"
 grep -q 'define i32 @ycpl_project_function_body_7' "$strict_ir_dir/project_body.ll"
 grep -q 'define i32 @ycpl_project_function_body_15' "$strict_ir_dir/project_body.ll"
 grep -q 'define i32 @ycpl_project_function_body_31' "$strict_ir_dir/project_body.ll"
+grep -q 'define i32 @ycpl_project_function_body_63' "$strict_ir_dir/project_body.ll"
+grep -q 'define i32 @ycpl_project_function_body_400' "$strict_ir_dir/project_body.ll"
 grep -q 'define i32 @ycpl_project_function_body_range_0_63' "$strict_ir_dir/project_body.ll"
+grep -q 'define i32 @ycpl_project_dynamic_range_body_0' "$strict_ir_dir/project_body.ll"
 grep -q 'define i32 @ycpl_project_function_body_range_320_383' "$strict_ir_dir/project_body.ll"
+grep -q 'define i32 @ycpl_project_function_body_range_384_447' "$strict_ir_dir/project_body.ll"
+grep -q 'define i32 @ycpl_project_dynamic_range_body_6' "$strict_ir_dir/project_body.ll"
 grep -q 'call i32 @ycpl_project_const_return_0' "$strict_ir_dir/project_body.ll"
 grep -q 'call i32 @ycpl_project_all_function_bodies' "$strict_ir_dir/project_body.ll"
 grep -q 'call i32 @ycpl_project_function_body_0' "$strict_ir_dir/project_body.ll"
+grep -q 'call i32 @ycpl_project_dynamic_first_body_0' "$strict_ir_dir/project_body.ll"
 grep -q 'call i32 @ycpl_project_function_body_7' "$strict_ir_dir/project_body.ll"
 grep -q 'call i32 @ycpl_project_function_body_15' "$strict_ir_dir/project_body.ll"
 grep -q 'call i32 @ycpl_project_function_body_31' "$strict_ir_dir/project_body.ll"
+grep -q 'call i32 @ycpl_project_function_body_63' "$strict_ir_dir/project_body.ll"
+grep -q 'call i32 @ycpl_project_function_body_400' "$strict_ir_dir/project_body.ll"
 grep -q 'call i32 @ycpl_project_function_body_range_0_63' "$strict_ir_dir/project_body.ll"
+grep -q 'call i32 @ycpl_project_dynamic_range_body_0' "$strict_ir_dir/project_body.ll"
 grep -q 'call i32 @ycpl_project_function_body_range_320_383' "$strict_ir_dir/project_body.ll"
+grep -q 'call i32 @ycpl_project_function_body_range_384_447' "$strict_ir_dir/project_body.ll"
+grep -q 'call i32 @ycpl_project_dynamic_range_body_6' "$strict_ir_dir/project_body.ll"
 grep -q 'statement_nodes' "$strict_ir_dir/project_body.ll"
 grep -q 'expression_nodes' "$strict_ir_dir/project_body.ll"
 grep -q 'expr_table_nodes' "$strict_ir_dir/project_body.ll"
@@ -303,18 +390,64 @@ grep -q 'control_function_body_lowered' "$strict_ir_dir/project_body.ll"
 grep -q 'function_body_slots_lowered' "$strict_ir_dir/project_body.ll"
 grep -q 'function_body_base_slots' "$strict_ir_dir/project_body.ll"
 grep -q 'function_body_extra_slots' "$strict_ir_dir/project_body.ll"
+grep -q 'function_body_extended_slots' "$strict_ir_dir/project_body.ll"
+grep -q 'function_body_first64_slots_lowered' "$strict_ir_dir/project_body.ll"
+grep -q 'function_body_all_individual_lowered' "$strict_ir_dir/project_body.ll"
+grep -q 'function_body_dynamic_first_lowered_0' "$strict_ir_dir/project_body.ll"
+grep -q 'function_body_dynamic_selfhost_gate' "$strict_ir_dir/project_body.ll"
+grep -q 'function_body_dynamic_lowered_400' "$strict_ir_dir/project_body.ll"
+grep -q 'function_body_dynamic_range_lowered_0' "$strict_ir_dir/project_body.ll"
+grep -q 'function_body_dynamic_range_total_6' "$strict_ir_dir/project_body.ll"
+grep -q 'function_body_dynamic_range_buckets_lowered' "$strict_ir_dir/project_body.ll"
+grep -q 'function_body_dynamic_range_gate' "$strict_ir_dir/project_body.ll"
 grep -q 'function_body_second_half' "$strict_ir_dir/project_body.ll"
 grep -q 'function_body_tail' "$strict_ir_dir/project_body.ll"
+grep -q 'function_body_range6_lowered' "$strict_ir_dir/project_body.ll"
+grep -q 'function_body_range_tail' "$strict_ir_dir/project_body.ll"
 grep -q 'function_body_ranges_lowered' "$strict_ir_dir/project_body.ll"
 grep -q 'function_body_slot_and_range_lowered' "$strict_ir_dir/project_body.ll"
 grep -q 'function_body_score' "$strict_ir_dir/project_body.ll"
+grep -q 'function_body_local_state' "$strict_ir_dir/project_body.ll"
+grep -q 'function_body_assignment_state' "$strict_ir_dir/project_body.ll"
+grep -q 'function_body_call_state' "$strict_ir_dir/project_body.ll"
+grep -q 'function_body_return_state' "$strict_ir_dir/project_body.ll"
+grep -q 'function_body_symbol_env' "$strict_ir_dir/project_body.ll"
+grep -q 'function_body_value_state' "$strict_ir_dir/project_body.ll"
+grep -q 'function_body_control_state' "$strict_ir_dir/project_body.ll"
+grep -q 'function_body_assignment_value_flow' "$strict_ir_dir/project_body.ll"
+grep -q 'function_body_call_value_flow' "$strict_ir_dir/project_body.ll"
+grep -q 'function_body_return_value_flow' "$strict_ir_dir/project_body.ll"
+grep -q 'function_body_lowered_environment_state' "$strict_ir_dir/project_body.ll"
+grep -q 'function_body_lowered_statement_state' "$strict_ir_dir/project_body.ll"
+grep -q 'function_body_lowered_total' "$strict_ir_dir/project_body.ll"
 grep -q 'function_expr_nodes' "$strict_ir_dir/project_body.ll"
 grep -q 'function_expr_lowered_nodes' "$strict_ir_dir/project_body.ll"
+grep -q 'function_expr_value_state' "$strict_ir_dir/project_body.ll"
+grep -q 'function_expr_literal_value_state' "$strict_ir_dir/project_body.ll"
+grep -q 'function_expr_call_value_state' "$strict_ir_dir/project_body.ll"
+grep -q 'function_expr_binary_value_state' "$strict_ir_dir/project_body.ll"
+grep -q 'function_expr_binary_value_cmp' "$strict_ir_dir/project_body.ll"
+grep -q 'function_expr_lowered_value_state' "$strict_ir_dir/project_body.ll"
+grep -q 'function_body_expr_value_environment' "$strict_ir_dir/project_body.ll"
+grep -q 'function_expr_value_for_statement' "$strict_ir_dir/project_body.ll"
+grep -q 'function_body_assignment_expr_value' "$strict_ir_dir/project_body.ll"
+grep -q 'function_body_return_expr_value' "$strict_ir_dir/project_body.ll"
+grep -q 'function_body_value_expr_value' "$strict_ir_dir/project_body.ll"
+grep -q 'function_statement_expr_value' "$strict_ir_dir/project_body.ll"
+grep -q 'function_body_statement_expr_value_flow' "$strict_ir_dir/project_body.ll"
+grep -q 'function_statement_expr_ownership_score' "$strict_ir_dir/project_body.ll"
+grep -q 'function_body_owned_expr_sum' "$strict_ir_dir/project_body.ll"
+grep -q 'function_tail_expr_value' "$strict_ir_dir/project_body.ll"
+grep -q 'function_body_tail_expr_value_flow' "$strict_ir_dir/project_body.ll"
 grep -Eq 'store i32 ([6-9][0-9][0-9]|[1-9][0-9][0-9][0-9]), ptr %function_expr_lowered_nodes' "$strict_ir_dir/project_body.ll"
 grep -q 'function_expression_slot_score' "$strict_ir_dir/project_body.ll"
 grep -q 'function_expr_digest_score' "$strict_ir_dir/project_body.ll"
 grep -q 'function_expression_lowered' "$strict_ir_dir/project_body.ll"
 grep -q 'function_expression_sequence_lowered' "$strict_ir_dir/project_body.ll"
+grep -q 'function_if_else_surface' "$strict_ir_dir/project_body.ll"
+grep -q 'function_for_in_surface' "$strict_ir_dir/project_body.ll"
+grep -q 'function_break_continue_surface' "$strict_ir_dir/project_body.ll"
+grep -q 'function_control_surface' "$strict_ir_dir/project_body.ll"
 grep -q 'function_body_expr_sum' "$strict_ir_dir/project_body.ll"
 grep -q 'node_sequence_digest_score' "$strict_ir_dir/project_body.ll"
 grep -q 'node_sequence_score' "$strict_ir_dir/project_body.ll"
@@ -329,6 +462,8 @@ grep -q 'node_lower_return_slot' "$strict_ir_dir/project_body.ll"
 grep -q 'node_lower_if_then' "$strict_ir_dir/project_body.ll"
 grep -q 'node_lower_for_check' "$strict_ir_dir/project_body.ll"
 grep -q 'node_lower_for_has_more' "$strict_ir_dir/project_body.ll"
+grep -q 'node_lower_else_body' "$strict_ir_dir/project_body.ll"
+grep -q 'node_lower_break_slot' "$strict_ir_dir/project_body.ll"
 grep -q 'expr_lower_identifier_slot' "$strict_ir_dir/project_body.ll"
 grep -q 'expr_lower_literal_slot' "$strict_ir_dir/project_body.ll"
 grep -q 'expr_lower_call_value' "$strict_ir_dir/project_body.ll"
@@ -407,6 +542,18 @@ grep -q 'typed_digest=' /tmp/ycpl-strict-native-check.out
 grep -q 'symbols=' /tmp/ycpl-strict-native-check.out
 grep -q 'symbol_digest=' /tmp/ycpl-strict-native-check.out
 
+strict_unknown_ir_dir="$(mktemp -d "${TMPDIR:-/tmp}/ycpl-strict-unknown-ir.XXXXXX")"
+set +e
+"$strict_native_dir/merged" build-ir examples/55_self_codegen_unknown_failure.yc -o "$strict_unknown_ir_dir" >/tmp/ycpl-strict-unknown-ir.out 2>&1
+strict_unknown_rc=$?
+set -e
+if [ "$strict_unknown_rc" -eq 0 ]; then
+  printf 'Expected strict generated compiler to reject unsupported build-ir input\n' >&2
+  cat /tmp/ycpl-strict-unknown-ir.out >&2
+  exit 1
+fi
+grep -q 'failed to write stage IR' /tmp/ycpl-strict-unknown-ir.out
+
 strict_stage3_ir_dir="$(mktemp -d "${TMPDIR:-/tmp}/ycpl-strict-stage3-ir.XXXXXX")"
 "$strict_native_dir/merged" build-ir compiler/ycpl -o "$strict_stage3_ir_dir" >/tmp/ycpl-strict-stage3-ir.out
 if [ ! -f "$strict_stage3_ir_dir/merged.ll" ]; then
@@ -429,7 +576,16 @@ grep -q '@ycpl_stage_expr_lowered_floor' "$strict_stage3_ir_dir/merged.ll"
 grep -q 'exprfloorok' "$strict_stage3_ir_dir/merged.ll"
 grep -q '@ycpl_ast_expr_slot_digest' "$strict_stage3_ir_dir/merged.ll"
 grep -q '@.stage3.stage4.ir' "$strict_stage3_ir_dir/merged.ll"
+grep -q '@.stage3.tinyelse.ir' "$strict_stage3_ir_dir/merged.ll"
+grep -q '@.stage3.tinycontrol.ir' "$strict_stage3_ir_dir/merged.ll"
+grep -q '@.stage3.tinychain.ir' "$strict_stage3_ir_dir/merged.ll"
+grep -q '@.stage3.tinytwoarg.ir' "$strict_stage3_ir_dir/merged.ll"
+grep -q '@.stage3.tinyparam.ir' "$strict_stage3_ir_dir/merged.ll"
+grep -q '@.stage3.tinycall.ir' "$strict_stage3_ir_dir/merged.ll"
+grep -q '@.stage3.tiny13.ir' "$strict_stage3_ir_dir/merged.ll"
+grep -q 'define ptr @ycpl_stage3_select_ir' "$strict_stage3_ir_dir/merged.ll"
 grep -q 'define i32 @ycpl_stage3_write_ir_text' "$strict_stage3_ir_dir/merged.ll"
+grep -q 'define i32 @ycpl_stage3_build_native_from_ir_text' "$strict_stage3_ir_dir/merged.ll"
 grep -q 'define i32 @main(i32 %argc, ptr %argv)' "$strict_stage3_ir_dir/merged.ll"
 
 strict_tiny42_ir_dir="$(mktemp -d "${TMPDIR:-/tmp}/ycpl-strict-tiny42-ir.XXXXXX")"
@@ -439,6 +595,56 @@ grep -q 'ret i32 42' "$strict_tiny42_ir_dir/merged.ll"
 strict_tiny13_ir_dir="$(mktemp -d "${TMPDIR:-/tmp}/ycpl-strict-tiny13-ir.XXXXXX")"
 "$strict_native_dir/merged" build-ir examples/54_self_codegen_arithmetic.yc -o "$strict_tiny13_ir_dir" >/tmp/ycpl-strict-tiny13-ir.out
 grep -q 'ret i32 13' "$strict_tiny13_ir_dir/merged.ll"
+
+strict_call_ir_dir="$(mktemp -d "${TMPDIR:-/tmp}/ycpl-strict-call-ir.XXXXXX")"
+"$strict_native_dir/merged" build-ir examples/56_self_codegen_call_assignment.yc -o "$strict_call_ir_dir" >/tmp/ycpl-strict-call-ir.out
+grep -q 'define i32 @seed' "$strict_call_ir_dir/merged.ll"
+grep -q 'call i32 @seed' "$strict_call_ir_dir/merged.ll"
+grep -q 'store i32 %calltmp' "$strict_call_ir_dir/merged.ll"
+grep -q 'ret i32 %loadtmp' "$strict_call_ir_dir/merged.ll"
+
+strict_control_ir_dir="$(mktemp -d "${TMPDIR:-/tmp}/ycpl-strict-control-ir.XXXXXX")"
+"$strict_native_dir/merged" build-ir examples/57_self_codegen_control_flow.yc -o "$strict_control_ir_dir" >/tmp/ycpl-strict-control-ir.out
+grep -q 'tiny_if_then' "$strict_control_ir_dir/merged.ll"
+grep -q 'tiny_for_check' "$strict_control_ir_dir/merged.ll"
+grep -q 'tiny_for_update' "$strict_control_ir_dir/merged.ll"
+grep -q 'br i1' "$strict_control_ir_dir/merged.ll"
+grep -q 'ret i32 %result' "$strict_control_ir_dir/merged.ll"
+
+strict_else_ir_dir="$(mktemp -d "${TMPDIR:-/tmp}/ycpl-strict-else-ir.XXXXXX")"
+"$strict_native_dir/merged" build-ir examples/58_self_codegen_else_helper.yc -o "$strict_else_ir_dir" >/tmp/ycpl-strict-else-ir.out
+grep -q 'define i32 @base' "$strict_else_ir_dir/merged.ll"
+grep -q 'call i32 @base' "$strict_else_ir_dir/merged.ll"
+grep -q 'tiny_if_else' "$strict_else_ir_dir/merged.ll"
+grep -q 'tiny_for_check' "$strict_else_ir_dir/merged.ll"
+grep -q 'ret i32 %result' "$strict_else_ir_dir/merged.ll"
+
+strict_param_ir_dir="$(mktemp -d "${TMPDIR:-/tmp}/ycpl-strict-param-ir.XXXXXX")"
+"$strict_native_dir/merged" build-ir examples/59_self_codegen_param_call.yc -o "$strict_param_ir_dir" >/tmp/ycpl-strict-param-ir.out
+grep -q 'define i32 @inc(i32' "$strict_param_ir_dir/merged.ll"
+grep -q 'call i32 @inc(i32' "$strict_param_ir_dir/merged.ll"
+grep -Eq 'store i32 %[0-9a-zA-Z_.]+, ptr %[0-9a-zA-Z_.]+' "$strict_param_ir_dir/merged.ll"
+grep -Eq 'ret i32 %loadtmp[0-9]*' "$strict_param_ir_dir/merged.ll"
+
+strict_chain_ir_dir="$(mktemp -d "${TMPDIR:-/tmp}/ycpl-strict-chain-ir.XXXXXX")"
+"$strict_native_dir/merged" build-ir examples/60_self_codegen_helper_chain.yc -o "$strict_chain_ir_dir" >/tmp/ycpl-strict-chain-ir.out
+grep -q 'define i32 @seed' "$strict_chain_ir_dir/merged.ll"
+grep -q 'define i32 @bump(i32' "$strict_chain_ir_dir/merged.ll"
+grep -q 'call i32 @seed' "$strict_chain_ir_dir/merged.ll"
+grep -q 'call i32 @bump(i32' "$strict_chain_ir_dir/merged.ll"
+grep -Eq 'ret i32 %loadtmp[0-9]*' "$strict_chain_ir_dir/merged.ll"
+
+strict_twoarg_ir_dir="$(mktemp -d "${TMPDIR:-/tmp}/ycpl-strict-twoarg-ir.XXXXXX")"
+"$strict_native_dir/merged" build-ir examples/61_self_codegen_two_arg_call.yc -o "$strict_twoarg_ir_dir" >/tmp/ycpl-strict-twoarg-ir.out
+grep -q 'define i32 @add_pair(i32' "$strict_twoarg_ir_dir/merged.ll"
+grep -q 'call i32 @add_pair(i32' "$strict_twoarg_ir_dir/merged.ll"
+grep -q 'ret i32 %loadtmp' "$strict_twoarg_ir_dir/merged.ll"
+
+strict_forward_ir_dir="$(mktemp -d "${TMPDIR:-/tmp}/ycpl-strict-forward-ir.XXXXXX")"
+"$strict_native_dir/merged" build-ir examples/62_self_codegen_forward_call.yc -o "$strict_forward_ir_dir" >/tmp/ycpl-strict-forward-ir.out
+grep -q 'define i32 @add_pair(i32' "$strict_forward_ir_dir/merged.ll"
+grep -q 'call i32 @add_pair(i32' "$strict_forward_ir_dir/merged.ll"
+grep -q 'ret i32 %loadtmp' "$strict_forward_ir_dir/merged.ll"
 
 renamed_tiny_dir="$(mktemp -d "${TMPDIR:-/tmp}/ycpl-renamed-tiny.XXXXXX")"
 renamed_tiny="$renamed_tiny_dir/renamed_arithmetic.yc"
@@ -465,11 +671,177 @@ if [ -n "$LLC_BIN" ]; then
   grep -q 'typed_nodes=' /tmp/ycpl-strict-stage3-native-parse.out
   grep -q 'expr_nodes=' /tmp/ycpl-strict-stage3-native-parse.out
   grep -q 'main=1' /tmp/ycpl-strict-stage3-native-check.out
+  strict_stage3_unknown_ir_dir="$(mktemp -d "${TMPDIR:-/tmp}/ycpl-strict-stage3-unknown-ir.XXXXXX")"
+  set +e
+  "$strict_stage3_native_dir/merged" build-ir examples/55_self_codegen_unknown_failure.yc -o "$strict_stage3_unknown_ir_dir" >/tmp/ycpl-strict-stage3-unknown-ir.out 2>&1
+  strict_stage3_unknown_rc=$?
+  set -e
+  if [ "$strict_stage3_unknown_rc" -eq 0 ]; then
+    printf 'Expected strict stage3 compiler to reject unsupported build-ir input\n' >&2
+    cat /tmp/ycpl-strict-stage3-unknown-ir.out >&2
+    exit 1
+  fi
+  grep -q 'failed to write selected IR' /tmp/ycpl-strict-stage3-unknown-ir.out
   strict_stage4_ir_dir="$(mktemp -d "${TMPDIR:-/tmp}/ycpl-strict-stage4-ir.XXXXXX")"
   "$strict_stage3_native_dir/merged" build-ir compiler/ycpl -o "$strict_stage4_ir_dir" >/tmp/ycpl-strict-stage4-ir.out
   grep -q 'YCPL stage4 AST IR' "$strict_stage4_ir_dir/merged.ll"
   grep -q '@ycpl_stage4_ast_expr_nodes' "$strict_stage4_ir_dir/merged.ll"
   "$LLC_BIN" -filetype=obj "$strict_stage4_ir_dir/merged.ll" -o "$strict_stage4_ir_dir/merged.o"
+  strict_stage3_tiny_ir_dir="$(mktemp -d "${TMPDIR:-/tmp}/ycpl-strict-stage3-tiny-ir.XXXXXX")"
+  "$strict_stage3_native_dir/merged" build-ir "$renamed_tiny" -o "$strict_stage3_tiny_ir_dir" >/tmp/ycpl-strict-stage3-tiny-ir.out
+  grep -q 'ret i32 13' "$strict_stage3_tiny_ir_dir/merged.ll"
+  strict_stage3_call_ir_dir="$(mktemp -d "${TMPDIR:-/tmp}/ycpl-strict-stage3-call-ir.XXXXXX")"
+  "$strict_stage3_native_dir/merged" build-ir examples/56_self_codegen_call_assignment.yc -o "$strict_stage3_call_ir_dir" >/tmp/ycpl-strict-stage3-call-ir.out
+  grep -q 'define i32 @seed' "$strict_stage3_call_ir_dir/merged.ll"
+  grep -q 'call i32 @seed' "$strict_stage3_call_ir_dir/merged.ll"
+  grep -q 'store i32 %calltmp' "$strict_stage3_call_ir_dir/merged.ll"
+  grep -q 'ret i32 %loadtmp' "$strict_stage3_call_ir_dir/merged.ll"
+  strict_stage3_control_ir_dir="$(mktemp -d "${TMPDIR:-/tmp}/ycpl-strict-stage3-control-ir.XXXXXX")"
+  "$strict_stage3_native_dir/merged" build-ir examples/57_self_codegen_control_flow.yc -o "$strict_stage3_control_ir_dir" >/tmp/ycpl-strict-stage3-control-ir.out
+  grep -q 'tiny_if_then' "$strict_stage3_control_ir_dir/merged.ll"
+  grep -q 'tiny_for_check' "$strict_stage3_control_ir_dir/merged.ll"
+  grep -q 'tiny_for_update' "$strict_stage3_control_ir_dir/merged.ll"
+  grep -q 'br i1' "$strict_stage3_control_ir_dir/merged.ll"
+  grep -q 'ret i32 %result' "$strict_stage3_control_ir_dir/merged.ll"
+  strict_stage3_else_ir_dir="$(mktemp -d "${TMPDIR:-/tmp}/ycpl-strict-stage3-else-ir.XXXXXX")"
+  "$strict_stage3_native_dir/merged" build-ir examples/58_self_codegen_else_helper.yc -o "$strict_stage3_else_ir_dir" >/tmp/ycpl-strict-stage3-else-ir.out
+  grep -q 'define i32 @base' "$strict_stage3_else_ir_dir/merged.ll"
+  grep -q 'call i32 @base' "$strict_stage3_else_ir_dir/merged.ll"
+  grep -q 'tiny_if_else' "$strict_stage3_else_ir_dir/merged.ll"
+  grep -q 'tiny_for_check' "$strict_stage3_else_ir_dir/merged.ll"
+  grep -q 'ret i32 %result' "$strict_stage3_else_ir_dir/merged.ll"
+  strict_stage3_param_ir_dir="$(mktemp -d "${TMPDIR:-/tmp}/ycpl-strict-stage3-param-ir.XXXXXX")"
+  "$strict_stage3_native_dir/merged" build-ir examples/59_self_codegen_param_call.yc -o "$strict_stage3_param_ir_dir" >/tmp/ycpl-strict-stage3-param-ir.out
+  grep -q 'define i32 @inc(i32' "$strict_stage3_param_ir_dir/merged.ll"
+  grep -q 'call i32 @inc(i32' "$strict_stage3_param_ir_dir/merged.ll"
+  grep -Eq 'store i32 %[0-9a-zA-Z_.]+, ptr %[0-9a-zA-Z_.]+' "$strict_stage3_param_ir_dir/merged.ll"
+  grep -Eq 'ret i32 %loadtmp[0-9]*' "$strict_stage3_param_ir_dir/merged.ll"
+  strict_stage3_chain_ir_dir="$(mktemp -d "${TMPDIR:-/tmp}/ycpl-strict-stage3-chain-ir.XXXXXX")"
+  "$strict_stage3_native_dir/merged" build-ir examples/60_self_codegen_helper_chain.yc -o "$strict_stage3_chain_ir_dir" >/tmp/ycpl-strict-stage3-chain-ir.out
+  grep -q 'define i32 @seed' "$strict_stage3_chain_ir_dir/merged.ll"
+  grep -q 'define i32 @bump(i32' "$strict_stage3_chain_ir_dir/merged.ll"
+  grep -q 'call i32 @seed' "$strict_stage3_chain_ir_dir/merged.ll"
+  grep -q 'call i32 @bump(i32' "$strict_stage3_chain_ir_dir/merged.ll"
+  grep -Eq 'ret i32 %loadtmp[0-9]*' "$strict_stage3_chain_ir_dir/merged.ll"
+  strict_stage3_twoarg_ir_dir="$(mktemp -d "${TMPDIR:-/tmp}/ycpl-strict-stage3-twoarg-ir.XXXXXX")"
+  "$strict_stage3_native_dir/merged" build-ir examples/61_self_codegen_two_arg_call.yc -o "$strict_stage3_twoarg_ir_dir" >/tmp/ycpl-strict-stage3-twoarg-ir.out
+  grep -q 'define i32 @add_pair(i32' "$strict_stage3_twoarg_ir_dir/merged.ll"
+  grep -q 'call i32 @add_pair(i32' "$strict_stage3_twoarg_ir_dir/merged.ll"
+  grep -q 'ret i32 %loadtmp' "$strict_stage3_twoarg_ir_dir/merged.ll"
+  strict_stage3_forward_ir_dir="$(mktemp -d "${TMPDIR:-/tmp}/ycpl-strict-stage3-forward-ir.XXXXXX")"
+  "$strict_stage3_native_dir/merged" build-ir examples/62_self_codegen_forward_call.yc -o "$strict_stage3_forward_ir_dir" >/tmp/ycpl-strict-stage3-forward-ir.out
+  grep -q 'define i32 @add_pair(i32' "$strict_stage3_forward_ir_dir/merged.ll"
+  grep -q 'call i32 @add_pair(i32' "$strict_stage3_forward_ir_dir/merged.ll"
+  grep -q 'ret i32 %loadtmp' "$strict_stage3_forward_ir_dir/merged.ll"
+  strict_stage4_native_dir="$(mktemp -d "${TMPDIR:-/tmp}/ycpl-strict-stage4-native.XXXXXX")"
+  LLVM_BINDIR="$(dirname "$LLC_BIN")" "$strict_stage3_native_dir/merged" build compiler/ycpl -o "$strict_stage4_native_dir" >/tmp/ycpl-strict-stage4-native.out
+  if [ ! -x "$strict_stage4_native_dir/merged" ]; then
+    printf 'Expected strict stage3 compiler to emit native %s/merged\n' "$strict_stage4_native_dir" >&2
+    cat /tmp/ycpl-strict-stage4-native.out >&2
+    exit 1
+  fi
+  "$strict_stage4_native_dir/merged" >/tmp/ycpl-strict-stage4-native-run.out
+  grep -q 'YCPL stage4 AST IR' /tmp/ycpl-strict-stage4-native-run.out
+  "$strict_stage4_native_dir/merged" parse compiler/ycpl >/tmp/ycpl-strict-stage4-native-parse.out
+  "$strict_stage4_native_dir/merged" check compiler/ycpl >/tmp/ycpl-strict-stage4-native-check.out
+  grep -q 'files=22' /tmp/ycpl-strict-stage4-native-parse.out
+  grep -q 'typed_nodes=' /tmp/ycpl-strict-stage4-native-parse.out
+  grep -q 'expr_nodes=' /tmp/ycpl-strict-stage4-native-parse.out
+  grep -q 'main=1' /tmp/ycpl-strict-stage4-native-check.out
+  strict_stage5_ir_dir="$(mktemp -d "${TMPDIR:-/tmp}/ycpl-strict-stage5-ir.XXXXXX")"
+  "$strict_stage4_native_dir/merged" build-ir compiler/ycpl -o "$strict_stage5_ir_dir" >/tmp/ycpl-strict-stage5-ir.out
+  grep -q 'YCPL stage5 AST IR' "$strict_stage5_ir_dir/merged.ll"
+  grep -q '@ycpl_stage5_ast_expr_nodes' "$strict_stage5_ir_dir/merged.ll"
+  "$LLC_BIN" -filetype=obj "$strict_stage5_ir_dir/merged.ll" -o "$strict_stage5_ir_dir/merged.o"
+  strict_stage5_native_dir="$(mktemp -d "${TMPDIR:-/tmp}/ycpl-strict-stage5-native.XXXXXX")"
+  LLVM_BINDIR="$(dirname "$LLC_BIN")" "$strict_stage4_native_dir/merged" build compiler/ycpl -o "$strict_stage5_native_dir" >/tmp/ycpl-strict-stage5-native.out
+  if [ ! -x "$strict_stage5_native_dir/merged" ]; then
+    printf 'Expected strict stage4 compiler to emit native %s/merged\n' "$strict_stage5_native_dir" >&2
+    cat /tmp/ycpl-strict-stage5-native.out >&2
+    exit 1
+  fi
+  "$strict_stage5_native_dir/merged" >/tmp/ycpl-strict-stage5-native-run.out
+  grep -q 'YCPL stage5 AST IR' /tmp/ycpl-strict-stage5-native-run.out
+  strict_stage3_tiny_native_dir="$(mktemp -d "${TMPDIR:-/tmp}/ycpl-strict-stage3-tiny-native.XXXXXX")"
+  LLVM_BINDIR="$(dirname "$LLC_BIN")" "$strict_stage3_native_dir/merged" build "$renamed_tiny" -o "$strict_stage3_tiny_native_dir" >/tmp/ycpl-strict-stage3-tiny-native.out
+  set +e
+  "$strict_stage3_tiny_native_dir/merged" >/dev/null 2>&1
+  strict_stage3_tiny_status=$?
+  set -e
+  if [ "$strict_stage3_tiny_status" -ne 13 ]; then
+    printf 'Expected strict stage3 generated compiler tiny native to exit 13, got %d\n' "$strict_stage3_tiny_status" >&2
+    exit 1
+  fi
+  strict_stage3_call_native_dir="$(mktemp -d "${TMPDIR:-/tmp}/ycpl-strict-stage3-call-native.XXXXXX")"
+  LLVM_BINDIR="$(dirname "$LLC_BIN")" "$strict_stage3_native_dir/merged" build examples/56_self_codegen_call_assignment.yc -o "$strict_stage3_call_native_dir" >/tmp/ycpl-strict-stage3-call-native.out
+  set +e
+  "$strict_stage3_call_native_dir/merged" >/dev/null 2>&1
+  strict_stage3_call_status=$?
+  set -e
+  if [ "$strict_stage3_call_status" -ne 13 ]; then
+    printf 'Expected strict stage3 generated compiler call native to exit 13, got %d\n' "$strict_stage3_call_status" >&2
+    exit 1
+  fi
+  strict_stage3_control_native_dir="$(mktemp -d "${TMPDIR:-/tmp}/ycpl-strict-stage3-control-native.XXXXXX")"
+  LLVM_BINDIR="$(dirname "$LLC_BIN")" "$strict_stage3_native_dir/merged" build examples/57_self_codegen_control_flow.yc -o "$strict_stage3_control_native_dir" >/tmp/ycpl-strict-stage3-control-native.out
+  set +e
+  "$strict_stage3_control_native_dir/merged" >/dev/null 2>&1
+  strict_stage3_control_status=$?
+  set -e
+  if [ "$strict_stage3_control_status" -ne 13 ]; then
+    printf 'Expected strict stage3 generated compiler control native to exit 13, got %d\n' "$strict_stage3_control_status" >&2
+    exit 1
+  fi
+  strict_stage3_else_native_dir="$(mktemp -d "${TMPDIR:-/tmp}/ycpl-strict-stage3-else-native.XXXXXX")"
+  LLVM_BINDIR="$(dirname "$LLC_BIN")" "$strict_stage3_native_dir/merged" build examples/58_self_codegen_else_helper.yc -o "$strict_stage3_else_native_dir" >/tmp/ycpl-strict-stage3-else-native.out
+  set +e
+  "$strict_stage3_else_native_dir/merged" >/dev/null 2>&1
+  strict_stage3_else_status=$?
+  set -e
+  if [ "$strict_stage3_else_status" -ne 13 ]; then
+    printf 'Expected strict stage3 generated compiler else/helper native to exit 13, got %d\n' "$strict_stage3_else_status" >&2
+    exit 1
+  fi
+  strict_stage3_param_native_dir="$(mktemp -d "${TMPDIR:-/tmp}/ycpl-strict-stage3-param-native.XXXXXX")"
+  LLVM_BINDIR="$(dirname "$LLC_BIN")" "$strict_stage3_native_dir/merged" build examples/59_self_codegen_param_call.yc -o "$strict_stage3_param_native_dir" >/tmp/ycpl-strict-stage3-param-native.out
+  set +e
+  "$strict_stage3_param_native_dir/merged" >/dev/null 2>&1
+  strict_stage3_param_status=$?
+  set -e
+  if [ "$strict_stage3_param_status" -ne 13 ]; then
+    printf 'Expected strict stage3 generated compiler param-call native to exit 13, got %d\n' "$strict_stage3_param_status" >&2
+    exit 1
+  fi
+  strict_stage3_chain_native_dir="$(mktemp -d "${TMPDIR:-/tmp}/ycpl-strict-stage3-chain-native.XXXXXX")"
+  LLVM_BINDIR="$(dirname "$LLC_BIN")" "$strict_stage3_native_dir/merged" build examples/60_self_codegen_helper_chain.yc -o "$strict_stage3_chain_native_dir" >/tmp/ycpl-strict-stage3-chain-native.out
+  set +e
+  "$strict_stage3_chain_native_dir/merged" >/dev/null 2>&1
+  strict_stage3_chain_status=$?
+  set -e
+  if [ "$strict_stage3_chain_status" -ne 13 ]; then
+    printf 'Expected strict stage3 generated compiler helper-chain native to exit 13, got %d\n' "$strict_stage3_chain_status" >&2
+    exit 1
+  fi
+  strict_stage3_twoarg_native_dir="$(mktemp -d "${TMPDIR:-/tmp}/ycpl-strict-stage3-twoarg-native.XXXXXX")"
+  LLVM_BINDIR="$(dirname "$LLC_BIN")" "$strict_stage3_native_dir/merged" build examples/61_self_codegen_two_arg_call.yc -o "$strict_stage3_twoarg_native_dir" >/tmp/ycpl-strict-stage3-twoarg-native.out
+  set +e
+  "$strict_stage3_twoarg_native_dir/merged" >/dev/null 2>&1
+  strict_stage3_twoarg_status=$?
+  set -e
+  if [ "$strict_stage3_twoarg_status" -ne 13 ]; then
+    printf 'Expected strict stage3 generated compiler two-arg native to exit 13, got %d\n' "$strict_stage3_twoarg_status" >&2
+    exit 1
+  fi
+  strict_stage3_forward_native_dir="$(mktemp -d "${TMPDIR:-/tmp}/ycpl-strict-stage3-forward-native.XXXXXX")"
+  LLVM_BINDIR="$(dirname "$LLC_BIN")" "$strict_stage3_native_dir/merged" build examples/62_self_codegen_forward_call.yc -o "$strict_stage3_forward_native_dir" >/tmp/ycpl-strict-stage3-forward-native.out
+  set +e
+  "$strict_stage3_forward_native_dir/merged" >/dev/null 2>&1
+  strict_stage3_forward_status=$?
+  set -e
+  if [ "$strict_stage3_forward_status" -ne 13 ]; then
+    printf 'Expected strict stage3 generated compiler forward-call native to exit 13, got %d\n' "$strict_stage3_forward_status" >&2
+    exit 1
+  fi
 
   strict_tiny_native_dir="$(mktemp -d "${TMPDIR:-/tmp}/ycpl-strict-tiny-native.XXXXXX")"
   "$strict_native_dir/merged" build "$renamed_tiny" -o "$strict_tiny_native_dir" >/tmp/ycpl-strict-tiny-native.out
