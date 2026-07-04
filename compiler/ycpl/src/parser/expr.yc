@@ -253,6 +253,9 @@ fn parse_at(path string, source string, target_index i32, target_count i32) Expr
     pending_local_type := false
     pending_local_name_hash := 0
     local_pointer_pending := false
+    pending_member_access := false
+    pending_member_line := 1
+    pending_member_col := 1
     if target_count <= 0 {
         target_count = 1
     }
@@ -392,6 +395,11 @@ fn parse_at(path string, source string, target_index i32, target_count i32) Expr
             identifier_type := lookup_name_type(local_types, lx.lexeme)
             table = expr.add_identifier_typed(table, lx.tok_line, lx.tok_col, lx.lexeme, identifier_type)
             function_expr_added = true
+            if pending_member_access {
+                table = expr.add_member(table, pending_member_line, pending_member_col, lx.lexeme)
+                function_expr_added = true
+                pending_member_access = false
+            }
         }
         if should_collect && is_literal(lx.kind) {
             table = expr.add_literal(table, lx.tok_line, lx.tok_col, lx.lexeme, lx.kind)
@@ -403,8 +411,9 @@ fn parse_at(path string, source string, target_index i32, target_count i32) Expr
             function_expr_added = true
         }
         if should_collect && lx.kind == tok.dot() {
-            table = expr.add_member(table, lx.tok_line, lx.tok_col, lx.lexeme)
-            function_expr_added = true
+            pending_member_access = true
+            pending_member_line = lx.tok_line
+            pending_member_col = lx.tok_col
         }
         if should_collect && lx.kind == tok.lbrack() {
             table = expr.add_index(table, lx.tok_line, lx.tok_col, lx.lexeme)
@@ -417,6 +426,9 @@ fn parse_at(path string, source string, target_index i32, target_count i32) Expr
         if should_collect && is_unary_operator(lx.kind, prev_kind) {
             table = expr.add_unary(table, lx.tok_line, lx.tok_col, lx.lexeme, lx.kind)
             function_expr_added = true
+        }
+        if pending_member_access && lx.kind != tok.dot() && lx.kind != tok.ident() {
+            pending_member_access = false
         }
         if in_function_body && collect_body && function_expr_added {
             table = expr.note_function_expr(table)

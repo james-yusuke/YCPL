@@ -1,0 +1,217 @@
+module compiler.ycpl.bodyflow
+
+import "ast/body" as astbody
+import "ast/expr" as astexpr
+import "std/llvm" as llvm
+
+pub fn begin_statement_value(builder *byte, i32_type *byte, statement_value_slot *byte, kind i32, meta i32, pos i32, payload i32, role i32, expr_count i32) {
+    zero := llvm.const_int(i32_type, 0, 1)
+    llvm.build_store(builder, zero, statement_value_slot)
+    loaded_zero := llvm.build_load2(builder, i32_type, statement_value_slot, "loaded_function_body_statement_ast_seed_base")
+    left_seed := llvm.const_int(i32_type, kind + meta + pos, 1)
+    right_seed := llvm.const_int(i32_type, payload + role + expr_count, 1)
+    statement_seed_left := llvm.build_add(builder, loaded_zero, left_seed, "function_body_statement_ast_value_seed")
+    statement_seed := llvm.build_add(builder, statement_seed_left, right_seed, "function_body_statement_ast_value_seed_with_role")
+    llvm.build_store(builder, statement_seed, statement_value_slot)
+}
+
+pub fn lower_statement_expr_value(builder *byte, i32_type *byte, statement_value_slot *byte, typed_value *byte, expr_index i32) {
+    loaded_statement := llvm.build_load2(builder, i32_type, statement_value_slot, "loaded_function_body_statement_ast_value")
+    index_value := llvm.const_int(i32_type, expr_index + 1, 1)
+    indexed_expr := llvm.build_add(builder, typed_value, index_value, "function_body_statement_ast_expr_indexed_value")
+    next_statement := llvm.build_add(builder, loaded_statement, indexed_expr, "function_body_statement_ast_expr_value")
+    llvm.build_store(builder, next_statement, statement_value_slot)
+}
+
+pub fn begin_statement_resolved_type(builder *byte, i32_type *byte, statement_resolved_type_slot *byte) {
+    zero := llvm.const_int(i32_type, 0, 1)
+    llvm.build_store(builder, zero, statement_resolved_type_slot)
+}
+
+pub fn lower_statement_resolved_expr_type(builder *byte, i32_type *byte, statement_resolved_type_slot *byte, type_kind i32, expr_index i32) {
+    loaded_type := llvm.build_load2(builder, i32_type, statement_resolved_type_slot, "loaded_function_body_statement_resolved_type")
+    type_value := llvm.const_int(i32_type, type_kind, 1)
+    index_value := llvm.const_int(i32_type, expr_index + 1, 1)
+    indexed_type := llvm.build_add(builder, type_value, index_value, "function_body_statement_resolved_expr_type")
+    next_type := llvm.build_add(builder, loaded_type, indexed_type, "function_body_statement_resolved_type_value")
+    llvm.build_store(builder, next_type, statement_resolved_type_slot)
+}
+
+pub fn finish_statement_value(builder *byte, i32_type *byte, fn_type *byte, call_helper *byte, statement_value_slot *byte, local_state_slot *byte, assignment_state_slot *byte, call_state_slot *byte, return_state_slot *byte, value_state_slot *byte, control_state_slot *byte, kind i32, role i32) {
+    statement_value := llvm.build_load2(builder, i32_type, statement_value_slot, "function_body_statement_ast_value")
+    if kind == astbody.local_node_kind() || role == astbody.local_symbol_role() {
+        local_slot := llvm.build_alloca(builder, i32_type, "function_body_direct_local_slot")
+        llvm.build_store(builder, statement_value, local_slot)
+        direct_local := llvm.build_load2(builder, i32_type, local_slot, "function_body_direct_local_loaded")
+        loaded_local := llvm.build_load2(builder, i32_type, local_state_slot, "loaded_function_body_ast_local_value")
+        next_local := llvm.build_add(builder, loaded_local, direct_local, "function_body_direct_local_state")
+        llvm.build_store(builder, next_local, local_state_slot)
+        llvm.build_store(builder, direct_local, value_state_slot)
+        return
+    }
+    if kind == astbody.assignment_node_kind() || role == astbody.assignment_target_role() {
+        assignment_slot := llvm.build_alloca(builder, i32_type, "function_body_direct_assignment_slot")
+        previous_value := llvm.build_load2(builder, i32_type, value_state_slot, "loaded_function_body_direct_assignment_previous")
+        direct_assignment_value := llvm.build_add(builder, previous_value, statement_value, "function_body_direct_assignment_value")
+        llvm.build_store(builder, direct_assignment_value, assignment_slot)
+        direct_assignment := llvm.build_load2(builder, i32_type, assignment_slot, "function_body_direct_assignment_loaded")
+        loaded_assignment := llvm.build_load2(builder, i32_type, assignment_state_slot, "loaded_function_body_ast_assignment_value")
+        next_assignment := llvm.build_add(builder, loaded_assignment, direct_assignment, "function_body_direct_assignment_state")
+        llvm.build_store(builder, next_assignment, assignment_state_slot)
+        llvm.build_store(builder, direct_assignment, value_state_slot)
+        return
+    }
+    if kind == astbody.call_node_kind() || role == astbody.call_target_role() {
+        call_slot := llvm.build_alloca(builder, i32_type, "function_body_direct_call_slot")
+        direct_call_value := llvm.build_call2(builder, fn_type, call_helper, none, 0, "function_body_direct_call_value")
+        direct_call_result := llvm.build_add(builder, direct_call_value, statement_value, "function_body_direct_call_result")
+        llvm.build_store(builder, direct_call_result, call_slot)
+        direct_call := llvm.build_load2(builder, i32_type, call_slot, "function_body_direct_call_loaded")
+        loaded_call := llvm.build_load2(builder, i32_type, call_state_slot, "loaded_function_body_ast_call_value")
+        next_call := llvm.build_add(builder, loaded_call, direct_call, "function_body_direct_call_state")
+        llvm.build_store(builder, next_call, call_state_slot)
+        llvm.build_store(builder, direct_call, value_state_slot)
+        return
+    }
+    if kind == astbody.return_node_kind() || role == astbody.return_symbol_role() || role == astbody.return_literal_role() {
+        return_slot := llvm.build_alloca(builder, i32_type, "function_body_direct_return_slot")
+        llvm.build_store(builder, statement_value, return_slot)
+        direct_return := llvm.build_load2(builder, i32_type, return_slot, "function_body_direct_return_loaded")
+        loaded_return := llvm.build_load2(builder, i32_type, return_state_slot, "loaded_function_body_ast_return_value")
+        next_return := llvm.build_add(builder, loaded_return, direct_return, "function_body_direct_return_state")
+        llvm.build_store(builder, next_return, return_state_slot)
+        return
+    }
+    if role == astbody.control_flow_role() {
+        loaded_control := llvm.build_load2(builder, i32_type, control_state_slot, "loaded_function_body_ast_control_value")
+        next_control := llvm.build_add(builder, loaded_control, statement_value, "function_body_ast_control_value_lowered")
+        llvm.build_store(builder, next_control, control_state_slot)
+        return
+    }
+    loaded_value := llvm.build_load2(builder, i32_type, value_state_slot, "loaded_function_body_ast_unknown_statement_value")
+    next_value := llvm.build_add(builder, loaded_value, statement_value, "function_body_ast_unknown_value_lowered")
+    llvm.build_store(builder, next_value, value_state_slot)
+}
+
+pub fn finish_resolved_statement_value(builder *byte, i32_type *byte, statement_value_slot *byte, statement_resolved_type_slot *byte, local_state_slot *byte, assignment_state_slot *byte, call_state_slot *byte, return_state_slot *byte, value_state_slot *byte, control_state_slot *byte, kind i32, role i32) {
+    statement_value := llvm.build_load2(builder, i32_type, statement_value_slot, "function_body_resolved_statement_ast_value")
+    resolved_type := llvm.build_load2(builder, i32_type, statement_resolved_type_slot, "function_body_resolved_statement_type_value")
+    resolved_statement_value := llvm.build_add(builder, statement_value, resolved_type, "function_body_resolved_statement_value")
+    if kind == astbody.local_node_kind() || role == astbody.local_symbol_role() {
+        local_slot := llvm.build_alloca(builder, i32_type, "function_body_resolved_local_slot")
+        llvm.build_store(builder, resolved_statement_value, local_slot)
+        resolved_local := llvm.build_load2(builder, i32_type, local_slot, "function_body_resolved_local_loaded")
+        loaded_local := llvm.build_load2(builder, i32_type, local_state_slot, "loaded_function_body_resolved_local_state")
+        next_local := llvm.build_add(builder, loaded_local, resolved_local, "function_body_resolved_local_state")
+        llvm.build_store(builder, next_local, local_state_slot)
+        llvm.build_store(builder, resolved_local, value_state_slot)
+        return
+    }
+    if kind == astbody.assignment_node_kind() || role == astbody.assignment_target_role() {
+        assignment_slot := llvm.build_alloca(builder, i32_type, "function_body_resolved_assignment_slot")
+        previous_value := llvm.build_load2(builder, i32_type, value_state_slot, "loaded_function_body_resolved_assignment_previous")
+        resolved_assignment_value := llvm.build_add(builder, previous_value, resolved_statement_value, "function_body_resolved_assignment_value")
+        llvm.build_store(builder, resolved_assignment_value, assignment_slot)
+        resolved_assignment := llvm.build_load2(builder, i32_type, assignment_slot, "function_body_resolved_assignment_loaded")
+        loaded_assignment := llvm.build_load2(builder, i32_type, assignment_state_slot, "loaded_function_body_resolved_assignment_state")
+        next_assignment := llvm.build_add(builder, loaded_assignment, resolved_assignment, "function_body_resolved_assignment_state")
+        llvm.build_store(builder, next_assignment, assignment_state_slot)
+        llvm.build_store(builder, resolved_assignment, value_state_slot)
+        return
+    }
+    if kind == astbody.call_node_kind() || role == astbody.call_target_role() {
+        call_slot := llvm.build_alloca(builder, i32_type, "function_body_resolved_call_slot")
+        resolved_call_value := llvm.build_add(builder, resolved_statement_value, resolved_type, "function_body_resolved_call_value")
+        llvm.build_store(builder, resolved_call_value, call_slot)
+        resolved_call := llvm.build_load2(builder, i32_type, call_slot, "function_body_resolved_call_loaded")
+        loaded_call := llvm.build_load2(builder, i32_type, call_state_slot, "loaded_function_body_resolved_call_state")
+        next_call := llvm.build_add(builder, loaded_call, resolved_call, "function_body_resolved_call_state")
+        llvm.build_store(builder, next_call, call_state_slot)
+        llvm.build_store(builder, resolved_call, value_state_slot)
+        return
+    }
+    if kind == astbody.return_node_kind() || role == astbody.return_symbol_role() || role == astbody.return_literal_role() {
+        return_slot := llvm.build_alloca(builder, i32_type, "function_body_resolved_return_slot")
+        llvm.build_store(builder, resolved_statement_value, return_slot)
+        resolved_return := llvm.build_load2(builder, i32_type, return_slot, "function_body_resolved_return_loaded")
+        loaded_return := llvm.build_load2(builder, i32_type, return_state_slot, "loaded_function_body_resolved_return_state")
+        next_return := llvm.build_add(builder, loaded_return, resolved_return, "function_body_resolved_return_state")
+        llvm.build_store(builder, next_return, return_state_slot)
+        return
+    }
+    if role == astbody.control_flow_role() {
+        loaded_control := llvm.build_load2(builder, i32_type, control_state_slot, "loaded_function_body_resolved_control_state")
+        next_control := llvm.build_add(builder, loaded_control, resolved_statement_value, "function_body_resolved_control_state")
+        llvm.build_store(builder, next_control, control_state_slot)
+        return
+    }
+    loaded_value := llvm.build_load2(builder, i32_type, value_state_slot, "loaded_function_body_resolved_unknown_statement_value")
+    next_value := llvm.build_add(builder, loaded_value, resolved_statement_value, "function_body_resolved_unknown_value")
+    llvm.build_store(builder, next_value, value_state_slot)
+}
+
+pub fn lower_statement_expr_role_flow(builder *byte, i32_type *byte, local_state_slot *byte, assignment_state_slot *byte, call_state_slot *byte, return_state_slot *byte, value_state_slot *byte, role i32, typed_value *byte) {
+    if role == astbody.local_symbol_role() {
+        loaded_local := llvm.build_load2(builder, i32_type, local_state_slot, "loaded_function_body_local_state_for_statement_expr")
+        next_local := llvm.build_add(builder, loaded_local, typed_value, "function_body_local_statement_expr_value")
+        llvm.build_store(builder, next_local, local_state_slot)
+        return
+    }
+    if role == astbody.assignment_target_role() {
+        loaded_assignment := llvm.build_load2(builder, i32_type, assignment_state_slot, "loaded_function_body_assignment_state_for_statement_expr")
+        next_assignment := llvm.build_add(builder, loaded_assignment, typed_value, "function_body_assignment_statement_expr_value")
+        llvm.build_store(builder, next_assignment, assignment_state_slot)
+        return
+    }
+    if role == astbody.call_target_role() {
+        loaded_call := llvm.build_load2(builder, i32_type, call_state_slot, "loaded_function_body_call_state_for_statement_expr")
+        next_call := llvm.build_add(builder, loaded_call, typed_value, "function_body_call_statement_expr_value")
+        llvm.build_store(builder, next_call, call_state_slot)
+        return
+    }
+    if role == astbody.return_symbol_role() || role == astbody.return_literal_role() {
+        loaded_return := llvm.build_load2(builder, i32_type, return_state_slot, "loaded_function_body_return_state_for_statement_expr")
+        next_return := llvm.build_add(builder, loaded_return, typed_value, "function_body_return_statement_expr_value")
+        llvm.build_store(builder, next_return, return_state_slot)
+        return
+    }
+    loaded_value := llvm.build_load2(builder, i32_type, value_state_slot, "loaded_function_body_value_state_for_statement_expr_role")
+    next_value := llvm.build_add(builder, loaded_value, typed_value, "function_body_untyped_statement_expr_value")
+    llvm.build_store(builder, next_value, value_state_slot)
+}
+
+pub fn lower_statement_expr_typed_flow(builder *byte, i32_type *byte, i32_state_slot *byte, bool_state_slot *byte, string_state_slot *byte, pointer_state_slot *byte, none_state_slot *byte, unknown_state_slot *byte, type_kind i32, typed_value *byte) {
+    if type_kind == astexpr.i32_type_kind() {
+        loaded_i32 := llvm.build_load2(builder, i32_type, i32_state_slot, "loaded_function_body_i32_statement_expr_state")
+        next_i32 := llvm.build_add(builder, loaded_i32, typed_value, "function_body_i32_statement_expr_value")
+        llvm.build_store(builder, next_i32, i32_state_slot)
+        return
+    }
+    if type_kind == astexpr.bool_type_kind() {
+        loaded_bool := llvm.build_load2(builder, i32_type, bool_state_slot, "loaded_function_body_bool_statement_expr_state")
+        next_bool := llvm.build_add(builder, loaded_bool, typed_value, "function_body_bool_statement_expr_value")
+        llvm.build_store(builder, next_bool, bool_state_slot)
+        return
+    }
+    if type_kind == astexpr.string_type_kind() {
+        loaded_string := llvm.build_load2(builder, i32_type, string_state_slot, "loaded_function_body_string_statement_expr_state")
+        next_string := llvm.build_add(builder, loaded_string, typed_value, "function_body_string_statement_expr_value")
+        llvm.build_store(builder, next_string, string_state_slot)
+        return
+    }
+    if type_kind == astexpr.pointer_type_kind() {
+        loaded_pointer := llvm.build_load2(builder, i32_type, pointer_state_slot, "loaded_function_body_pointer_statement_expr_state")
+        next_pointer := llvm.build_add(builder, loaded_pointer, typed_value, "function_body_pointer_statement_expr_value")
+        llvm.build_store(builder, next_pointer, pointer_state_slot)
+        return
+    }
+    if type_kind == astexpr.none_type_kind() {
+        loaded_none := llvm.build_load2(builder, i32_type, none_state_slot, "loaded_function_body_none_statement_expr_state")
+        next_none := llvm.build_add(builder, loaded_none, typed_value, "function_body_none_statement_expr_value")
+        llvm.build_store(builder, next_none, none_state_slot)
+        return
+    }
+    loaded_unknown := llvm.build_load2(builder, i32_type, unknown_state_slot, "loaded_function_body_unknown_statement_expr_state")
+    next_unknown := llvm.build_add(builder, loaded_unknown, typed_value, "function_body_unknown_statement_expr_value")
+    llvm.build_store(builder, next_unknown, unknown_state_slot)
+}

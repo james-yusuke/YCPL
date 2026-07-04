@@ -18,6 +18,8 @@ extern fn c_int8_type_in_context(ctx *byte) *byte as "LLVMInt8TypeInContext"
 extern fn c_int32_type_in_context(ctx *byte) *byte as "LLVMInt32TypeInContext"
 extern fn c_int64_type_in_context(ctx *byte) *byte as "LLVMInt64TypeInContext"
 extern fn c_pointer_type(element_type *byte, address_space i32) *byte as "LLVMPointerType"
+extern fn c_struct_type_in_context(ctx *byte, element_types *byte, element_count i32, packed i32) *byte as "LLVMStructTypeInContext"
+extern fn c_array_type(element_type *byte, element_count i32) *byte as "LLVMArrayType"
 extern fn c_function_type(return_type *byte, param_types *byte, param_count i32, is_var_arg i32) *byte as "LLVMFunctionType"
 
 extern fn c_add_function(mod_ref *byte, name string, function_type *byte) *byte as "LLVMAddFunction"
@@ -81,6 +83,25 @@ struct RefArgs6 {
     arg5 *byte
 }
 
+struct RefArgs16 {
+    arg0 *byte
+    arg1 *byte
+    arg2 *byte
+    arg3 *byte
+    arg4 *byte
+    arg5 *byte
+    arg6 *byte
+    arg7 *byte
+    arg8 *byte
+    arg9 *byte
+    arg10 *byte
+    arg11 *byte
+    arg12 *byte
+    arg13 *byte
+    arg14 *byte
+    arg15 *byte
+}
+
 pub fn context_create() *byte {
     return c_context_create()
 }
@@ -139,6 +160,25 @@ pub fn int64_type_in_context(ctx *byte) *byte {
 
 pub fn pointer_type(element_type *byte, address_space i32) *byte {
     return c_pointer_type(element_type, address_space)
+}
+
+pub fn struct_type2(ctx *byte, field0 *byte, field1 *byte, packed i32) *byte {
+    fields := RefArgs2{arg0: field0, arg1: field1}
+    return c_struct_type_in_context(ctx, &fields, 2, packed)
+}
+
+pub fn struct_type3(ctx *byte, field0 *byte, field1 *byte, field2 *byte, packed i32) *byte {
+    fields := RefArgs3{arg0: field0, arg1: field1, arg2: field2}
+    return c_struct_type_in_context(ctx, &fields, 3, packed)
+}
+
+pub fn struct_type16(ctx *byte, field_type *byte, packed i32) *byte {
+    fields := RefArgs16{arg0: field_type, arg1: field_type, arg2: field_type, arg3: field_type, arg4: field_type, arg5: field_type, arg6: field_type, arg7: field_type, arg8: field_type, arg9: field_type, arg10: field_type, arg11: field_type, arg12: field_type, arg13: field_type, arg14: field_type, arg15: field_type}
+    return c_struct_type_in_context(ctx, &fields, 16, packed)
+}
+
+pub fn array_type(element_type *byte, element_count i32) *byte {
+    return c_array_type(element_type, element_count)
 }
 
 pub fn function_type(return_type *byte, param_types *byte, param_count i32, is_var_arg i32) *byte {
