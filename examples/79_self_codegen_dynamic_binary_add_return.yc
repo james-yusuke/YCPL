@@ -1,0 +1,5 @@
+fn main() i32 {
+    left := 8
+    right := 21
+    return left + right
+}

@@ -1,0 +1,7 @@
+fn main() i32 {
+    probe := 0
+    if probe == 0 {
+        return 34
+    }
+    return 55
+}

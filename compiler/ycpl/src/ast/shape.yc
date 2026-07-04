@@ -52,6 +52,10 @@ fn is_type_position(kind i32) bool {
     return kind == tok.colon() || kind == tok.rparen() || kind == tok.star() || kind == tok.lbrack()
 }
 
+fn is_declare_assign(kind i32, lexeme string) bool {
+    return kind == tok.assign() && lexeme[0] == ':'
+}
+
 pub fn scan(path string, source string) AstShape {
     lx := lexer.new(path, source)
     shape := AstShape{ok: true, message: "", line: 1, col: 1, decl_nodes: 0, stmt_nodes: 0, expr_nodes: 0, type_nodes: 0, digest: 17}
@@ -105,10 +109,10 @@ pub fn scan(path string, source string) AstShape {
         if lx.kind == tok.kw_break() || lx.kind == tok.kw_continue() {
             shape = add_node(shape, 204, lx.lexeme)
         }
-        if lx.kind == tok.colon() && prev_kind == tok.ident() {
+        if (lx.kind == tok.colon() || is_declare_assign(lx.kind, lx.lexeme)) && prev_kind == tok.ident() {
             shape = add_node(shape, 205, lx.lexeme)
         }
-        if lx.kind == tok.assign() || lx.kind == tok.plus_assign() || lx.kind == tok.minus_assign() || lx.kind == tok.mul_assign() || lx.kind == tok.div_assign() || lx.kind == tok.mod_assign() {
+        if !is_declare_assign(lx.kind, lx.lexeme) && (lx.kind == tok.assign() || lx.kind == tok.plus_assign() || lx.kind == tok.minus_assign() || lx.kind == tok.mul_assign() || lx.kind == tok.div_assign() || lx.kind == tok.mod_assign()) {
             shape = add_node(shape, 206, lx.lexeme)
         }
 

@@ -568,6 +568,10 @@ fn set_slot(p TinyIrParser, name string, slot *byte, type_kind i32) TinyIrParser
     return unsupported_parser(p, "self codegen currently supports up to 8 local variables")
 }
 
+fn is_declare_assign(kind i32, lexeme string) bool {
+    return kind == tok.assign() && lexeme[0] == ':'
+}
+
 fn lookup_helper(p TinyIrParser, name string) TinyIrParser {
     if p.helper_count > 0 && str.eq(p.helper0_name, name) {
         p.helper_name = p.helper0_name
@@ -1328,6 +1332,19 @@ fn parse_var_or_assign(p TinyIrParser) TinyIrParser {
     p = advance_sig(p)
     if !p.ok { return p }
 
+    if is_declare_assign(p.lx.kind, p.lx.lexeme) {
+        p = advance_sig(p)
+        p = parse_expr_or_comparison(p)
+        if !p.ok { return p }
+        inferred_type := p.value_type
+        if inferred_type == tiny_void_type_kind() {
+            return unsupported_parser(p, "self codegen cannot store void expression in a local")
+        }
+        slot := llvm.build_alloca(p.builder, llvm_type_for_value(p, inferred_type), name)
+        llvm.build_store(p.builder, p.value, slot)
+        return set_slot(p, name, slot, inferred_type)
+    }
+
     if p.lx.kind == tok.colon() {
         p = advance_sig(p)
         if p.lx.kind == tok.assign() {
@@ -1398,11 +1415,13 @@ fn parse_if_statement(p TinyIrParser) TinyIrParser {
 
     llvm.position_builder_at_end(p.builder, then_block)
     p = advance_sig(p)
+    then_returned := false
     for (; p.ok && p.lx.kind != tok.rbrace() && p.lx.kind != tok.eof(); ) {
         p = parse_statement(p)
         if !p.ok { return p }
         if p.returned {
-            return unsupported_parser(p, "self codegen does not support return inside if yet")
+            then_returned = true
+            p.returned = false
         }
         if p.lx.kind == tok.semicolon() {
             p = advance_sig(p)
@@ -1412,10 +1431,13 @@ fn parse_if_statement(p TinyIrParser) TinyIrParser {
     if p.lx.kind != tok.rbrace() {
         return fail_parser(p, "expected '}' after if body")
     }
-    llvm.build_br(p.builder, done_block)
+    if !then_returned {
+        llvm.build_br(p.builder, done_block)
+    }
     p = advance_sig(p)
 
     llvm.position_builder_at_end(p.builder, else_block)
+    else_returned := false
     if p.lx.kind == tok.kw_else() {
         p = advance_sig(p)
         if p.lx.kind != tok.lbrace() {
@@ -1426,7 +1448,8 @@ fn parse_if_statement(p TinyIrParser) TinyIrParser {
             p = parse_statement(p)
             if !p.ok { return p }
             if p.returned {
-                return unsupported_parser(p, "self codegen does not support return inside else yet")
+                else_returned = true
+                p.returned = false
             }
             if p.lx.kind == tok.semicolon() {
                 p = advance_sig(p)
@@ -1438,7 +1461,9 @@ fn parse_if_statement(p TinyIrParser) TinyIrParser {
         }
         p = advance_sig(p)
     }
-    llvm.build_br(p.builder, done_block)
+    if !else_returned {
+        llvm.build_br(p.builder, done_block)
+    }
     llvm.position_builder_at_end(p.builder, done_block)
     return p
 }
