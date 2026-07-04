@@ -19,6 +19,18 @@ export YCPL_BOOTSTRAP_YCC="$YCC"
 
 cd "$RUNFILES_ROOT"
 
+require_project_file_count() {
+  output_file="$1"
+  minimum="$2"
+  label="$3"
+  count="$(sed -n 's/.*files=\([0-9][0-9]*\).*/\1/p' "$output_file" | head -n 1)"
+  if [ -z "$count" ] || [ "$count" -lt "$minimum" ]; then
+    printf 'Expected %s to report at least %s files, got:\n' "$label" "$minimum" >&2
+    cat "$output_file" >&2
+    exit 1
+  fi
+}
+
 "$YCC_YCPL" parse compiler/ycpl >/tmp/ycpl-stage-parse.out
 "$YCC_YCPL" check compiler/ycpl >/tmp/ycpl-stage-check.out
 traversal_dir="$(mktemp -d "${TMPDIR:-/tmp}/ycpl-stage-traversal.XXXXXX")"
@@ -47,20 +59,15 @@ fn traversal_flow_surface(items []i32) i32 {
 }
 YCPL
 "$YCC_YCPL" parse "$traversal_dir/ycpl" >/tmp/ycpl-stage-traversal-parse.out
-if ! grep -q 'files=23' /tmp/ycpl-stage-traversal-parse.out; then
-  printf 'Expected recursive traversal to discover 23 files in %s, got:\n' "$traversal_dir/ycpl" >&2
-  cat /tmp/ycpl-stage-traversal-parse.out >&2
-  find "$traversal_dir/ycpl/src" -type f -name '*.yc' | sort >&2
-  exit 1
-fi
+require_project_file_count /tmp/ycpl-stage-traversal-parse.out 24 "recursive traversal in $traversal_dir/ycpl"
 traversal_ir_dir="$(mktemp -d "${TMPDIR:-/tmp}/ycpl-stage-traversal-ir.XXXXXX")"
 YCPL_NO_BOOTSTRAP=1 "$YCC_YCPL" build-ir "$traversal_dir/ycpl" -o "$traversal_ir_dir" >/tmp/ycpl-stage-traversal-ir.out
 grep -q 'node_lower_else_body' "$traversal_ir_dir/project_body.ll"
 grep -q 'node_lower_break_slot' "$traversal_ir_dir/project_body.ll"
 grep -q 'node_lower_continue_slot' "$traversal_ir_dir/project_body.ll"
 grep -q 'node_lower_for_in_check' "$traversal_ir_dir/project_body.ll"
-grep -q 'files=22' /tmp/ycpl-stage-parse.out
-grep -q 'files=22' /tmp/ycpl-stage-check.out
+require_project_file_count /tmp/ycpl-stage-parse.out 23 "stage parse"
+require_project_file_count /tmp/ycpl-stage-check.out 23 "stage check"
 grep -q 'fn_digest=' /tmp/ycpl-stage-parse.out
 grep -q 'body_digest=' /tmp/ycpl-stage-parse.out
 grep -q 'body_tokens=' /tmp/ycpl-stage-parse.out
@@ -320,7 +327,27 @@ grep -q 'function_expr_typed_symbol_surface' "$strict_ir_dir/merged.ll"
 grep -q 'function_expr_project_type_surface' "$strict_ir_dir/merged.ll"
 grep -q 'function_expression_typed_shape_score' "$strict_ir_dir/merged.ll"
 grep -q 'function_expr_member_type_state' "$strict_ir_dir/merged.ll"
+grep -q 'function_expr_member_field0_gep' "$strict_ir_dir/merged.ll"
+grep -q 'function_expr_member_field_index_gep' "$strict_ir_dir/merged.ll"
+grep -q 'function_expr_member_field_index_value' "$strict_ir_dir/merged.ll"
+grep -q 'function_expr_member_resolved_field_index_value' "$strict_ir_dir/merged.ll"
+grep -q 'function_expr_member_actual_struct_gep' "$strict_ir_dir/merged.ll"
+grep -q 'function_expr_member_actual_field_loaded' "$strict_ir_dir/merged.ll"
+grep -q 'function_expr_member_actual_field_value' "$strict_ir_dir/merged.ll"
+grep -q 'function_expr_member_name_hash_value' "$strict_ir_dir/merged.ll"
+grep -q 'function_expr_member_name_indexed_value' "$strict_ir_dir/merged.ll"
+grep -q 'function_expr_member_field2_gep' "$strict_ir_dir/merged.ll"
 grep -q 'function_expr_index_type_state' "$strict_ir_dir/merged.ll"
+grep -q 'function_expr_index_slice_len_gep' "$strict_ir_dir/merged.ll"
+grep -q 'function_expr_index_bounds_check' "$strict_ir_dir/merged.ll"
+grep -q 'function_expr_index_gep' "$strict_ir_dir/merged.ll"
+grep -q 'expr_lower_index_slice_len_gep' "$strict_ir_dir/merged.ll"
+grep -q 'expr_lower_index_bounds_check' "$strict_ir_dir/merged.ll"
+grep -q 'expr_lower_index_in_bounds' "$strict_ir_dir/merged.ll"
+grep -q 'expr_lower_index_oob' "$strict_ir_dir/merged.ll"
+grep -q 'expr_lower_index_gep' "$strict_ir_dir/merged.ll"
+grep -q 'expr_lower_index_len_checked_value' "$strict_ir_dir/merged.ll"
+grep -q 'alloca \[4 x i32\]' "$strict_ir_dir/merged.ll"
 grep -q 'function_expr_binary_value_state' "$strict_ir_dir/merged.ll"
 grep -q 'function_expr_binary_value_cmp' "$strict_ir_dir/merged.ll"
 grep -q 'function_expr_binary_bool_type_state' "$strict_ir_dir/merged.ll"
@@ -340,6 +367,16 @@ grep -q 'function_statement_expr_value' "$strict_ir_dir/merged.ll"
 grep -q 'function_statement_expr_type' "$strict_ir_dir/merged.ll"
 grep -q 'function_body_statement_expr_value_flow' "$strict_ir_dir/merged.ll"
 grep -q 'function_body_statement_expr_typed_value' "$strict_ir_dir/merged.ll"
+grep -q 'function_body_statement_ast_value_slot' "$strict_ir_dir/merged.ll"
+grep -q 'function_body_statement_ast_value_seed' "$strict_ir_dir/merged.ll"
+grep -q 'function_body_statement_ast_expr_value' "$strict_ir_dir/merged.ll"
+grep -q 'function_body_direct_local_loaded' "$strict_ir_dir/merged.ll"
+grep -q 'function_body_direct_assignment_value' "$strict_ir_dir/merged.ll"
+grep -q 'function_body_direct_assignment_loaded' "$strict_ir_dir/merged.ll"
+grep -q 'function_body_direct_call_value' "$strict_ir_dir/merged.ll"
+grep -q 'function_body_direct_call_loaded' "$strict_ir_dir/merged.ll"
+grep -q 'function_body_direct_return_loaded' "$strict_ir_dir/merged.ll"
+grep -q 'function_body_statement_ast_lowered_state' "$strict_ir_dir/merged.ll"
 grep -q 'function_body_local_statement_expr_value' "$strict_ir_dir/merged.ll"
 grep -q 'function_body_assignment_statement_expr_value' "$strict_ir_dir/merged.ll"
 grep -q 'function_body_call_statement_expr_value' "$strict_ir_dir/merged.ll"
@@ -539,7 +576,27 @@ grep -q 'function_expr_typed_symbol_surface' "$strict_ir_dir/project_body.ll"
 grep -q 'function_expr_project_type_surface' "$strict_ir_dir/project_body.ll"
 grep -q 'function_expression_typed_shape_score' "$strict_ir_dir/project_body.ll"
 grep -q 'function_expr_member_type_state' "$strict_ir_dir/project_body.ll"
+grep -q 'function_expr_member_field0_gep' "$strict_ir_dir/project_body.ll"
+grep -q 'function_expr_member_field_index_gep' "$strict_ir_dir/project_body.ll"
+grep -q 'function_expr_member_field_index_value' "$strict_ir_dir/project_body.ll"
+grep -q 'function_expr_member_resolved_field_index_value' "$strict_ir_dir/project_body.ll"
+grep -q 'function_expr_member_actual_struct_gep' "$strict_ir_dir/project_body.ll"
+grep -q 'function_expr_member_actual_field_loaded' "$strict_ir_dir/project_body.ll"
+grep -q 'function_expr_member_actual_field_value' "$strict_ir_dir/project_body.ll"
+grep -q 'function_expr_member_name_hash_value' "$strict_ir_dir/project_body.ll"
+grep -q 'function_expr_member_name_indexed_value' "$strict_ir_dir/project_body.ll"
+grep -q 'function_expr_member_field2_gep' "$strict_ir_dir/project_body.ll"
 grep -q 'function_expr_index_type_state' "$strict_ir_dir/project_body.ll"
+grep -q 'function_expr_index_slice_len_gep' "$strict_ir_dir/project_body.ll"
+grep -q 'function_expr_index_bounds_check' "$strict_ir_dir/project_body.ll"
+grep -q 'function_expr_index_gep' "$strict_ir_dir/project_body.ll"
+grep -q 'expr_lower_index_slice_len_gep' "$strict_ir_dir/project_body.ll"
+grep -q 'expr_lower_index_bounds_check' "$strict_ir_dir/project_body.ll"
+grep -q 'expr_lower_index_in_bounds' "$strict_ir_dir/project_body.ll"
+grep -q 'expr_lower_index_oob' "$strict_ir_dir/project_body.ll"
+grep -q 'expr_lower_index_gep' "$strict_ir_dir/project_body.ll"
+grep -q 'expr_lower_index_len_checked_value' "$strict_ir_dir/project_body.ll"
+grep -q 'alloca \[4 x i32\]' "$strict_ir_dir/project_body.ll"
 grep -q 'function_expr_binary_value_state' "$strict_ir_dir/project_body.ll"
 grep -q 'function_expr_binary_value_cmp' "$strict_ir_dir/project_body.ll"
 grep -q 'function_expr_binary_bool_type_state' "$strict_ir_dir/project_body.ll"
@@ -559,6 +616,16 @@ grep -q 'function_statement_expr_value' "$strict_ir_dir/project_body.ll"
 grep -q 'function_statement_expr_type' "$strict_ir_dir/project_body.ll"
 grep -q 'function_body_statement_expr_value_flow' "$strict_ir_dir/project_body.ll"
 grep -q 'function_body_statement_expr_typed_value' "$strict_ir_dir/project_body.ll"
+grep -q 'function_body_statement_ast_value_slot' "$strict_ir_dir/project_body.ll"
+grep -q 'function_body_statement_ast_value_seed' "$strict_ir_dir/project_body.ll"
+grep -q 'function_body_statement_ast_expr_value' "$strict_ir_dir/project_body.ll"
+grep -q 'function_body_direct_local_loaded' "$strict_ir_dir/project_body.ll"
+grep -q 'function_body_direct_assignment_value' "$strict_ir_dir/project_body.ll"
+grep -q 'function_body_direct_assignment_loaded' "$strict_ir_dir/project_body.ll"
+grep -q 'function_body_direct_call_value' "$strict_ir_dir/project_body.ll"
+grep -q 'function_body_direct_call_loaded' "$strict_ir_dir/project_body.ll"
+grep -q 'function_body_direct_return_loaded' "$strict_ir_dir/project_body.ll"
+grep -q 'function_body_statement_ast_lowered_state' "$strict_ir_dir/project_body.ll"
 grep -q 'function_body_local_statement_expr_value' "$strict_ir_dir/project_body.ll"
 grep -q 'function_body_assignment_statement_expr_value' "$strict_ir_dir/project_body.ll"
 grep -q 'function_body_call_statement_expr_value' "$strict_ir_dir/project_body.ll"
@@ -636,6 +703,16 @@ grep -q 'expr_lower_identifier_slot' "$strict_ir_dir/project_body.ll"
 grep -q 'expr_lower_literal_slot' "$strict_ir_dir/project_body.ll"
 grep -q 'expr_lower_call_value' "$strict_ir_dir/project_body.ll"
 grep -q 'expr_lower_member_score' "$strict_ir_dir/project_body.ll"
+grep -q 'expr_lower_member_field0_gep' "$strict_ir_dir/project_body.ll"
+grep -q 'expr_lower_member_field_index_gep' "$strict_ir_dir/project_body.ll"
+grep -q 'expr_lower_member_field_index_value' "$strict_ir_dir/project_body.ll"
+grep -q 'expr_lower_member_resolved_field_index_value' "$strict_ir_dir/project_body.ll"
+grep -q 'expr_lower_member_actual_struct_gep' "$strict_ir_dir/project_body.ll"
+grep -q 'expr_lower_member_actual_field_loaded' "$strict_ir_dir/project_body.ll"
+grep -q 'expr_lower_member_actual_field_value' "$strict_ir_dir/project_body.ll"
+grep -q 'expr_lower_member_name_hash_value' "$strict_ir_dir/project_body.ll"
+grep -q 'expr_lower_member_name_indexed_value' "$strict_ir_dir/project_body.ll"
+grep -q 'expr_lower_member_field2_gep' "$strict_ir_dir/project_body.ll"
 grep -q 'expr_lower_index_score' "$strict_ir_dir/project_body.ll"
 grep -q 'expr_lower_binary_value' "$strict_ir_dir/project_body.ll"
 grep -q 'expr_lower_binary_sub_value' "$strict_ir_dir/project_body.ll"
@@ -684,8 +761,8 @@ if [ ! -x "$strict_native_dir/merged" ]; then
 fi
 "$strict_native_dir/merged" parse compiler/ycpl >/tmp/ycpl-strict-native-parse.out
 "$strict_native_dir/merged" check compiler/ycpl >/tmp/ycpl-strict-native-check.out
-grep -q 'files=22' /tmp/ycpl-strict-native-parse.out
-grep -q 'files=22' /tmp/ycpl-strict-native-check.out
+require_project_file_count /tmp/ycpl-strict-native-parse.out 23 "strict native parse"
+require_project_file_count /tmp/ycpl-strict-native-check.out 23 "strict native check"
 grep -q 'fn_digest=' /tmp/ycpl-strict-native-parse.out
 grep -q 'body_digest=' /tmp/ycpl-strict-native-parse.out
 grep -q 'body_nodes=' /tmp/ycpl-strict-native-parse.out
@@ -743,6 +820,14 @@ grep -q '@ycpl_ast_expr_table_digest' "$strict_stage3_ir_dir/merged.ll"
 grep -q '@ycpl_stage_expr_lowered_floor' "$strict_stage3_ir_dir/merged.ll"
 grep -q 'exprfloorok' "$strict_stage3_ir_dir/merged.ll"
 grep -q '@ycpl_ast_expr_slot_digest' "$strict_stage3_ir_dir/merged.ll"
+grep -q 'function_body_statement_resolved_type_slot' "$strict_stage3_ir_dir/merged.ll"
+grep -q 'function_body_statement_resolved_expr_type' "$strict_stage3_ir_dir/merged.ll"
+grep -q 'function_body_resolved_statement_value' "$strict_stage3_ir_dir/merged.ll"
+grep -q 'function_body_resolved_local_loaded' "$strict_stage3_ir_dir/merged.ll"
+grep -q 'function_body_resolved_assignment_loaded' "$strict_stage3_ir_dir/merged.ll"
+grep -q 'function_body_resolved_call_loaded' "$strict_stage3_ir_dir/merged.ll"
+grep -q 'function_body_resolved_return_loaded' "$strict_stage3_ir_dir/merged.ll"
+grep -q 'function_body_resolved_statement_lowered_state' "$strict_stage3_ir_dir/merged.ll"
 grep -q '@.stage3.stage4.ir' "$strict_stage3_ir_dir/merged.ll"
 grep -q '@.stage3.tinyllvmcall2icmp.ir' "$strict_stage3_ir_dir/merged.ll"
 grep -q '@.stage3.tinyllvmbuildermemory.ir' "$strict_stage3_ir_dir/merged.ll"
@@ -960,7 +1045,7 @@ if [ -n "$LLC_BIN" ]; then
   grep -q 'YCPL stage3 AST IR' /tmp/ycpl-strict-stage3-native-run.out
   "$strict_stage3_native_dir/merged" parse compiler/ycpl >/tmp/ycpl-strict-stage3-native-parse.out
   "$strict_stage3_native_dir/merged" check compiler/ycpl >/tmp/ycpl-strict-stage3-native-check.out
-  grep -q 'files=22' /tmp/ycpl-strict-stage3-native-parse.out
+  require_project_file_count /tmp/ycpl-strict-stage3-native-parse.out 23 "strict stage3 native parse"
   grep -q 'typed_nodes=' /tmp/ycpl-strict-stage3-native-parse.out
   grep -q 'expr_nodes=' /tmp/ycpl-strict-stage3-native-parse.out
   grep -q 'main=1' /tmp/ycpl-strict-stage3-native-check.out
@@ -1130,7 +1215,7 @@ if [ -n "$LLC_BIN" ]; then
   grep -q 'YCPL stage4 AST IR' /tmp/ycpl-strict-stage4-native-run.out
   "$strict_stage4_native_dir/merged" parse compiler/ycpl >/tmp/ycpl-strict-stage4-native-parse.out
   "$strict_stage4_native_dir/merged" check compiler/ycpl >/tmp/ycpl-strict-stage4-native-check.out
-  grep -q 'files=22' /tmp/ycpl-strict-stage4-native-parse.out
+  require_project_file_count /tmp/ycpl-strict-stage4-native-parse.out 23 "strict stage4 native parse"
   grep -q 'typed_nodes=' /tmp/ycpl-strict-stage4-native-parse.out
   grep -q 'expr_nodes=' /tmp/ycpl-strict-stage4-native-parse.out
   grep -q 'main=1' /tmp/ycpl-strict-stage4-native-check.out
@@ -1269,8 +1354,8 @@ fi
 
 "$STAGE2" parse compiler/ycpl >/tmp/ycpl-stage2-parse.out
 "$STAGE2" check compiler/ycpl >/tmp/ycpl-stage2-check.out
-grep -q 'files=22' /tmp/ycpl-stage2-parse.out
-grep -q 'files=22' /tmp/ycpl-stage2-check.out
+require_project_file_count /tmp/ycpl-stage2-parse.out 23 "stage2 parse"
+require_project_file_count /tmp/ycpl-stage2-check.out 23 "stage2 check"
 grep -q 'fn_digest=' /tmp/ycpl-stage2-parse.out
 grep -q 'body_digest=' /tmp/ycpl-stage2-parse.out
 grep -q 'body_nodes=' /tmp/ycpl-stage2-parse.out

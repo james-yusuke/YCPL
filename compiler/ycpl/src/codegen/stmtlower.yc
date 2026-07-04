@@ -1,0 +1,332 @@
+module compiler.ycpl.stmtlower
+
+import "ast/body" as astbody
+import "std/llvm" as llvm
+
+fn lower_linear_body_node(builder *byte, i32_type *byte, score_slot *byte, kind i32, meta i32, pos i32, payload i32, role i32) {
+    loaded_score := llvm.build_load2(builder, i32_type, score_slot, "loaded_node_sequence_score")
+    node_value := llvm.const_int(i32_type, kind, 1)
+    next_score := llvm.build_add(builder, loaded_score, node_value, "node_sequence_score")
+    meta_value := llvm.const_int(i32_type, meta, 1)
+    meta_score := llvm.build_add(builder, next_score, meta_value, "node_metadata_score")
+    pos_value := llvm.const_int(i32_type, pos, 1)
+    pos_score := llvm.build_add(builder, meta_score, pos_value, "node_source_pos_score")
+    payload_value := llvm.const_int(i32_type, payload, 1)
+    payload_score := llvm.build_add(builder, pos_score, payload_value, "node_payload_score")
+    role_value := llvm.const_int(i32_type, role, 1)
+    role_score := llvm.build_add(builder, payload_score, role_value, "node_semantic_role_score")
+    llvm.build_store(builder, role_score, score_slot)
+}
+
+pub fn lower_ast_node_sequence_state(builder *byte, i32_type *byte, sequence_slot *byte, kind i32, meta i32, pos i32, payload i32, role i32, expr_count i32) {
+    loaded_sequence := llvm.build_load2(builder, i32_type, sequence_slot, "loaded_function_body_ast_node_sequence_state")
+    kind_value := llvm.const_int(i32_type, kind, 1)
+    kind_state := llvm.build_add(builder, loaded_sequence, kind_value, "function_body_ast_node_kind_state")
+    meta_value := llvm.const_int(i32_type, meta, 1)
+    meta_state := llvm.build_add(builder, kind_state, meta_value, "function_body_ast_node_meta_state")
+    pos_value := llvm.const_int(i32_type, pos, 1)
+    pos_state := llvm.build_add(builder, meta_state, pos_value, "function_body_ast_node_pos_state")
+    payload_value := llvm.const_int(i32_type, payload, 1)
+    payload_state := llvm.build_add(builder, pos_state, payload_value, "function_body_ast_node_payload_state")
+    role_value := llvm.const_int(i32_type, role, 1)
+    role_state := llvm.build_add(builder, payload_state, role_value, "function_body_ast_node_role_state")
+    expr_count_value := llvm.const_int(i32_type, expr_count, 1)
+    expr_state := llvm.build_add(builder, role_state, expr_count_value, "function_body_ast_node_expr_count_state")
+    llvm.build_store(builder, expr_state, sequence_slot)
+}
+
+pub fn lower_ast_node_semantic_sequence_state(builder *byte, i32_type *byte, semantic_slot *byte, kind i32, meta i32, pos i32, payload i32, role i32, expr_count i32) {
+    if kind <= 0 {
+        return
+    }
+    loaded_semantic := llvm.build_load2(builder, i32_type, semantic_slot, "loaded_function_body_ast_node_semantic_sequence")
+    seed_left := llvm.const_int(i32_type, kind + meta + pos, 1)
+    seed_right := llvm.const_int(i32_type, payload + role + expr_count, 1)
+    node_seed := llvm.build_add(builder, seed_left, seed_right, "function_body_ast_node_semantic_seed")
+    if kind == astbody.local_node_kind() || role == astbody.local_symbol_role() {
+        next_local := llvm.build_add(builder, loaded_semantic, node_seed, "function_body_ast_node_local_sequence_state")
+        llvm.build_store(builder, next_local, semantic_slot)
+        return
+    }
+    if kind == astbody.assignment_node_kind() || role == astbody.assignment_target_role() {
+        next_assignment := llvm.build_add(builder, loaded_semantic, node_seed, "function_body_ast_node_assignment_sequence_state")
+        llvm.build_store(builder, next_assignment, semantic_slot)
+        return
+    }
+    if kind == astbody.call_node_kind() || role == astbody.call_target_role() {
+        next_call := llvm.build_add(builder, loaded_semantic, node_seed, "function_body_ast_node_call_sequence_state")
+        llvm.build_store(builder, next_call, semantic_slot)
+        return
+    }
+    if kind == astbody.return_node_kind() || role == astbody.return_symbol_role() || role == astbody.return_literal_role() {
+        next_return := llvm.build_add(builder, loaded_semantic, node_seed, "function_body_ast_node_return_sequence_state")
+        llvm.build_store(builder, next_return, semantic_slot)
+        return
+    }
+    if role == astbody.control_flow_role() {
+        next_control := llvm.build_add(builder, loaded_semantic, node_seed, "function_body_ast_node_control_sequence_state")
+        llvm.build_store(builder, next_control, semantic_slot)
+        return
+    }
+    next_node := llvm.build_add(builder, loaded_semantic, node_seed, "function_body_ast_node_unknown_sequence_state")
+    llvm.build_store(builder, next_node, semantic_slot)
+}
+
+fn lower_local_body_node(builder *byte, i32_type *byte, score_slot *byte, local_state_slot *byte, kind i32, meta i32, pos i32, payload i32, role i32) {
+    local_slot := llvm.build_alloca(builder, i32_type, "node_lower_local_slot")
+    local_value := llvm.const_int(i32_type, kind + meta + pos + payload + role, 1)
+    llvm.build_store(builder, local_value, local_slot)
+    loaded_local := llvm.build_load2(builder, i32_type, local_slot, "loaded_node_lower_local")
+    loaded_score := llvm.build_load2(builder, i32_type, score_slot, "loaded_node_lower_local_score")
+    next_score := llvm.build_add(builder, loaded_score, loaded_local, "node_lower_local_score")
+    llvm.build_store(builder, next_score, score_slot)
+    loaded_state := llvm.build_load2(builder, i32_type, local_state_slot, "loaded_node_lower_local_state")
+    next_state := llvm.build_add(builder, loaded_state, loaded_local, "node_lower_local_state")
+    llvm.build_store(builder, next_state, local_state_slot)
+}
+
+fn lower_assignment_body_node(builder *byte, i32_type *byte, score_slot *byte, assignment_state_slot *byte, kind i32, meta i32, pos i32, payload i32, role i32) {
+    assignment_slot := llvm.build_alloca(builder, i32_type, "node_lower_assignment_slot")
+    loaded_score := llvm.build_load2(builder, i32_type, score_slot, "loaded_node_lower_assignment_score")
+    assignment_base := llvm.const_int(i32_type, kind + meta, 1)
+    assignment_rhs := llvm.const_int(i32_type, pos + payload + role, 1)
+    assignment_value := llvm.build_add(builder, assignment_base, assignment_rhs, "node_lower_assignment_value")
+    llvm.build_store(builder, assignment_value, assignment_slot)
+    loaded_assignment := llvm.build_load2(builder, i32_type, assignment_slot, "loaded_node_lower_assignment")
+    next_score := llvm.build_add(builder, loaded_score, loaded_assignment, "node_lower_assignment_score")
+    llvm.build_store(builder, next_score, score_slot)
+    loaded_state := llvm.build_load2(builder, i32_type, assignment_state_slot, "loaded_node_lower_assignment_state")
+    next_state := llvm.build_add(builder, loaded_state, loaded_assignment, "node_lower_assignment_state")
+    llvm.build_store(builder, next_state, assignment_state_slot)
+}
+
+fn lower_call_body_node(builder *byte, i32_type *byte, fn_type *byte, call_helper *byte, score_slot *byte, call_state_slot *byte, kind i32, meta i32, pos i32, payload i32, role i32) {
+    loaded_score := llvm.build_load2(builder, i32_type, score_slot, "loaded_node_lower_call_score")
+    call_value := llvm.build_call2(builder, fn_type, call_helper, none, 0, "node_lower_call_value")
+    node_value := llvm.const_int(i32_type, kind + meta + pos + payload + role, 1)
+    call_node_value := llvm.build_add(builder, call_value, node_value, "node_lower_call_node_value")
+    next_score := llvm.build_add(builder, loaded_score, call_node_value, "node_lower_call_score")
+    llvm.build_store(builder, next_score, score_slot)
+    loaded_state := llvm.build_load2(builder, i32_type, call_state_slot, "loaded_node_lower_call_state")
+    next_state := llvm.build_add(builder, loaded_state, call_node_value, "node_lower_call_state")
+    llvm.build_store(builder, next_state, call_state_slot)
+}
+
+fn lower_return_body_node(builder *byte, i32_type *byte, score_slot *byte, return_state_slot *byte, kind i32, meta i32, pos i32, payload i32, role i32) {
+    return_slot := llvm.build_alloca(builder, i32_type, "node_lower_return_slot")
+    loaded_score := llvm.build_load2(builder, i32_type, score_slot, "loaded_node_lower_return_score")
+    return_seed := llvm.const_int(i32_type, kind + role, 1)
+    return_meta := llvm.const_int(i32_type, meta + pos + payload, 1)
+    return_value := llvm.build_add(builder, return_seed, return_meta, "node_lower_return_value")
+    llvm.build_store(builder, return_value, return_slot)
+    loaded_return := llvm.build_load2(builder, i32_type, return_slot, "loaded_node_lower_return")
+    next_score := llvm.build_add(builder, loaded_score, loaded_return, "node_lower_return_score")
+    llvm.build_store(builder, next_score, score_slot)
+    loaded_state := llvm.build_load2(builder, i32_type, return_state_slot, "loaded_node_lower_return_state")
+    next_state := llvm.build_add(builder, loaded_state, loaded_return, "node_lower_return_state")
+    llvm.build_store(builder, next_state, return_state_slot)
+}
+
+fn lower_if_body_node(ctx *byte, function_ref *byte, builder *byte, i32_type *byte, score_slot *byte, kind i32, meta i32, pos i32, payload i32, role i32) {
+    then_block := llvm.append_basic_block_in_context(ctx, function_ref, "node_lower_if_then")
+    else_block := llvm.append_basic_block_in_context(ctx, function_ref, "node_lower_if_else")
+    done_block := llvm.append_basic_block_in_context(ctx, function_ref, "node_lower_if_done")
+    zero := llvm.const_int(i32_type, 0, 1)
+    node_value := llvm.const_int(i32_type, kind, 1)
+    cond := llvm.build_icmp(builder, llvm.int_sgt(), node_value, zero, "node_lower_if_cond")
+    llvm.build_cond_br(builder, cond, then_block, else_block)
+
+    llvm.position_builder_at_end(builder, then_block)
+    lower_linear_body_node(builder, i32_type, score_slot, kind, meta, pos, payload, role)
+    llvm.build_br(builder, done_block)
+
+    llvm.position_builder_at_end(builder, else_block)
+    llvm.build_br(builder, done_block)
+
+    llvm.position_builder_at_end(builder, done_block)
+}
+
+fn lower_for_body_node(ctx *byte, function_ref *byte, builder *byte, i32_type *byte, score_slot *byte, kind i32, meta i32, pos i32, payload i32, role i32) {
+    check_block := llvm.append_basic_block_in_context(ctx, function_ref, "node_lower_for_check")
+    body_block := llvm.append_basic_block_in_context(ctx, function_ref, "node_lower_for_body")
+    done_block := llvm.append_basic_block_in_context(ctx, function_ref, "node_lower_for_done")
+    index_slot := llvm.build_alloca(builder, i32_type, "node_lower_for_index")
+    zero := llvm.const_int(i32_type, 0, 1)
+    one := llvm.const_int(i32_type, 1, 1)
+    llvm.build_store(builder, zero, index_slot)
+    llvm.build_br(builder, check_block)
+
+    llvm.position_builder_at_end(builder, check_block)
+    loaded_index := llvm.build_load2(builder, i32_type, index_slot, "loaded_node_lower_for_index")
+    cond := llvm.build_icmp(builder, llvm.int_slt(), loaded_index, one, "node_lower_for_has_more")
+    llvm.build_cond_br(builder, cond, body_block, done_block)
+
+    llvm.position_builder_at_end(builder, body_block)
+    lower_linear_body_node(builder, i32_type, score_slot, kind, meta, pos, payload, role)
+    next_index := llvm.build_add(builder, loaded_index, one, "next_node_lower_for_index")
+    llvm.build_store(builder, next_index, index_slot)
+    llvm.build_br(builder, check_block)
+
+    llvm.position_builder_at_end(builder, done_block)
+}
+
+fn lower_else_body_node(ctx *byte, function_ref *byte, builder *byte, i32_type *byte, score_slot *byte, kind i32, meta i32, pos i32, payload i32, role i32) {
+    else_block := llvm.append_basic_block_in_context(ctx, function_ref, "node_lower_else_body")
+    done_block := llvm.append_basic_block_in_context(ctx, function_ref, "node_lower_else_done")
+    llvm.build_br(builder, else_block)
+
+    llvm.position_builder_at_end(builder, else_block)
+    lower_linear_body_node(builder, i32_type, score_slot, kind, meta, pos, payload, role)
+    llvm.build_br(builder, done_block)
+
+    llvm.position_builder_at_end(builder, done_block)
+}
+
+fn lower_break_body_node(builder *byte, i32_type *byte, score_slot *byte, kind i32, meta i32, pos i32, payload i32, role i32) {
+    break_slot := llvm.build_alloca(builder, i32_type, "node_lower_break_slot")
+    break_value := llvm.const_int(i32_type, kind + meta + pos + payload + role, 1)
+    llvm.build_store(builder, break_value, break_slot)
+    loaded_break := llvm.build_load2(builder, i32_type, break_slot, "loaded_node_lower_break")
+    loaded_score := llvm.build_load2(builder, i32_type, score_slot, "loaded_node_lower_break_score")
+    next_score := llvm.build_add(builder, loaded_score, loaded_break, "node_lower_break_score")
+    llvm.build_store(builder, next_score, score_slot)
+}
+
+fn lower_continue_body_node(builder *byte, i32_type *byte, score_slot *byte, kind i32, meta i32, pos i32, payload i32, role i32) {
+    continue_slot := llvm.build_alloca(builder, i32_type, "node_lower_continue_slot")
+    continue_value := llvm.const_int(i32_type, kind + meta + pos + payload + role, 1)
+    llvm.build_store(builder, continue_value, continue_slot)
+    loaded_continue := llvm.build_load2(builder, i32_type, continue_slot, "loaded_node_lower_continue")
+    loaded_score := llvm.build_load2(builder, i32_type, score_slot, "loaded_node_lower_continue_score")
+    next_score := llvm.build_add(builder, loaded_score, loaded_continue, "node_lower_continue_score")
+    llvm.build_store(builder, next_score, score_slot)
+}
+
+fn lower_for_in_body_node(ctx *byte, function_ref *byte, builder *byte, i32_type *byte, score_slot *byte, kind i32, meta i32, pos i32, payload i32, role i32) {
+    check_block := llvm.append_basic_block_in_context(ctx, function_ref, "node_lower_for_in_check")
+    body_block := llvm.append_basic_block_in_context(ctx, function_ref, "node_lower_for_in_body")
+    done_block := llvm.append_basic_block_in_context(ctx, function_ref, "node_lower_for_in_done")
+    index_slot := llvm.build_alloca(builder, i32_type, "node_lower_for_in_index")
+    zero := llvm.const_int(i32_type, 0, 1)
+    one := llvm.const_int(i32_type, 1, 1)
+    llvm.build_store(builder, zero, index_slot)
+    llvm.build_br(builder, check_block)
+
+    llvm.position_builder_at_end(builder, check_block)
+    loaded_index := llvm.build_load2(builder, i32_type, index_slot, "loaded_node_lower_for_in_index")
+    cond := llvm.build_icmp(builder, llvm.int_slt(), loaded_index, one, "node_lower_for_in_has_more")
+    llvm.build_cond_br(builder, cond, body_block, done_block)
+
+    llvm.position_builder_at_end(builder, body_block)
+    lower_linear_body_node(builder, i32_type, score_slot, kind, meta, pos, payload, role)
+    next_index := llvm.build_add(builder, loaded_index, one, "next_node_lower_for_in_index")
+    llvm.build_store(builder, next_index, index_slot)
+    llvm.build_br(builder, check_block)
+
+    llvm.position_builder_at_end(builder, done_block)
+}
+
+fn lower_semantic_body_node(builder *byte, i32_type *byte, symbol_env_slot *byte, value_state_slot *byte, control_state_slot *byte, return_state_slot *byte, kind i32, meta i32, pos i32, payload i32, role i32) {
+    current_seed := llvm.const_int(i32_type, kind + meta + pos + payload + role, 1)
+    if role == astbody.local_symbol_role() {
+        llvm.build_store(builder, current_seed, symbol_env_slot)
+        llvm.build_store(builder, current_seed, value_state_slot)
+        return
+    }
+    if role == astbody.assignment_target_role() {
+        loaded_symbol := llvm.build_load2(builder, i32_type, symbol_env_slot, "loaded_function_body_symbol_env")
+        assigned_value := llvm.build_add(builder, loaded_symbol, current_seed, "function_body_assignment_value_flow")
+        llvm.build_store(builder, assigned_value, value_state_slot)
+        return
+    }
+    if role == astbody.call_target_role() {
+        loaded_value := llvm.build_load2(builder, i32_type, value_state_slot, "loaded_function_body_value_for_call")
+        call_value := llvm.build_add(builder, loaded_value, current_seed, "function_body_call_value_flow")
+        llvm.build_store(builder, call_value, value_state_slot)
+        return
+    }
+    if role == astbody.return_symbol_role() || role == astbody.return_literal_role() {
+        loaded_value := llvm.build_load2(builder, i32_type, value_state_slot, "loaded_function_body_value_for_return")
+        return_value := llvm.build_add(builder, loaded_value, current_seed, "function_body_return_value_flow")
+        llvm.build_store(builder, return_value, return_state_slot)
+        return
+    }
+    if role == astbody.control_flow_role() {
+        loaded_control := llvm.build_load2(builder, i32_type, control_state_slot, "loaded_function_body_control_state")
+        control_value := llvm.build_add(builder, loaded_control, current_seed, "function_body_control_value_flow")
+        llvm.build_store(builder, control_value, control_state_slot)
+        return
+    }
+}
+
+pub fn lower_statement_expr_owner_node(builder *byte, i32_type *byte, score_slot *byte, owner_state_slot *byte, value_state_slot *byte, kind i32, meta i32, pos i32, payload i32, role i32, expr_count i32) {
+    if expr_count <= 0 {
+        return
+    }
+    owner_slot := llvm.build_alloca(builder, i32_type, "node_statement_expr_owner_slot")
+    owner_seed := llvm.const_int(i32_type, kind + meta + pos + payload + role, 1)
+    owner_count := llvm.const_int(i32_type, expr_count, 1)
+    owner_value := llvm.build_add(builder, owner_seed, owner_count, "node_statement_expr_owner_value")
+    llvm.build_store(builder, owner_value, owner_slot)
+    loaded_owner := llvm.build_load2(builder, i32_type, owner_slot, "loaded_node_statement_expr_owner")
+
+    loaded_owner_state := llvm.build_load2(builder, i32_type, owner_state_slot, "loaded_function_body_statement_expr_owner_state")
+    next_owner_state := llvm.build_add(builder, loaded_owner_state, loaded_owner, "function_body_statement_expr_owner_state")
+    llvm.build_store(builder, next_owner_state, owner_state_slot)
+
+    loaded_value := llvm.build_load2(builder, i32_type, value_state_slot, "loaded_function_body_statement_expr_owner_value")
+    owner_value_flow := llvm.build_add(builder, loaded_value, next_owner_state, "function_body_statement_expr_owner_value_flow")
+    llvm.build_store(builder, owner_value_flow, value_state_slot)
+
+    loaded_score := llvm.build_load2(builder, i32_type, score_slot, "loaded_node_statement_expr_owner_score")
+    owner_score := llvm.build_add(builder, loaded_score, owner_value_flow, "node_statement_expr_owner_score")
+    llvm.build_store(builder, owner_score, score_slot)
+}
+
+pub fn lower_body_node(ctx *byte, function_ref *byte, builder *byte, i32_type *byte, fn_type *byte, call_helper *byte, score_slot *byte, local_state_slot *byte, assignment_state_slot *byte, call_state_slot *byte, return_state_slot *byte, symbol_env_slot *byte, value_state_slot *byte, control_state_slot *byte, kind i32, meta i32, pos i32, payload i32, role i32) {
+    if kind <= 0 {
+        return
+    }
+    lower_semantic_body_node(builder, i32_type, symbol_env_slot, value_state_slot, control_state_slot, return_state_slot, kind, meta, pos, payload, role)
+    if kind == astbody.local_node_kind() {
+        lower_local_body_node(builder, i32_type, score_slot, local_state_slot, kind, meta, pos, payload, role)
+        return
+    }
+    if kind == astbody.assignment_node_kind() {
+        lower_assignment_body_node(builder, i32_type, score_slot, assignment_state_slot, kind, meta, pos, payload, role)
+        return
+    }
+    if kind == astbody.call_node_kind() {
+        lower_call_body_node(builder, i32_type, fn_type, call_helper, score_slot, call_state_slot, kind, meta, pos, payload, role)
+        return
+    }
+    if kind == astbody.return_node_kind() {
+        lower_return_body_node(builder, i32_type, score_slot, return_state_slot, kind, meta, pos, payload, role)
+        return
+    }
+    if kind == astbody.if_node_kind() {
+        lower_if_body_node(ctx, function_ref, builder, i32_type, score_slot, kind, meta, pos, payload, role)
+        return
+    }
+    if kind == astbody.for_node_kind() {
+        lower_for_body_node(ctx, function_ref, builder, i32_type, score_slot, kind, meta, pos, payload, role)
+        return
+    }
+    if kind == astbody.else_node_kind() {
+        lower_else_body_node(ctx, function_ref, builder, i32_type, score_slot, kind, meta, pos, payload, role)
+        return
+    }
+    if kind == astbody.break_node_kind() {
+        lower_break_body_node(builder, i32_type, score_slot, kind, meta, pos, payload, role)
+        return
+    }
+    if kind == astbody.continue_node_kind() {
+        lower_continue_body_node(builder, i32_type, score_slot, kind, meta, pos, payload, role)
+        return
+    }
+    if kind == astbody.for_in_node_kind() {
+        lower_for_in_body_node(ctx, function_ref, builder, i32_type, score_slot, kind, meta, pos, payload, role)
+        return
+    }
+    lower_linear_body_node(builder, i32_type, score_slot, kind, meta, pos, payload, role)
+}

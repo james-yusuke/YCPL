@@ -120,7 +120,13 @@ stage-2 self-host gate
 ├─ project_body.ll は per-function statement-owned body-node count から expression node を lower し、残りの tail expression を後続で lower する
 ├─ project_body.ll は statement が所有する expression 数を node ごとの owner state と value-flow IR に lower する
 ├─ statement-owned expression の typed value は owning body node の semantic role に従い、local/assignment/call/return state へ流れる
+├─ statement-owned expression は local/assignment/call/return/control lowering の前に statement ごとの AST value へ畳み込まれ、summary-only body lowering path をさらに減らしている
+├─ statement ごとの AST value は aggregate state 更新だけでなく、direct local/assignment/call/return LLVM alloca/store/load/call path に流れる
+├─ statement ごとの AST value は parser/resolver 由来の expression type tag と結合され、resolved local/assignment/call/return state lowering に流れる
 ├─ statement-owned expression の typed value は i32/bool/string/pointer/none/unknown の型カテゴリ別 state にも流れ、function-body environment に合成される
+├─ statement/expression の role/type flow lowering は `codegen/bodyflow.yc` module に分離し、`projectir.yc` は module 経由で呼び出す
+├─ identifier/literal/call/member/index/binary/unary expression lowering は `codegen/exprlower.yc` module に分離し、index expression は LLVM slice-header len/cap、bounds-check branch、array-type GEP/load IR を生成し、member expression は parse した member-name hash と project field-table index から bounded LLVM struct GEP/load IR を生成する
+├─ local/assignment/call/return/if/for/else/break/continue/for-in body statement lowering は `codegen/stmtlower.yc` module に分離し、`projectir.yc` は per-function orchestration に集中する
 ├─ YCPL lexer/parser/checker/tinyir は C++ bootstrap と同じく `:=` を 1 個の ASSIGN token/lexeme として扱い、local initializer を local statement-expression lowering に接続する
 ├─ project parse/check と生成 IR は parser-owned statement-expression link count、tail expression count、digest を公開する
 ├─ project_body.ll は 1024-cap / 600+ node の expression sequence lowering pass 用に function_expr_lowered_nodes と function_expression_sequence_lowered を保持する

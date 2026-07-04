@@ -4,6 +4,10 @@ import "ast/body" as astbody
 import "ast/expr" as astexpr
 import "parser/body" as bodyparser
 import "parser/expr" as exprparser
+import "parser/fields" as fieldparser
+import "codegen/bodyflow" as bodyflow
+import "codegen/exprlower" as exprlower
+import "codegen/stmtlower" as stmtlower
 import "resolver/resolver" as resolver
 import "lexer/lexer" as lexer
 import "lexer/token" as tok
@@ -124,6 +128,12 @@ struct ProjectExprTypeTable {
     len i32
     cap i32
     typed_returns i32
+    field_name_data string
+    field_index_data string
+    field_len i32
+    field_cap i32
+    field_count i32
+    field_digest i32
 }
 
 pub struct ProjectIrResult {
@@ -270,11 +280,11 @@ fn max_statement_expr_owner_lowering_nodes() i32 {
 }
 
 fn project_expr_type_table_ok() ProjectExprTypeTable {
-    return ProjectExprTypeTable{ok: true, message: "", line: 1, col: 1, name_data: none, type_data: none, len: 0, cap: 0, typed_returns: 0}
+    return ProjectExprTypeTable{ok: true, message: "", line: 1, col: 1, name_data: none, type_data: none, len: 0, cap: 0, typed_returns: 0, field_name_data: none, field_index_data: none, field_len: 0, field_cap: 0, field_count: 0, field_digest: 17}
 }
 
 fn project_expr_type_table_fail(line i32, col i32, message string) ProjectExprTypeTable {
-    return ProjectExprTypeTable{ok: false, message: message, line: line, col: col, name_data: none, type_data: none, len: 0, cap: 0, typed_returns: 0}
+    return ProjectExprTypeTable{ok: false, message: message, line: line, col: col, name_data: none, type_data: none, len: 0, cap: 0, typed_returns: 0, field_name_data: none, field_index_data: none, field_len: 0, field_cap: 0, field_count: 0, field_digest: 17}
 }
 
 fn expr_type_hash(name string) i32 {
@@ -376,6 +386,76 @@ fn lookup_project_expr_type(table ProjectExprTypeTable, name_hash i32) i32 {
     return astexpr.unknown_type_kind()
 }
 
+fn ensure_project_field_table(table ProjectExprTypeTable, needed i32) ProjectExprTypeTable {
+    if table.field_cap >= needed {
+        return table
+    }
+    next_cap := table.field_cap
+    if next_cap <= 0 {
+        next_cap = 64
+    }
+    for (; next_cap < needed; ) {
+        next_cap = next_cap * 2
+    }
+    if table.field_name_data == none {
+        table.field_name_data = mem.calloc(next_cap + 1, 1)
+        table.field_index_data = mem.calloc(next_cap + 1, 1)
+    } else {
+        table.field_name_data = mem.realloc(table.field_name_data, next_cap + 1)
+        table.field_index_data = mem.realloc(table.field_index_data, next_cap + 1)
+    }
+    table.field_cap = next_cap
+    return table
+}
+
+fn add_project_field_index(table ProjectExprTypeTable, name_hash i32, encoded_index i32) ProjectExprTypeTable {
+    if !table.ok || name_hash <= 0 || encoded_index <= 0 {
+        return table
+    }
+    i := 0
+    for (; i < table.field_len; i++) {
+        if table.field_name_data[i] == name_hash {
+            table.field_digest = table.field_digest * 31 + name_hash + encoded_index
+            table.field_count += 1
+            return table
+        }
+    }
+    table = ensure_project_field_table(table, table.field_len + 1)
+    table.field_name_data[table.field_len] = name_hash
+    table.field_index_data[table.field_len] = encoded_index
+    table.field_len += 1
+    table.field_name_data[table.field_len] = 0
+    table.field_index_data[table.field_len] = 0
+    table.field_count += 1
+    table.field_digest = table.field_digest * 31 + name_hash
+    table.field_digest = table.field_digest * 31 + encoded_index
+    return table
+}
+
+fn merge_project_fields(table ProjectExprTypeTable, fields StructFieldTable) ProjectExprTypeTable {
+    if !fields.ok {
+        return project_expr_type_table_fail(fields.line, fields.col, fields.message)
+    }
+    i := 0
+    for (; i < fields.len; i++) {
+        table = add_project_field_index(table, fields.name_data[i], fields.index_data[i])
+    }
+    return table
+}
+
+fn lookup_project_field_index(table ProjectExprTypeTable, name_hash i32) i32 {
+    if !table.ok || name_hash <= 0 {
+        return 0
+    }
+    i := 0
+    for (; i < table.field_len; i++) {
+        if table.field_name_data[i] == name_hash {
+            return table.field_index_data[i]
+        }
+    }
+    return 0
+}
+
 fn scan_project_expr_types_in_source(table ProjectExprTypeTable, path string, text string) ProjectExprTypeTable {
     lx := lexer.new(path, text)
     pending_function_name := false
@@ -462,6 +542,14 @@ fn scan_project_expr_types_from_sources(sources SourceList) ProjectExprTypeTable
         if !table.ok {
             return table
         }
+        fields := fieldparser.parse(path, src.text)
+        if !fields.ok {
+            return project_expr_type_table_fail(fields.line, fields.col, fields.message)
+        }
+        table = merge_project_fields(table, fields)
+        if !table.ok {
+            return table
+        }
     }
     return table
 }
@@ -478,6 +566,23 @@ fn apply_project_expr_types(table ExpressionTable, project_types ProjectExprType
                 if resolved > 0 {
                     table.type_data[i] = resolved + 16
                 }
+            }
+        }
+    }
+    return table
+}
+
+fn apply_project_field_indices(table ExpressionTable, project_types ProjectExprTypeTable) ExpressionTable {
+    if !table.ok || !project_types.ok {
+        return table
+    }
+    i := 0
+    for (; i < table.node_len; i++) {
+        if table.kind_data[i] == astexpr.member_expr_kind() {
+            resolved_field := lookup_project_field_index(project_types, table.meta_data[i])
+            if resolved_field > 0 {
+                table.op_data[i] = resolved_field
+                table.digest = table.digest * 31 + resolved_field
             }
         }
     }
@@ -962,6 +1067,7 @@ fn attach_expr_table_with_project_types(scan FunctionBodyScan, table ExpressionT
         return body_scan_fail(project_types.line, project_types.col, project_types.message)
     }
     table = apply_project_expr_types(table, project_types)
+    table = apply_project_field_indices(table, project_types)
     return attach_expr_table(scan, table)
 }
 
@@ -1255,618 +1361,6 @@ fn scan_const_functions_from_sources(sources SourceList) ConstFunctionScan {
     return ConstFunctionScan{ok: true, message: "", line: 1, col: 1, count: total_count, sum: total_sum, first_value: first_value, has_first: has_first}
 }
 
-fn lower_linear_body_node(builder *byte, i32_type *byte, score_slot *byte, kind i32, meta i32, pos i32, payload i32, role i32) {
-    loaded_score := llvm.build_load2(builder, i32_type, score_slot, "loaded_node_sequence_score")
-    node_value := llvm.const_int(i32_type, kind, 1)
-    next_score := llvm.build_add(builder, loaded_score, node_value, "node_sequence_score")
-    meta_value := llvm.const_int(i32_type, meta, 1)
-    meta_score := llvm.build_add(builder, next_score, meta_value, "node_metadata_score")
-    pos_value := llvm.const_int(i32_type, pos, 1)
-    pos_score := llvm.build_add(builder, meta_score, pos_value, "node_source_pos_score")
-    payload_value := llvm.const_int(i32_type, payload, 1)
-    payload_score := llvm.build_add(builder, pos_score, payload_value, "node_payload_score")
-    role_value := llvm.const_int(i32_type, role, 1)
-    role_score := llvm.build_add(builder, payload_score, role_value, "node_semantic_role_score")
-    llvm.build_store(builder, role_score, score_slot)
-}
-
-fn lower_ast_node_sequence_state(builder *byte, i32_type *byte, sequence_slot *byte, kind i32, meta i32, pos i32, payload i32, role i32, expr_count i32) {
-    loaded_sequence := llvm.build_load2(builder, i32_type, sequence_slot, "loaded_function_body_ast_node_sequence_state")
-    kind_value := llvm.const_int(i32_type, kind, 1)
-    kind_state := llvm.build_add(builder, loaded_sequence, kind_value, "function_body_ast_node_kind_state")
-    meta_value := llvm.const_int(i32_type, meta, 1)
-    meta_state := llvm.build_add(builder, kind_state, meta_value, "function_body_ast_node_meta_state")
-    pos_value := llvm.const_int(i32_type, pos, 1)
-    pos_state := llvm.build_add(builder, meta_state, pos_value, "function_body_ast_node_pos_state")
-    payload_value := llvm.const_int(i32_type, payload, 1)
-    payload_state := llvm.build_add(builder, pos_state, payload_value, "function_body_ast_node_payload_state")
-    role_value := llvm.const_int(i32_type, role, 1)
-    role_state := llvm.build_add(builder, payload_state, role_value, "function_body_ast_node_role_state")
-    expr_count_value := llvm.const_int(i32_type, expr_count, 1)
-    expr_state := llvm.build_add(builder, role_state, expr_count_value, "function_body_ast_node_expr_count_state")
-    llvm.build_store(builder, expr_state, sequence_slot)
-}
-
-fn lower_ast_node_semantic_sequence_state(builder *byte, i32_type *byte, semantic_slot *byte, kind i32, meta i32, pos i32, payload i32, role i32, expr_count i32) {
-    if kind <= 0 {
-        return
-    }
-    loaded_semantic := llvm.build_load2(builder, i32_type, semantic_slot, "loaded_function_body_ast_node_semantic_sequence")
-    seed_left := llvm.const_int(i32_type, kind + meta + pos, 1)
-    seed_right := llvm.const_int(i32_type, payload + role + expr_count, 1)
-    node_seed := llvm.build_add(builder, seed_left, seed_right, "function_body_ast_node_semantic_seed")
-    if kind == astbody.local_node_kind() || role == astbody.local_symbol_role() {
-        next_local := llvm.build_add(builder, loaded_semantic, node_seed, "function_body_ast_node_local_sequence_state")
-        llvm.build_store(builder, next_local, semantic_slot)
-        return
-    }
-    if kind == astbody.assignment_node_kind() || role == astbody.assignment_target_role() {
-        next_assignment := llvm.build_add(builder, loaded_semantic, node_seed, "function_body_ast_node_assignment_sequence_state")
-        llvm.build_store(builder, next_assignment, semantic_slot)
-        return
-    }
-    if kind == astbody.call_node_kind() || role == astbody.call_target_role() {
-        next_call := llvm.build_add(builder, loaded_semantic, node_seed, "function_body_ast_node_call_sequence_state")
-        llvm.build_store(builder, next_call, semantic_slot)
-        return
-    }
-    if kind == astbody.return_node_kind() || role == astbody.return_symbol_role() || role == astbody.return_literal_role() {
-        next_return := llvm.build_add(builder, loaded_semantic, node_seed, "function_body_ast_node_return_sequence_state")
-        llvm.build_store(builder, next_return, semantic_slot)
-        return
-    }
-    if role == astbody.control_flow_role() {
-        next_control := llvm.build_add(builder, loaded_semantic, node_seed, "function_body_ast_node_control_sequence_state")
-        llvm.build_store(builder, next_control, semantic_slot)
-        return
-    }
-    next_node := llvm.build_add(builder, loaded_semantic, node_seed, "function_body_ast_node_unknown_sequence_state")
-    llvm.build_store(builder, next_node, semantic_slot)
-}
-
-fn lower_local_body_node(builder *byte, i32_type *byte, score_slot *byte, local_state_slot *byte, kind i32, meta i32, pos i32, payload i32, role i32) {
-    local_slot := llvm.build_alloca(builder, i32_type, "node_lower_local_slot")
-    local_value := llvm.const_int(i32_type, kind + meta + pos + payload + role, 1)
-    llvm.build_store(builder, local_value, local_slot)
-    loaded_local := llvm.build_load2(builder, i32_type, local_slot, "loaded_node_lower_local")
-    loaded_score := llvm.build_load2(builder, i32_type, score_slot, "loaded_node_lower_local_score")
-    next_score := llvm.build_add(builder, loaded_score, loaded_local, "node_lower_local_score")
-    llvm.build_store(builder, next_score, score_slot)
-    loaded_state := llvm.build_load2(builder, i32_type, local_state_slot, "loaded_node_lower_local_state")
-    next_state := llvm.build_add(builder, loaded_state, loaded_local, "node_lower_local_state")
-    llvm.build_store(builder, next_state, local_state_slot)
-}
-
-fn lower_assignment_body_node(builder *byte, i32_type *byte, score_slot *byte, assignment_state_slot *byte, kind i32, meta i32, pos i32, payload i32, role i32) {
-    assignment_slot := llvm.build_alloca(builder, i32_type, "node_lower_assignment_slot")
-    loaded_score := llvm.build_load2(builder, i32_type, score_slot, "loaded_node_lower_assignment_score")
-    assignment_base := llvm.const_int(i32_type, kind + meta, 1)
-    assignment_rhs := llvm.const_int(i32_type, pos + payload + role, 1)
-    assignment_value := llvm.build_add(builder, assignment_base, assignment_rhs, "node_lower_assignment_value")
-    llvm.build_store(builder, assignment_value, assignment_slot)
-    loaded_assignment := llvm.build_load2(builder, i32_type, assignment_slot, "loaded_node_lower_assignment")
-    next_score := llvm.build_add(builder, loaded_score, loaded_assignment, "node_lower_assignment_score")
-    llvm.build_store(builder, next_score, score_slot)
-    loaded_state := llvm.build_load2(builder, i32_type, assignment_state_slot, "loaded_node_lower_assignment_state")
-    next_state := llvm.build_add(builder, loaded_state, loaded_assignment, "node_lower_assignment_state")
-    llvm.build_store(builder, next_state, assignment_state_slot)
-}
-
-fn lower_call_body_node(builder *byte, i32_type *byte, fn_type *byte, call_helper *byte, score_slot *byte, call_state_slot *byte, kind i32, meta i32, pos i32, payload i32, role i32) {
-    loaded_score := llvm.build_load2(builder, i32_type, score_slot, "loaded_node_lower_call_score")
-    call_value := llvm.build_call2(builder, fn_type, call_helper, none, 0, "node_lower_call_value")
-    node_value := llvm.const_int(i32_type, kind + meta + pos + payload + role, 1)
-    call_node_value := llvm.build_add(builder, call_value, node_value, "node_lower_call_node_value")
-    next_score := llvm.build_add(builder, loaded_score, call_node_value, "node_lower_call_score")
-    llvm.build_store(builder, next_score, score_slot)
-    loaded_state := llvm.build_load2(builder, i32_type, call_state_slot, "loaded_node_lower_call_state")
-    next_state := llvm.build_add(builder, loaded_state, call_node_value, "node_lower_call_state")
-    llvm.build_store(builder, next_state, call_state_slot)
-}
-
-fn lower_return_body_node(builder *byte, i32_type *byte, score_slot *byte, return_state_slot *byte, kind i32, meta i32, pos i32, payload i32, role i32) {
-    return_slot := llvm.build_alloca(builder, i32_type, "node_lower_return_slot")
-    loaded_score := llvm.build_load2(builder, i32_type, score_slot, "loaded_node_lower_return_score")
-    return_seed := llvm.const_int(i32_type, kind + role, 1)
-    return_meta := llvm.const_int(i32_type, meta + pos + payload, 1)
-    return_value := llvm.build_add(builder, return_seed, return_meta, "node_lower_return_value")
-    llvm.build_store(builder, return_value, return_slot)
-    loaded_return := llvm.build_load2(builder, i32_type, return_slot, "loaded_node_lower_return")
-    next_score := llvm.build_add(builder, loaded_score, loaded_return, "node_lower_return_score")
-    llvm.build_store(builder, next_score, score_slot)
-    loaded_state := llvm.build_load2(builder, i32_type, return_state_slot, "loaded_node_lower_return_state")
-    next_state := llvm.build_add(builder, loaded_state, loaded_return, "node_lower_return_state")
-    llvm.build_store(builder, next_state, return_state_slot)
-}
-
-fn lower_if_body_node(ctx *byte, function_ref *byte, builder *byte, i32_type *byte, score_slot *byte, kind i32, meta i32, pos i32, payload i32, role i32) {
-    then_block := llvm.append_basic_block_in_context(ctx, function_ref, "node_lower_if_then")
-    else_block := llvm.append_basic_block_in_context(ctx, function_ref, "node_lower_if_else")
-    done_block := llvm.append_basic_block_in_context(ctx, function_ref, "node_lower_if_done")
-    zero := llvm.const_int(i32_type, 0, 1)
-    node_value := llvm.const_int(i32_type, kind, 1)
-    cond := llvm.build_icmp(builder, llvm.int_sgt(), node_value, zero, "node_lower_if_cond")
-    llvm.build_cond_br(builder, cond, then_block, else_block)
-
-    llvm.position_builder_at_end(builder, then_block)
-    lower_linear_body_node(builder, i32_type, score_slot, kind, meta, pos, payload, role)
-    llvm.build_br(builder, done_block)
-
-    llvm.position_builder_at_end(builder, else_block)
-    llvm.build_br(builder, done_block)
-
-    llvm.position_builder_at_end(builder, done_block)
-}
-
-fn lower_for_body_node(ctx *byte, function_ref *byte, builder *byte, i32_type *byte, score_slot *byte, kind i32, meta i32, pos i32, payload i32, role i32) {
-    check_block := llvm.append_basic_block_in_context(ctx, function_ref, "node_lower_for_check")
-    body_block := llvm.append_basic_block_in_context(ctx, function_ref, "node_lower_for_body")
-    done_block := llvm.append_basic_block_in_context(ctx, function_ref, "node_lower_for_done")
-    index_slot := llvm.build_alloca(builder, i32_type, "node_lower_for_index")
-    zero := llvm.const_int(i32_type, 0, 1)
-    one := llvm.const_int(i32_type, 1, 1)
-    llvm.build_store(builder, zero, index_slot)
-    llvm.build_br(builder, check_block)
-
-    llvm.position_builder_at_end(builder, check_block)
-    loaded_index := llvm.build_load2(builder, i32_type, index_slot, "loaded_node_lower_for_index")
-    cond := llvm.build_icmp(builder, llvm.int_slt(), loaded_index, one, "node_lower_for_has_more")
-    llvm.build_cond_br(builder, cond, body_block, done_block)
-
-    llvm.position_builder_at_end(builder, body_block)
-    lower_linear_body_node(builder, i32_type, score_slot, kind, meta, pos, payload, role)
-    next_index := llvm.build_add(builder, loaded_index, one, "next_node_lower_for_index")
-    llvm.build_store(builder, next_index, index_slot)
-    llvm.build_br(builder, check_block)
-
-    llvm.position_builder_at_end(builder, done_block)
-}
-
-fn lower_else_body_node(ctx *byte, function_ref *byte, builder *byte, i32_type *byte, score_slot *byte, kind i32, meta i32, pos i32, payload i32, role i32) {
-    else_block := llvm.append_basic_block_in_context(ctx, function_ref, "node_lower_else_body")
-    done_block := llvm.append_basic_block_in_context(ctx, function_ref, "node_lower_else_done")
-    llvm.build_br(builder, else_block)
-
-    llvm.position_builder_at_end(builder, else_block)
-    lower_linear_body_node(builder, i32_type, score_slot, kind, meta, pos, payload, role)
-    llvm.build_br(builder, done_block)
-
-    llvm.position_builder_at_end(builder, done_block)
-}
-
-fn lower_break_body_node(builder *byte, i32_type *byte, score_slot *byte, kind i32, meta i32, pos i32, payload i32, role i32) {
-    break_slot := llvm.build_alloca(builder, i32_type, "node_lower_break_slot")
-    break_value := llvm.const_int(i32_type, kind + meta + pos + payload + role, 1)
-    llvm.build_store(builder, break_value, break_slot)
-    loaded_break := llvm.build_load2(builder, i32_type, break_slot, "loaded_node_lower_break")
-    loaded_score := llvm.build_load2(builder, i32_type, score_slot, "loaded_node_lower_break_score")
-    next_score := llvm.build_add(builder, loaded_score, loaded_break, "node_lower_break_score")
-    llvm.build_store(builder, next_score, score_slot)
-}
-
-fn lower_continue_body_node(builder *byte, i32_type *byte, score_slot *byte, kind i32, meta i32, pos i32, payload i32, role i32) {
-    continue_slot := llvm.build_alloca(builder, i32_type, "node_lower_continue_slot")
-    continue_value := llvm.const_int(i32_type, kind + meta + pos + payload + role, 1)
-    llvm.build_store(builder, continue_value, continue_slot)
-    loaded_continue := llvm.build_load2(builder, i32_type, continue_slot, "loaded_node_lower_continue")
-    loaded_score := llvm.build_load2(builder, i32_type, score_slot, "loaded_node_lower_continue_score")
-    next_score := llvm.build_add(builder, loaded_score, loaded_continue, "node_lower_continue_score")
-    llvm.build_store(builder, next_score, score_slot)
-}
-
-fn lower_for_in_body_node(ctx *byte, function_ref *byte, builder *byte, i32_type *byte, score_slot *byte, kind i32, meta i32, pos i32, payload i32, role i32) {
-    check_block := llvm.append_basic_block_in_context(ctx, function_ref, "node_lower_for_in_check")
-    body_block := llvm.append_basic_block_in_context(ctx, function_ref, "node_lower_for_in_body")
-    done_block := llvm.append_basic_block_in_context(ctx, function_ref, "node_lower_for_in_done")
-    index_slot := llvm.build_alloca(builder, i32_type, "node_lower_for_in_index")
-    zero := llvm.const_int(i32_type, 0, 1)
-    one := llvm.const_int(i32_type, 1, 1)
-    llvm.build_store(builder, zero, index_slot)
-    llvm.build_br(builder, check_block)
-
-    llvm.position_builder_at_end(builder, check_block)
-    loaded_index := llvm.build_load2(builder, i32_type, index_slot, "loaded_node_lower_for_in_index")
-    cond := llvm.build_icmp(builder, llvm.int_slt(), loaded_index, one, "node_lower_for_in_has_more")
-    llvm.build_cond_br(builder, cond, body_block, done_block)
-
-    llvm.position_builder_at_end(builder, body_block)
-    lower_linear_body_node(builder, i32_type, score_slot, kind, meta, pos, payload, role)
-    next_index := llvm.build_add(builder, loaded_index, one, "next_node_lower_for_in_index")
-    llvm.build_store(builder, next_index, index_slot)
-    llvm.build_br(builder, check_block)
-
-    llvm.position_builder_at_end(builder, done_block)
-}
-
-fn lower_semantic_body_node(builder *byte, i32_type *byte, symbol_env_slot *byte, value_state_slot *byte, control_state_slot *byte, return_state_slot *byte, kind i32, meta i32, pos i32, payload i32, role i32) {
-    current_seed := llvm.const_int(i32_type, kind + meta + pos + payload + role, 1)
-    if role == astbody.local_symbol_role() {
-        llvm.build_store(builder, current_seed, symbol_env_slot)
-        llvm.build_store(builder, current_seed, value_state_slot)
-        return
-    }
-    if role == astbody.assignment_target_role() {
-        loaded_symbol := llvm.build_load2(builder, i32_type, symbol_env_slot, "loaded_function_body_symbol_env")
-        assigned_value := llvm.build_add(builder, loaded_symbol, current_seed, "function_body_assignment_value_flow")
-        llvm.build_store(builder, assigned_value, value_state_slot)
-        return
-    }
-    if role == astbody.call_target_role() {
-        loaded_value := llvm.build_load2(builder, i32_type, value_state_slot, "loaded_function_body_value_for_call")
-        call_value := llvm.build_add(builder, loaded_value, current_seed, "function_body_call_value_flow")
-        llvm.build_store(builder, call_value, value_state_slot)
-        return
-    }
-    if role == astbody.return_symbol_role() || role == astbody.return_literal_role() {
-        loaded_value := llvm.build_load2(builder, i32_type, value_state_slot, "loaded_function_body_value_for_return")
-        return_value := llvm.build_add(builder, loaded_value, current_seed, "function_body_return_value_flow")
-        llvm.build_store(builder, return_value, return_state_slot)
-        return
-    }
-    if role == astbody.control_flow_role() {
-        loaded_control := llvm.build_load2(builder, i32_type, control_state_slot, "loaded_function_body_control_state")
-        control_value := llvm.build_add(builder, loaded_control, current_seed, "function_body_control_value_flow")
-        llvm.build_store(builder, control_value, control_state_slot)
-        return
-    }
-}
-
-fn lower_statement_expr_owner_node(builder *byte, i32_type *byte, score_slot *byte, owner_state_slot *byte, value_state_slot *byte, kind i32, meta i32, pos i32, payload i32, role i32, expr_count i32) {
-    if expr_count <= 0 {
-        return
-    }
-    owner_slot := llvm.build_alloca(builder, i32_type, "node_statement_expr_owner_slot")
-    owner_seed := llvm.const_int(i32_type, kind + meta + pos + payload + role, 1)
-    owner_count := llvm.const_int(i32_type, expr_count, 1)
-    owner_value := llvm.build_add(builder, owner_seed, owner_count, "node_statement_expr_owner_value")
-    llvm.build_store(builder, owner_value, owner_slot)
-    loaded_owner := llvm.build_load2(builder, i32_type, owner_slot, "loaded_node_statement_expr_owner")
-
-    loaded_owner_state := llvm.build_load2(builder, i32_type, owner_state_slot, "loaded_function_body_statement_expr_owner_state")
-    next_owner_state := llvm.build_add(builder, loaded_owner_state, loaded_owner, "function_body_statement_expr_owner_state")
-    llvm.build_store(builder, next_owner_state, owner_state_slot)
-
-    loaded_value := llvm.build_load2(builder, i32_type, value_state_slot, "loaded_function_body_statement_expr_owner_value")
-    owner_value_flow := llvm.build_add(builder, loaded_value, next_owner_state, "function_body_statement_expr_owner_value_flow")
-    llvm.build_store(builder, owner_value_flow, value_state_slot)
-
-    loaded_score := llvm.build_load2(builder, i32_type, score_slot, "loaded_node_statement_expr_owner_score")
-    owner_score := llvm.build_add(builder, loaded_score, owner_value_flow, "node_statement_expr_owner_score")
-    llvm.build_store(builder, owner_score, score_slot)
-}
-
-fn lower_statement_expr_role_flow(builder *byte, i32_type *byte, local_state_slot *byte, assignment_state_slot *byte, call_state_slot *byte, return_state_slot *byte, value_state_slot *byte, role i32, typed_value *byte) {
-    if role == astbody.local_symbol_role() {
-        loaded_local := llvm.build_load2(builder, i32_type, local_state_slot, "loaded_function_body_local_state_for_statement_expr")
-        next_local := llvm.build_add(builder, loaded_local, typed_value, "function_body_local_statement_expr_value")
-        llvm.build_store(builder, next_local, local_state_slot)
-        return
-    }
-    if role == astbody.assignment_target_role() {
-        loaded_assignment := llvm.build_load2(builder, i32_type, assignment_state_slot, "loaded_function_body_assignment_state_for_statement_expr")
-        next_assignment := llvm.build_add(builder, loaded_assignment, typed_value, "function_body_assignment_statement_expr_value")
-        llvm.build_store(builder, next_assignment, assignment_state_slot)
-        return
-    }
-    if role == astbody.call_target_role() {
-        loaded_call := llvm.build_load2(builder, i32_type, call_state_slot, "loaded_function_body_call_state_for_statement_expr")
-        next_call := llvm.build_add(builder, loaded_call, typed_value, "function_body_call_statement_expr_value")
-        llvm.build_store(builder, next_call, call_state_slot)
-        return
-    }
-    if role == astbody.return_symbol_role() || role == astbody.return_literal_role() {
-        loaded_return := llvm.build_load2(builder, i32_type, return_state_slot, "loaded_function_body_return_state_for_statement_expr")
-        next_return := llvm.build_add(builder, loaded_return, typed_value, "function_body_return_statement_expr_value")
-        llvm.build_store(builder, next_return, return_state_slot)
-        return
-    }
-    loaded_value := llvm.build_load2(builder, i32_type, value_state_slot, "loaded_function_body_value_state_for_statement_expr_role")
-    next_value := llvm.build_add(builder, loaded_value, typed_value, "function_body_untyped_statement_expr_value")
-    llvm.build_store(builder, next_value, value_state_slot)
-}
-
-fn lower_statement_expr_typed_flow(builder *byte, i32_type *byte, i32_state_slot *byte, bool_state_slot *byte, string_state_slot *byte, pointer_state_slot *byte, none_state_slot *byte, unknown_state_slot *byte, type_kind i32, typed_value *byte) {
-    if type_kind == astexpr.i32_type_kind() {
-        loaded_i32 := llvm.build_load2(builder, i32_type, i32_state_slot, "loaded_function_body_i32_statement_expr_state")
-        next_i32 := llvm.build_add(builder, loaded_i32, typed_value, "function_body_i32_statement_expr_value")
-        llvm.build_store(builder, next_i32, i32_state_slot)
-        return
-    }
-    if type_kind == astexpr.bool_type_kind() {
-        loaded_bool := llvm.build_load2(builder, i32_type, bool_state_slot, "loaded_function_body_bool_statement_expr_state")
-        next_bool := llvm.build_add(builder, loaded_bool, typed_value, "function_body_bool_statement_expr_value")
-        llvm.build_store(builder, next_bool, bool_state_slot)
-        return
-    }
-    if type_kind == astexpr.string_type_kind() {
-        loaded_string := llvm.build_load2(builder, i32_type, string_state_slot, "loaded_function_body_string_statement_expr_state")
-        next_string := llvm.build_add(builder, loaded_string, typed_value, "function_body_string_statement_expr_value")
-        llvm.build_store(builder, next_string, string_state_slot)
-        return
-    }
-    if type_kind == astexpr.pointer_type_kind() {
-        loaded_pointer := llvm.build_load2(builder, i32_type, pointer_state_slot, "loaded_function_body_pointer_statement_expr_state")
-        next_pointer := llvm.build_add(builder, loaded_pointer, typed_value, "function_body_pointer_statement_expr_value")
-        llvm.build_store(builder, next_pointer, pointer_state_slot)
-        return
-    }
-    if type_kind == astexpr.none_type_kind() {
-        loaded_none := llvm.build_load2(builder, i32_type, none_state_slot, "loaded_function_body_none_statement_expr_state")
-        next_none := llvm.build_add(builder, loaded_none, typed_value, "function_body_none_statement_expr_value")
-        llvm.build_store(builder, next_none, none_state_slot)
-        return
-    }
-    loaded_unknown := llvm.build_load2(builder, i32_type, unknown_state_slot, "loaded_function_body_unknown_statement_expr_state")
-    next_unknown := llvm.build_add(builder, loaded_unknown, typed_value, "function_body_unknown_statement_expr_value")
-    llvm.build_store(builder, next_unknown, unknown_state_slot)
-}
-
-fn lower_body_node(ctx *byte, function_ref *byte, builder *byte, i32_type *byte, fn_type *byte, call_helper *byte, score_slot *byte, local_state_slot *byte, assignment_state_slot *byte, call_state_slot *byte, return_state_slot *byte, symbol_env_slot *byte, value_state_slot *byte, control_state_slot *byte, kind i32, meta i32, pos i32, payload i32, role i32) {
-    if kind <= 0 {
-        return
-    }
-    lower_semantic_body_node(builder, i32_type, symbol_env_slot, value_state_slot, control_state_slot, return_state_slot, kind, meta, pos, payload, role)
-    if kind == astbody.local_node_kind() {
-        lower_local_body_node(builder, i32_type, score_slot, local_state_slot, kind, meta, pos, payload, role)
-        return
-    }
-    if kind == astbody.assignment_node_kind() {
-        lower_assignment_body_node(builder, i32_type, score_slot, assignment_state_slot, kind, meta, pos, payload, role)
-        return
-    }
-    if kind == astbody.call_node_kind() {
-        lower_call_body_node(builder, i32_type, fn_type, call_helper, score_slot, call_state_slot, kind, meta, pos, payload, role)
-        return
-    }
-    if kind == astbody.return_node_kind() {
-        lower_return_body_node(builder, i32_type, score_slot, return_state_slot, kind, meta, pos, payload, role)
-        return
-    }
-    if kind == astbody.if_node_kind() {
-        lower_if_body_node(ctx, function_ref, builder, i32_type, score_slot, kind, meta, pos, payload, role)
-        return
-    }
-    if kind == astbody.for_node_kind() {
-        lower_for_body_node(ctx, function_ref, builder, i32_type, score_slot, kind, meta, pos, payload, role)
-        return
-    }
-    if kind == astbody.else_node_kind() {
-        lower_else_body_node(ctx, function_ref, builder, i32_type, score_slot, kind, meta, pos, payload, role)
-        return
-    }
-    if kind == astbody.break_node_kind() {
-        lower_break_body_node(builder, i32_type, score_slot, kind, meta, pos, payload, role)
-        return
-    }
-    if kind == astbody.continue_node_kind() {
-        lower_continue_body_node(builder, i32_type, score_slot, kind, meta, pos, payload, role)
-        return
-    }
-    if kind == astbody.for_in_node_kind() {
-        lower_for_in_body_node(ctx, function_ref, builder, i32_type, score_slot, kind, meta, pos, payload, role)
-        return
-    }
-    lower_linear_body_node(builder, i32_type, score_slot, kind, meta, pos, payload, role)
-}
-
-fn lower_identifier_expr_node(builder *byte, i32_type *byte, score_slot *byte, kind i32, meta i32, pos i32) {
-    expr_slot := llvm.build_alloca(builder, i32_type, "expr_lower_identifier_slot")
-    expr_value := llvm.const_int(i32_type, kind + meta + pos, 1)
-    llvm.build_store(builder, expr_value, expr_slot)
-    loaded_expr := llvm.build_load2(builder, i32_type, expr_slot, "loaded_expr_lower_identifier")
-    loaded_score := llvm.build_load2(builder, i32_type, score_slot, "loaded_expr_lower_identifier_score")
-    next_score := llvm.build_add(builder, loaded_score, loaded_expr, "expr_lower_identifier_score")
-    llvm.build_store(builder, next_score, score_slot)
-}
-
-fn lower_literal_expr_node(builder *byte, i32_type *byte, score_slot *byte, kind i32, meta i32, pos i32) {
-    expr_slot := llvm.build_alloca(builder, i32_type, "expr_lower_literal_slot")
-    expr_value := llvm.const_int(i32_type, kind + meta + pos, 1)
-    llvm.build_store(builder, expr_value, expr_slot)
-    loaded_expr := llvm.build_load2(builder, i32_type, expr_slot, "loaded_expr_lower_literal")
-    loaded_score := llvm.build_load2(builder, i32_type, score_slot, "loaded_expr_lower_literal_score")
-    next_score := llvm.build_add(builder, loaded_score, loaded_expr, "expr_lower_literal_score")
-    llvm.build_store(builder, next_score, score_slot)
-}
-
-fn lower_call_expr_node(builder *byte, i32_type *byte, fn_type *byte, call_helper *byte, score_slot *byte, kind i32, meta i32, pos i32) {
-    loaded_score := llvm.build_load2(builder, i32_type, score_slot, "loaded_expr_lower_call_score")
-    call_value := llvm.build_call2(builder, fn_type, call_helper, none, 0, "expr_lower_call_value")
-    node_value := llvm.const_int(i32_type, kind + meta + pos, 1)
-    call_node_value := llvm.build_add(builder, call_value, node_value, "expr_lower_call_node_value")
-    next_score := llvm.build_add(builder, loaded_score, call_node_value, "expr_lower_call_score")
-    llvm.build_store(builder, next_score, score_slot)
-}
-
-fn lower_member_expr_node(builder *byte, i32_type *byte, score_slot *byte, kind i32, meta i32, pos i32) {
-    loaded_score := llvm.build_load2(builder, i32_type, score_slot, "loaded_expr_lower_member_score")
-    member_value := llvm.const_int(i32_type, kind + meta + pos, 1)
-    next_score := llvm.build_add(builder, loaded_score, member_value, "expr_lower_member_score")
-    llvm.build_store(builder, next_score, score_slot)
-}
-
-fn lower_index_expr_node(builder *byte, i32_type *byte, score_slot *byte, kind i32, meta i32, pos i32) {
-    loaded_score := llvm.build_load2(builder, i32_type, score_slot, "loaded_expr_lower_index_score")
-    index_value := llvm.const_int(i32_type, kind + meta + pos, 1)
-    next_score := llvm.build_add(builder, loaded_score, index_value, "expr_lower_index_score")
-    llvm.build_store(builder, next_score, score_slot)
-}
-
-fn is_compare_op(op_kind i32) bool {
-    return op_kind == tok.eq() || op_kind == tok.neq() || op_kind == tok.lt() || op_kind == tok.gt() || op_kind == tok.le() || op_kind == tok.ge()
-}
-
-fn compare_predicate_for_op(op_kind i32) i32 {
-    if op_kind == tok.eq() {
-        return llvm.int_eq()
-    }
-    if op_kind == tok.neq() {
-        return llvm.int_ne()
-    }
-    if op_kind == tok.lt() {
-        return llvm.int_slt()
-    }
-    if op_kind == tok.gt() {
-        return llvm.int_sgt()
-    }
-    if op_kind == tok.le() {
-        return llvm.int_sle()
-    }
-    return llvm.int_sge()
-}
-
-fn lower_binary_expr_node(builder *byte, i32_type *byte, score_slot *byte, kind i32, meta i32, pos i32, op_kind i32) {
-    lhs_slot := llvm.build_alloca(builder, i32_type, "expr_lower_binary_lhs_slot")
-    lhs_value := llvm.const_int(i32_type, meta, 1)
-    llvm.build_store(builder, lhs_value, lhs_slot)
-    loaded_lhs := llvm.build_load2(builder, i32_type, lhs_slot, "loaded_expr_lower_binary_lhs")
-    rhs_value := llvm.const_int(i32_type, pos, 1)
-    binary_value := loaded_lhs
-    if op_kind == tok.minus() {
-        binary_value = llvm.build_sub(builder, loaded_lhs, rhs_value, "expr_lower_binary_sub_value")
-    } else if op_kind == tok.star() {
-        binary_value = llvm.build_mul(builder, loaded_lhs, rhs_value, "expr_lower_binary_mul_value")
-    } else if op_kind == tok.slash() {
-        safe_rhs := llvm.const_int(i32_type, pos + 1, 1)
-        binary_value = llvm.build_sdiv(builder, loaded_lhs, safe_rhs, "expr_lower_binary_div_value")
-    } else if op_kind == tok.percent() {
-        safe_rhs := llvm.const_int(i32_type, pos + 1, 1)
-        binary_value = llvm.build_srem(builder, loaded_lhs, safe_rhs, "expr_lower_binary_rem_value")
-    } else if is_compare_op(op_kind) {
-        llvm.build_icmp(builder, compare_predicate_for_op(op_kind), loaded_lhs, rhs_value, "expr_lower_binary_cmp_value")
-        binary_value = llvm.build_add(builder, loaded_lhs, rhs_value, "expr_lower_binary_value")
-    } else {
-        binary_value = llvm.build_add(builder, loaded_lhs, rhs_value, "expr_lower_binary_value")
-    }
-    loaded_score := llvm.build_load2(builder, i32_type, score_slot, "loaded_expr_lower_binary_score")
-    next_score := llvm.build_add(builder, loaded_score, binary_value, "expr_lower_binary_score")
-    llvm.build_store(builder, next_score, score_slot)
-}
-
-fn lower_unary_expr_node(builder *byte, i32_type *byte, score_slot *byte, kind i32, meta i32, pos i32, op_kind i32) {
-    unary_seed := llvm.const_int(i32_type, kind + meta + pos, 1)
-    if op_kind == tok.minus() {
-        zero := llvm.const_int(i32_type, 0, 1)
-        unary_seed = llvm.build_sub(builder, zero, unary_seed, "expr_lower_unary_neg_value")
-    }
-    loaded_score := llvm.build_load2(builder, i32_type, score_slot, "loaded_expr_lower_unary_score")
-    next_score := llvm.build_add(builder, loaded_score, unary_seed, "expr_lower_unary_score")
-    llvm.build_store(builder, next_score, score_slot)
-}
-
-fn lower_expr_value_node(builder *byte, i32_type *byte, fn_type *byte, call_helper *byte, expr_value_state_slot *byte, expr_type_state_slot *byte, kind i32, meta i32, pos i32, op_kind i32, type_kind i32) {
-    loaded_value := llvm.build_load2(builder, i32_type, expr_value_state_slot, "loaded_function_expr_value_state")
-    loaded_type := llvm.build_load2(builder, i32_type, expr_type_state_slot, "loaded_function_expr_type_state")
-    seed := llvm.const_int(i32_type, kind + meta + pos, 1)
-    type_seed := llvm.const_int(i32_type, type_kind, 1)
-    next_value := llvm.build_add(builder, loaded_value, seed, "function_expr_value_seed")
-    next_type := llvm.build_add(builder, loaded_type, type_seed, "function_expr_table_type_state")
-    if kind == astexpr.identifier_expr_kind() {
-        next_value = llvm.build_add(builder, loaded_value, seed, "function_expr_identifier_value_state")
-        if type_kind > 0 {
-            next_type = llvm.build_add(builder, loaded_type, type_seed, "function_expr_identifier_resolved_type_state")
-        } else {
-            next_type = llvm.build_add(builder, loaded_type, type_seed, "function_expr_identifier_type_state")
-        }
-    } else if kind == astexpr.literal_expr_kind() {
-        if op_kind == tok.string_lit() {
-            next_value = llvm.build_add(builder, loaded_value, seed, "function_expr_literal_value_state")
-            next_type = llvm.build_add(builder, loaded_type, type_seed, "function_expr_string_literal_type_state")
-        } else if op_kind == tok.bool_lit() {
-            next_value = llvm.build_add(builder, loaded_value, seed, "function_expr_literal_value_state")
-            next_type = llvm.build_add(builder, loaded_type, type_seed, "function_expr_bool_literal_type_state")
-        } else if op_kind == tok.none_lit() {
-            next_value = llvm.build_add(builder, loaded_value, seed, "function_expr_literal_value_state")
-            next_type = llvm.build_add(builder, loaded_type, type_seed, "function_expr_none_literal_type_state")
-        } else {
-            next_value = llvm.build_add(builder, loaded_value, seed, "function_expr_literal_value_state")
-            next_type = llvm.build_add(builder, loaded_type, type_seed, "function_expr_numeric_literal_type_state")
-        }
-    } else if kind == astexpr.call_expr_kind() {
-        call_value := llvm.build_call2(builder, fn_type, call_helper, none, 0, "function_expr_call_value")
-        next_value = llvm.build_add(builder, call_value, seed, "function_expr_call_value_state")
-        if type_kind > 16 {
-            next_type = llvm.build_add(builder, loaded_type, type_seed, "function_expr_project_call_resolved_type_state")
-        } else if type_kind > 0 {
-            next_type = llvm.build_add(builder, loaded_type, type_seed, "function_expr_call_resolved_type_state")
-        } else {
-            next_type = llvm.build_add(builder, loaded_type, type_seed, "function_expr_call_type_state")
-        }
-    } else if kind == astexpr.member_expr_kind() {
-        next_value = llvm.build_add(builder, loaded_value, seed, "function_expr_member_value_state")
-        next_type = llvm.build_add(builder, loaded_type, type_seed, "function_expr_member_type_state")
-    } else if kind == astexpr.index_expr_kind() {
-        next_value = llvm.build_add(builder, loaded_value, seed, "function_expr_index_value_state")
-        next_type = llvm.build_add(builder, loaded_type, type_seed, "function_expr_index_type_state")
-    } else if kind == astexpr.binary_expr_kind() {
-        rhs := llvm.const_int(i32_type, pos + op_kind + 1, 1)
-        if op_kind == tok.minus() {
-            next_value = llvm.build_sub(builder, loaded_value, rhs, "function_expr_binary_value_sub")
-        } else if op_kind == tok.star() {
-            next_value = llvm.build_mul(builder, loaded_value, rhs, "function_expr_binary_value_mul")
-        } else if op_kind == tok.slash() {
-            next_value = llvm.build_sdiv(builder, loaded_value, rhs, "function_expr_binary_value_div")
-        } else if op_kind == tok.percent() {
-            next_value = llvm.build_srem(builder, loaded_value, rhs, "function_expr_binary_value_rem")
-        } else if is_compare_op(op_kind) {
-            llvm.build_icmp(builder, compare_predicate_for_op(op_kind), loaded_value, rhs, "function_expr_binary_value_cmp")
-            next_value = llvm.build_add(builder, loaded_value, rhs, "function_expr_binary_value_state")
-            next_type = llvm.build_add(builder, loaded_type, type_seed, "function_expr_binary_bool_type_state")
-        } else {
-            next_value = llvm.build_add(builder, loaded_value, rhs, "function_expr_binary_value_state")
-        }
-        if !is_compare_op(op_kind) {
-            next_type = llvm.build_add(builder, loaded_type, type_seed, "function_expr_binary_numeric_type_state")
-        }
-    } else if kind == astexpr.unary_expr_kind() {
-        if op_kind == tok.minus() {
-            zero := llvm.const_int(i32_type, 0, 1)
-            next_value = llvm.build_sub(builder, zero, seed, "function_expr_unary_value_neg")
-            next_type = llvm.build_add(builder, loaded_type, type_seed, "function_expr_unary_numeric_type_state")
-        } else {
-            next_value = llvm.build_add(builder, loaded_value, seed, "function_expr_unary_value_state")
-            next_type = llvm.build_add(builder, loaded_type, type_seed, "function_expr_unary_type_state")
-        }
-    }
-    llvm.build_store(builder, next_value, expr_value_state_slot)
-    llvm.build_store(builder, next_type, expr_type_state_slot)
-}
-
-fn lower_expr_node(builder *byte, i32_type *byte, fn_type *byte, call_helper *byte, score_slot *byte, expr_value_state_slot *byte, expr_type_state_slot *byte, kind i32, meta i32, pos i32, op_kind i32, type_kind i32) {
-    if kind <= 0 {
-        return
-    }
-    lower_expr_value_node(builder, i32_type, fn_type, call_helper, expr_value_state_slot, expr_type_state_slot, kind, meta, pos, op_kind, type_kind)
-    if kind == astexpr.identifier_expr_kind() {
-        lower_identifier_expr_node(builder, i32_type, score_slot, kind, meta, pos)
-        return
-    }
-    if kind == astexpr.literal_expr_kind() {
-        lower_literal_expr_node(builder, i32_type, score_slot, kind, meta, pos)
-        return
-    }
-    if kind == astexpr.call_expr_kind() {
-        lower_call_expr_node(builder, i32_type, fn_type, call_helper, score_slot, kind, meta, pos)
-        return
-    }
-    if kind == astexpr.member_expr_kind() {
-        lower_member_expr_node(builder, i32_type, score_slot, kind, meta, pos)
-        return
-    }
-    if kind == astexpr.index_expr_kind() {
-        lower_index_expr_node(builder, i32_type, score_slot, kind, meta, pos)
-        return
-    }
-    if kind == astexpr.binary_expr_kind() {
-        lower_binary_expr_node(builder, i32_type, score_slot, kind, meta, pos, op_kind)
-        return
-    }
-    if kind == astexpr.unary_expr_kind() {
-        lower_unary_expr_node(builder, i32_type, score_slot, kind, meta, pos, op_kind)
-        return
-    }
-}
-
 fn emit_function_body_lowering(ctx *byte, mod *byte, builder *byte, i32_type *byte, fn_type *byte, call_helper *byte, name string, scan FunctionBodyScan) *byte {
     body_fn := llvm.add_function(mod, name, fn_type)
     body_entry := llvm.append_basic_block_in_context(ctx, body_fn, "entry")
@@ -1885,6 +1379,8 @@ fn emit_function_body_lowering(ctx *byte, mod *byte, builder *byte, i32_type *by
     function_symbol_env_slot := llvm.build_alloca(builder, i32_type, "function_body_symbol_env")
     function_value_state_slot := llvm.build_alloca(builder, i32_type, "function_body_value_state")
     function_control_state_slot := llvm.build_alloca(builder, i32_type, "function_body_control_state")
+    function_statement_value_slot := llvm.build_alloca(builder, i32_type, "function_body_statement_ast_value_slot")
+    function_statement_resolved_type_slot := llvm.build_alloca(builder, i32_type, "function_body_statement_resolved_type_slot")
     function_statement_expr_owner_state_slot := llvm.build_alloca(builder, i32_type, "function_body_statement_expr_owner_state")
     function_ast_node_sequence_state_slot := llvm.build_alloca(builder, i32_type, "function_body_ast_node_sequence_state")
     function_ast_node_semantic_sequence_state_slot := llvm.build_alloca(builder, i32_type, "function_body_ast_node_semantic_sequence_state")
@@ -2124,6 +1620,8 @@ fn emit_function_body_lowering(ctx *byte, mod *byte, builder *byte, i32_type *by
     llvm.build_store(builder, zero, function_symbol_env_slot)
     llvm.build_store(builder, zero, function_value_state_slot)
     llvm.build_store(builder, zero, function_control_state_slot)
+    llvm.build_store(builder, zero, function_statement_value_slot)
+    llvm.build_store(builder, zero, function_statement_resolved_type_slot)
     llvm.build_store(builder, zero, function_statement_expr_owner_state_slot)
     llvm.build_store(builder, zero, function_ast_node_sequence_state_slot)
     llvm.build_store(builder, zero, function_ast_node_semantic_sequence_state_slot)
@@ -2145,12 +1643,14 @@ fn emit_function_body_lowering(ctx *byte, mod *byte, builder *byte, i32_type *by
     arena_index := 0
     statement_owner_lowered := 0
     for (; arena_index < scan.node_len; arena_index++) {
-        lower_ast_node_sequence_state(builder, i32_type, function_ast_node_sequence_state_slot, scan.node_data[arena_index], scan.node_meta_data[arena_index], scan.node_pos_data[arena_index], scan.node_payload_data[arena_index], scan.node_role_data[arena_index], scan.node_expr_count_data[arena_index])
-        lower_ast_node_semantic_sequence_state(builder, i32_type, function_ast_node_semantic_sequence_state_slot, scan.node_data[arena_index], scan.node_meta_data[arena_index], scan.node_pos_data[arena_index], scan.node_payload_data[arena_index], scan.node_role_data[arena_index], scan.node_expr_count_data[arena_index])
-        lower_body_node(ctx, body_fn, builder, i32_type, fn_type, call_helper, function_score_slot, function_local_state_slot, function_assignment_state_slot, function_call_state_slot, function_return_state_slot, function_symbol_env_slot, function_value_state_slot, function_control_state_slot, scan.node_data[arena_index], scan.node_meta_data[arena_index], scan.node_pos_data[arena_index], scan.node_payload_data[arena_index], scan.node_role_data[arena_index])
+        stmtlower.lower_ast_node_sequence_state(builder, i32_type, function_ast_node_sequence_state_slot, scan.node_data[arena_index], scan.node_meta_data[arena_index], scan.node_pos_data[arena_index], scan.node_payload_data[arena_index], scan.node_role_data[arena_index], scan.node_expr_count_data[arena_index])
+        stmtlower.lower_ast_node_semantic_sequence_state(builder, i32_type, function_ast_node_semantic_sequence_state_slot, scan.node_data[arena_index], scan.node_meta_data[arena_index], scan.node_pos_data[arena_index], scan.node_payload_data[arena_index], scan.node_role_data[arena_index], scan.node_expr_count_data[arena_index])
+        stmtlower.lower_body_node(ctx, body_fn, builder, i32_type, fn_type, call_helper, function_score_slot, function_local_state_slot, function_assignment_state_slot, function_call_state_slot, function_return_state_slot, function_symbol_env_slot, function_value_state_slot, function_control_state_slot, scan.node_data[arena_index], scan.node_meta_data[arena_index], scan.node_pos_data[arena_index], scan.node_payload_data[arena_index], scan.node_role_data[arena_index])
         exprs_for_statement := scan.node_expr_count_data[arena_index]
+        bodyflow.begin_statement_value(builder, i32_type, function_statement_value_slot, scan.node_data[arena_index], scan.node_meta_data[arena_index], scan.node_pos_data[arena_index], scan.node_payload_data[arena_index], scan.node_role_data[arena_index], exprs_for_statement)
+        bodyflow.begin_statement_resolved_type(builder, i32_type, function_statement_resolved_type_slot)
         if exprs_for_statement > 0 && statement_owner_lowered < max_statement_expr_owner_lowering_nodes() {
-            lower_statement_expr_owner_node(builder, i32_type, function_score_slot, function_statement_expr_owner_state_slot, function_value_state_slot, scan.node_data[arena_index], scan.node_meta_data[arena_index], scan.node_pos_data[arena_index], scan.node_payload_data[arena_index], scan.node_role_data[arena_index], exprs_for_statement)
+            stmtlower.lower_statement_expr_owner_node(builder, i32_type, function_score_slot, function_statement_expr_owner_state_slot, function_value_state_slot, scan.node_data[arena_index], scan.node_meta_data[arena_index], scan.node_pos_data[arena_index], scan.node_payload_data[arena_index], scan.node_role_data[arena_index], exprs_for_statement)
             statement_owner_lowered += 1
             loaded_owner_count := llvm.build_load2(builder, i32_type, statement_expr_owner_lowered_slot, "loaded_function_statement_expr_owner_lowered_count")
             next_owner_count := llvm.build_add(builder, loaded_owner_count, one, "function_body_statement_expr_owner_lowered_count")
@@ -2158,27 +1658,31 @@ fn emit_function_body_lowering(ctx *byte, mod *byte, builder *byte, i32_type *by
         }
         statement_expr_index := 0
         for (; statement_expr_index < exprs_for_statement && expr_cursor < scan.expr_len; statement_expr_index++) {
-            lower_expr_node(builder, i32_type, fn_type, call_helper, function_score_slot, function_expr_value_state_slot, function_expr_type_state_slot, scan.expr_kind_data[expr_cursor], scan.expr_meta_data[expr_cursor], scan.expr_pos_data[expr_cursor], scan.expr_op_data[expr_cursor], scan.expr_type_data[expr_cursor])
+            exprlower.lower_expr_node(ctx, body_fn, builder, i32_type, fn_type, call_helper, function_score_slot, function_expr_value_state_slot, function_expr_type_state_slot, scan.expr_kind_data[expr_cursor], scan.expr_meta_data[expr_cursor], scan.expr_pos_data[expr_cursor], scan.expr_op_data[expr_cursor], scan.expr_type_data[expr_cursor])
             statement_expr_value := llvm.build_load2(builder, i32_type, function_expr_value_state_slot, "function_statement_expr_value")
             statement_expr_type := llvm.build_load2(builder, i32_type, function_expr_type_state_slot, "function_statement_expr_type")
             statement_expr_base := llvm.build_load2(builder, i32_type, function_value_state_slot, "function_body_statement_expr_value_base")
             statement_expr_typed_value := llvm.build_add(builder, statement_expr_value, statement_expr_type, "function_body_statement_expr_typed_value")
             statement_expr_flow := llvm.build_add(builder, statement_expr_base, statement_expr_typed_value, "function_body_statement_expr_value_flow")
             llvm.build_store(builder, statement_expr_flow, function_value_state_slot)
-            lower_statement_expr_role_flow(builder, i32_type, function_local_state_slot, function_assignment_state_slot, function_call_state_slot, function_return_state_slot, function_value_state_slot, scan.node_role_data[arena_index], statement_expr_typed_value)
-            lower_statement_expr_typed_flow(builder, i32_type, function_i32_statement_expr_state_slot, function_bool_statement_expr_state_slot, function_string_statement_expr_state_slot, function_pointer_statement_expr_state_slot, function_none_statement_expr_state_slot, function_unknown_statement_expr_state_slot, scan.expr_type_data[expr_cursor], statement_expr_typed_value)
+            bodyflow.lower_statement_expr_value(builder, i32_type, function_statement_value_slot, statement_expr_typed_value, statement_expr_index)
+            bodyflow.lower_statement_resolved_expr_type(builder, i32_type, function_statement_resolved_type_slot, scan.expr_type_data[expr_cursor], statement_expr_index)
+            bodyflow.lower_statement_expr_role_flow(builder, i32_type, function_local_state_slot, function_assignment_state_slot, function_call_state_slot, function_return_state_slot, function_value_state_slot, scan.node_role_data[arena_index], statement_expr_typed_value)
+            bodyflow.lower_statement_expr_typed_flow(builder, i32_type, function_i32_statement_expr_state_slot, function_bool_statement_expr_state_slot, function_string_statement_expr_state_slot, function_pointer_statement_expr_state_slot, function_none_statement_expr_state_slot, function_unknown_statement_expr_state_slot, scan.expr_type_data[expr_cursor], statement_expr_typed_value)
             expr_cursor += 1
         }
+        bodyflow.finish_statement_value(builder, i32_type, fn_type, call_helper, function_statement_value_slot, function_local_state_slot, function_assignment_state_slot, function_call_state_slot, function_return_state_slot, function_value_state_slot, function_control_state_slot, scan.node_data[arena_index], scan.node_role_data[arena_index])
+        bodyflow.finish_resolved_statement_value(builder, i32_type, function_statement_value_slot, function_statement_resolved_type_slot, function_local_state_slot, function_assignment_state_slot, function_call_state_slot, function_return_state_slot, function_value_state_slot, function_control_state_slot, scan.node_data[arena_index], scan.node_role_data[arena_index])
     }
     for (; expr_cursor < scan.expr_len; expr_cursor++) {
-        lower_expr_node(builder, i32_type, fn_type, call_helper, function_score_slot, function_expr_value_state_slot, function_expr_type_state_slot, scan.expr_kind_data[expr_cursor], scan.expr_meta_data[expr_cursor], scan.expr_pos_data[expr_cursor], scan.expr_op_data[expr_cursor], scan.expr_type_data[expr_cursor])
+        exprlower.lower_expr_node(ctx, body_fn, builder, i32_type, fn_type, call_helper, function_score_slot, function_expr_value_state_slot, function_expr_type_state_slot, scan.expr_kind_data[expr_cursor], scan.expr_meta_data[expr_cursor], scan.expr_pos_data[expr_cursor], scan.expr_op_data[expr_cursor], scan.expr_type_data[expr_cursor])
         tail_expr_value := llvm.build_load2(builder, i32_type, function_expr_value_state_slot, "function_tail_expr_value")
         tail_expr_type := llvm.build_load2(builder, i32_type, function_expr_type_state_slot, "function_tail_expr_type")
         tail_expr_base := llvm.build_load2(builder, i32_type, function_value_state_slot, "function_body_tail_expr_value_base")
         tail_expr_typed_value := llvm.build_add(builder, tail_expr_value, tail_expr_type, "function_body_tail_expr_typed_value")
         tail_expr_flow := llvm.build_add(builder, tail_expr_base, tail_expr_typed_value, "function_body_tail_expr_value_flow")
         llvm.build_store(builder, tail_expr_flow, function_value_state_slot)
-        lower_statement_expr_typed_flow(builder, i32_type, function_i32_statement_expr_state_slot, function_bool_statement_expr_state_slot, function_string_statement_expr_state_slot, function_pointer_statement_expr_state_slot, function_none_statement_expr_state_slot, function_unknown_statement_expr_state_slot, scan.expr_type_data[expr_cursor], tail_expr_typed_value)
+        bodyflow.lower_statement_expr_typed_flow(builder, i32_type, function_i32_statement_expr_state_slot, function_bool_statement_expr_state_slot, function_string_statement_expr_state_slot, function_pointer_statement_expr_state_slot, function_none_statement_expr_state_slot, function_unknown_statement_expr_state_slot, scan.expr_type_data[expr_cursor], tail_expr_typed_value)
     }
     lowered_expr_value_for_statement := llvm.build_load2(builder, i32_type, function_expr_value_state_slot, "function_expr_value_for_statement")
     lowered_expr_type_for_statement := llvm.build_load2(builder, i32_type, function_expr_type_state_slot, "function_expr_type_for_statement")
@@ -2226,6 +1730,8 @@ fn emit_function_body_lowering(ctx *byte, mod *byte, builder *byte, i32_type *by
     lowered_symbol_env := llvm.build_load2(builder, i32_type, function_symbol_env_slot, "function_body_lowered_symbol_env")
     lowered_value_state := llvm.build_load2(builder, i32_type, function_value_state_slot, "function_body_lowered_value_state")
     lowered_control_state := llvm.build_load2(builder, i32_type, function_control_state_slot, "function_body_lowered_control_state")
+    lowered_statement_ast_value := llvm.build_load2(builder, i32_type, function_statement_value_slot, "function_body_lowered_statement_ast_value")
+    lowered_statement_resolved_type := llvm.build_load2(builder, i32_type, function_statement_resolved_type_slot, "function_body_lowered_statement_resolved_type")
     lowered_statement_expr_owner_state := llvm.build_load2(builder, i32_type, function_statement_expr_owner_state_slot, "function_body_lowered_statement_expr_owner_state")
     lowered_ast_node_sequence_state := llvm.build_load2(builder, i32_type, function_ast_node_sequence_state_slot, "function_body_lowered_ast_node_sequence_state")
     lowered_ast_node_semantic_sequence_state := llvm.build_load2(builder, i32_type, function_ast_node_semantic_sequence_state_slot, "function_body_lowered_ast_node_semantic_sequence_state")
@@ -2251,7 +1757,9 @@ fn emit_function_body_lowering(ctx *byte, mod *byte, builder *byte, i32_type *by
     function_body_expr_typed_environment := llvm.build_add(builder, lowered_expr_value_state, lowered_expr_type_state, "function_body_expr_typed_environment")
     function_body_expr_typed_with_statement_environment := llvm.build_add(builder, function_body_expr_typed_environment, function_body_statement_expr_typed_environment, "function_body_expr_typed_with_statement_environment")
     function_body_expr_value_environment := llvm.build_add(builder, lowered_environment_state, function_body_expr_typed_with_statement_environment, "function_body_expr_value_environment")
-    function_body_expr_owner_state := llvm.build_add(builder, lowered_statement_expr_owner_state, lowered_statement_expr_owner_count, "function_body_statement_expr_owner_lowered_state")
+    function_body_expr_owner_state_base := llvm.build_add(builder, lowered_statement_expr_owner_state, lowered_statement_expr_owner_count, "function_body_statement_expr_owner_lowered_state")
+    function_body_resolved_statement_state := llvm.build_add(builder, lowered_statement_ast_value, lowered_statement_resolved_type, "function_body_resolved_statement_lowered_state")
+    function_body_expr_owner_state := llvm.build_add(builder, function_body_expr_owner_state_base, function_body_resolved_statement_state, "function_body_statement_ast_lowered_state")
     function_body_ast_node_semantic_sequence_lowered := llvm.build_add(builder, lowered_ast_node_sequence_state, lowered_ast_node_semantic_sequence_state, "function_body_ast_node_semantic_sequence_lowered")
     function_body_ast_node_sequence_lowered := llvm.build_add(builder, function_body_expr_owner_state, function_body_ast_node_semantic_sequence_lowered, "function_body_ast_node_sequence_lowered")
     function_body_expr_owner_environment := llvm.build_add(builder, function_body_expr_value_environment, function_body_ast_node_sequence_lowered, "function_body_expr_owner_environment")
