@@ -123,7 +123,7 @@ stage-2 self-host gate
 ├─ statement-owned expressions now fold into a per-statement AST value before local/assignment/call/return/control lowering, reducing the remaining summary-only body lowering path
 ├─ per-statement AST values now feed direct local/assignment/call/return LLVM alloca/store/load/call paths instead of only updating aggregate state
 ├─ per-statement AST values now combine with parser/resolver expression type tags and flow into resolved local/assignment/call/return state lowering
-├─ statement-owned expression typed values also flow into i32/bool/string/pointer/none/unknown type-category state and are folded into the function-body environment
+├─ statement-owned expression typed values also flow into i32/i64/bool/string/pointer/slice/reference/none/unknown type-category state and are folded into the function-body environment
 ├─ statement/expression role/type flow lowering now lives in the `codegen/bodyflow.yc` module, with `projectir.yc` calling it through the module boundary
 ├─ identifier/literal/call/member/index/binary/unary expression lowering now lives in the `codegen/exprlower.yc` module; index expressions emit LLVM slice-header len/cap, bounds-check branch, and array-type GEP/load IR, while member expressions use parsed member-name hash plus project field-table index to drive bounded LLVM struct GEP/load IR
 ├─ local/assignment/call/return/if/for/else/break/continue/for-in body statement lowering now lives in the `codegen/stmtlower.yc` module, leaving `projectir.yc` focused on per-function orchestration
@@ -156,12 +156,25 @@ stage-2 self-host gate
 ├─ generated stage2/stage3 binaries parse a `dyn_seed()` helper's `return <integer>` at the fallback position and emit zero-argument helper-call IR without a fixed fixture string
 ├─ generated stage2/stage3 binaries parse `probe := <integer>; if probe == 0 { return <integer> }; return <integer>` at the fallback position and emit conditional-branch IR without a fixed fixture string
 ├─ generated stage2/stage3 binaries parse `sum := <integer>; for (i := 0; i < <integer>; i = i + 1) { sum = sum + <integer> }; return sum` at the fallback position and emit loop check/body/update/done IR without a fixed fixture string
+├─ checker/tinyir now type-check and lower fixed three-element i32 array literals, index loads, element assignments, `for value in items`, `for i in n`, and `break` / `continue` inside loops and nested `if` branches into LLVM array alloca/GEP/store/load/loop IR. Dynamic indexes go through `icmp sge`/`icmp slt` bounds checks, and the OOB path lowers to `abort` + `unreachable`
+├─ checker/tinyir now treats `return` inside numeric for-in and C-style for bodies as real control flow: the return path terminates with LLVM `ret`, while the loop's normal path can continue to following statements
+├─ checker/tinyir now handles two- and three-field i32 struct declarations, struct-literal locals, member loads/assignments, two- and three-field struct helper-parameter calls, and two- and three-field struct helper returns, lowering them into LLVM struct allocas plus `LLVMBuildStructGEP2`/load/store/call/ret IR
+├─ generated stage2/stage3 binaries lower the array/index self-codegen fixture into array alloca/GEP/load/store IR
+├─ generated stage4/stage5 IR now runs a resolved local/assignment/call/return lowering probe from compiler project body-node counts and statement-expression links
+├─ project body lowering keeps the compact gate but now feeds bounded leading real `scan.node_*` / `scan.expr_*` entries through `stmtlower` / `exprlower` / `bodyflow`, connecting resolved statement values/types to local/assignment/call/return state
+├─ project_body.ll now folds the bounded real AST lowering state into function_body_lowered_total, moving one step away from a summary-only total
+├─ project_body.ll now gates the real statement-expression lowering limit as a named IR marker, making the next expansion point explicit
 ├─ tiny single-file codegen now treats returns inside if/else bodies as terminated blocks and continues through the join block without emitting extra branches
 ├─ function body lowering now lowers multiple statement/expression owner nodes per function from the body node sequence with a bounded cap, and verifies the owner count/limit through IR gates
 ├─ function body lowering now lowers BodyNodeSequence kind/meta/source-position/payload/semantic-role/expression-count data into generated function-body AST node sequence state
 ├─ function body lowering now dispatches AST node sequences into local/assignment/call/return/control semantic sequence state
 ├─ function body lowering now carries expression-table identifier/literal/string/bool/none/member/index categories into the scan and lowers literal type/access/call surfaces into the IR value flow
 ├─ generated stage2/stage3 binaries reject unsupported file build-ir inputs instead of returning project compiler IR
+├─ regular ycc-ycpl build/build-ir paths now forbid bootstrap fallback under YCPL_NO_BOOTSTRAP=1 and fail unsupported inputs with an explicit diagnostic
+├─ project_body.ll no longer relies on fixed expression probes in the compact path; it lowers statement-owned expressions and remaining tail expressions from the real scan.expr_* sequence
+├─ project_body.ll now raises the real AST lowering caps to 16 body nodes, 32 expressions, 16 statement expressions, and 16 statement owners, with IR gates pinning those values
+├─ project_body.ll now emits named IR markers for lowered and still-unlowered real node/expression counts, so CI can detect remaining summary/smoke coverage
+├─ traversal project gates now carry i64 and []T/slice parameters through typed AST flow and verify i64/reference statement-expression markers in generated IR
 └─ compiler-equivalent native ycc-ycpl is still the next implementation step
 ```
 

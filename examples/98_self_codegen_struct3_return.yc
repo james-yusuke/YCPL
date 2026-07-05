@@ -1,0 +1,15 @@
+struct Triple {
+    left i32
+    middle i32
+    right i32
+}
+
+fn make_triple() Triple {
+    triple := Triple{left: 4, middle: 2, right: 7}
+    return triple
+}
+
+fn main() i32 {
+    triple := make_triple()
+    return triple.left + triple.middle + triple.right
+}

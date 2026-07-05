@@ -17,6 +17,11 @@ pub fn bool_type_kind() i32 { return 2 }
 pub fn string_type_kind() i32 { return 3 }
 pub fn none_type_kind() i32 { return 4 }
 pub fn pointer_type_kind() i32 { return 5 }
+pub fn i64_type_kind() i32 { return 6 }
+pub fn array_type_kind() i32 { return 7 }
+pub fn slice_type_kind() i32 { return 8 }
+pub fn struct_type_kind() i32 { return 9 }
+pub fn function_type_kind() i32 { return 10 }
 
 pub struct ExpressionTable {
     ok bool

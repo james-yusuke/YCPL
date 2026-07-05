@@ -30,6 +30,8 @@ struct TinyIrParser {
     void_type *byte
     bool_type *byte
     string_type *byte
+    struct2_type *byte
+    struct3_type *byte
     i64_type *byte
     ptr_type *byte
     i32_type *byte
@@ -42,6 +44,10 @@ struct TinyIrParser {
     string_fn_type *byte
     string_fn_type1 *byte
     string_fn_type2 *byte
+    abort_fn_type *byte
+    abort_fn *byte
+    current_break_block *byte
+    current_continue_block *byte
     current_fn *byte
     current_return_type i32
     main_fn *byte
@@ -130,6 +136,19 @@ struct TinyIrParser {
     type7 i32
     saw_main bool
     returned bool
+    loop_break bool
+    loop_continue bool
+    saw_struct bool
+    struct_name string
+    struct_fields i32
+    struct_field0 string
+    struct_field1 string
+    struct_field2 string
+}
+
+struct TinyGepIndices2 {
+    arg0 *byte
+    arg1 *byte
 }
 
 fn ok_result(out_file string) TinyIrResult {
@@ -233,6 +252,18 @@ fn tiny_void_type_kind() i32 {
     return 6
 }
 
+fn tiny_i32_array3_type_kind() i32 {
+    return 7
+}
+
+fn tiny_i32_struct2_type_kind() i32 {
+    return 8
+}
+
+fn tiny_i32_struct3_type_kind() i32 {
+    return 9
+}
+
 fn tiny_type_from_name(name string) i32 {
     if str.eq(name, "void") {
         return tiny_void_type_kind()
@@ -267,6 +298,15 @@ fn llvm_type_for_value(p TinyIrParser, type_kind i32) *byte {
     }
     if type_kind == tiny_ptr_type_kind() {
         return p.ptr_type
+    }
+    if type_kind == tiny_i32_array3_type_kind() {
+        return llvm.array_type(p.i32_type, 3)
+    }
+    if type_kind == tiny_i32_struct2_type_kind() {
+        return p.struct2_type
+    }
+    if type_kind == tiny_i32_struct3_type_kind() {
+        return p.struct3_type
     }
     return p.i32_type
 }
@@ -340,7 +380,84 @@ fn ensure_value_type(p TinyIrParser, expected_type i32, message string) TinyIrPa
     if expected_type == tiny_ptr_type_kind() {
         return ensure_ptr_value(p, message)
     }
+    if expected_type == tiny_i32_array3_type_kind() {
+        if p.value_type == tiny_i32_array3_type_kind() {
+            return p
+        }
+        return unsupported_parser(p, message)
+    }
+    if expected_type == tiny_i32_struct2_type_kind() {
+        if p.value_type == tiny_i32_struct2_type_kind() {
+            return p
+        }
+        return unsupported_parser(p, message)
+    }
+    if expected_type == tiny_i32_struct3_type_kind() {
+        if p.value_type == tiny_i32_struct3_type_kind() {
+            return p
+        }
+        return unsupported_parser(p, message)
+    }
     return ensure_i32_value(p, message)
+}
+
+fn struct_field_index(p TinyIrParser, field string) i32 {
+    if str.eq(field, p.struct_field0) {
+        return 0
+    }
+    if str.eq(field, p.struct_field1) {
+        return 1
+    }
+    if p.struct_fields == 3 && str.eq(field, p.struct_field2) {
+        return 2
+    }
+    return -1
+}
+
+fn build_i32_struct_field_ptr(p TinyIrParser, slot *byte, type_kind i32, field string, name string) *byte {
+    index := struct_field_index(p, field)
+    if index < 0 {
+        return none
+    }
+    if type_kind == tiny_i32_struct3_type_kind() {
+        return llvm.build_struct_gep2(p.builder, p.struct3_type, slot, index, name)
+    }
+    return llvm.build_struct_gep2(p.builder, p.struct2_type, slot, index, name)
+}
+
+fn build_i32_array3_element_ptr(p TinyIrParser, slot *byte, index_value *byte, name string) *byte {
+    array_type := llvm.array_type(p.i32_type, 3)
+    zero := llvm.const_int(p.i32_type, 0, 1)
+    indices := TinyGepIndices2{arg0: zero, arg1: index_value}
+    return llvm.build_gep2(p.builder, array_type, slot, &indices, 2, name)
+}
+
+fn build_checked_i32_array3_element_ptr(p TinyIrParser, slot *byte, index_value *byte, name string) *byte {
+    zero := llvm.const_int(p.i32_type, 0, 1)
+    three := llvm.const_int(p.i32_type, 3, 1)
+    lower_ok_cond := llvm.build_icmp(p.builder, llvm.int_sge(), index_value, zero, "arrayidx_lower_ok")
+    lower_ok_block := llvm.append_basic_block_in_context(p.ctx, p.current_fn, "arrayidx_lower_ok")
+    upper_check_block := llvm.append_basic_block_in_context(p.ctx, p.current_fn, "arrayidx_upper_check")
+    oob_block := llvm.append_basic_block_in_context(p.ctx, p.current_fn, "arrayidx_oob")
+    llvm.build_cond_br(p.builder, lower_ok_cond, lower_ok_block, oob_block)
+
+    llvm.position_builder_at_end(p.builder, lower_ok_block)
+    upper_ok_cond := llvm.build_icmp(p.builder, llvm.int_slt(), index_value, three, "arrayidx_in_bounds")
+    llvm.build_cond_br(p.builder, upper_ok_cond, upper_check_block, oob_block)
+
+    llvm.position_builder_at_end(p.builder, oob_block)
+    llvm.build_call2(p.builder, p.abort_fn_type, p.abort_fn, none, 0, "")
+    llvm.build_unreachable(p.builder)
+
+    llvm.position_builder_at_end(p.builder, upper_check_block)
+    return build_i32_array3_element_ptr(p, slot, index_value, name)
+}
+
+fn store_i32_array3_element(p TinyIrParser, slot *byte, index i32, value *byte) TinyIrParser {
+    index_value := llvm.const_int(p.i32_type, index, 1)
+    element_ptr := build_checked_i32_array3_element_ptr(p, slot, index_value, "arrayidx")
+    llvm.build_store(p.builder, value, element_ptr)
+    return p
 }
 
 fn tiny_signature(param_count i32, param0_type i32, param1_type i32) i32 {
@@ -420,6 +537,10 @@ fn reset_locals(p TinyIrParser) TinyIrParser {
     p.type7 = 0
     p.value_type = 0
     p.returned = false
+    p.current_break_block = none
+    p.current_continue_block = none
+    p.loop_break = false
+    p.loop_continue = false
     return p
 }
 
@@ -753,6 +874,22 @@ fn scan_skip_block(p TinyIrParser) TinyIrParser {
     return p
 }
 
+fn skip_to_block_end(p TinyIrParser) TinyIrParser {
+    depth := 0
+    for (; p.ok && p.lx.kind != tok.eof(); ) {
+        if p.lx.kind == tok.lbrace() {
+            depth += 1
+        } else if p.lx.kind == tok.rbrace() {
+            if depth == 0 {
+                return p
+            }
+            depth -= 1
+        }
+        p = advance_sig(p)
+    }
+    return p
+}
+
 fn parse_type_name(p TinyIrParser, message string) TinyIrParser {
     if p.lx.kind == tok.star() {
         p = advance_sig(p)
@@ -765,10 +902,67 @@ fn parse_type_name(p TinyIrParser, message string) TinyIrParser {
     if p.lx.kind != tok.ident() {
         return fail_parser(p, message)
     }
+    if p.saw_struct && str.eq(p.lx.lexeme, p.struct_name) {
+        if p.struct_fields == 3 {
+            p.value_type = tiny_i32_struct3_type_kind()
+        } else {
+            p.value_type = tiny_i32_struct2_type_kind()
+        }
+        return advance_sig(p)
+    }
     p.value_type = tiny_type_from_name(p.lx.lexeme)
     if p.value_type == 0 {
         return unsupported_parser(p, "self codegen currently supports i32, i64, bool, string, and *byte types")
     }
+    return advance_sig(p)
+}
+
+fn scan_struct_decl(p TinyIrParser) TinyIrParser {
+    p = advance_sig(p)
+    if p.lx.kind != tok.ident() {
+        return fail_parser(p, "expected struct name")
+    }
+    p.struct_name = p.lx.lexeme
+    p = advance_sig(p)
+    if p.lx.kind != tok.lbrace() {
+        return fail_parser(p, "expected '{' after struct name")
+    }
+    p = advance_sig(p)
+    if p.lx.kind != tok.ident() {
+        return fail_parser(p, "expected struct field name")
+    }
+    p.struct_field0 = p.lx.lexeme
+    p = advance_sig(p)
+    p = parse_type_name(p, "expected struct field type")
+    if !p.ok { return p }
+    if p.value_type != tiny_i32_type_kind() {
+        return unsupported_parser(p, "self codegen currently supports two- or three-field i32 structs")
+    }
+    if p.lx.kind != tok.ident() {
+        return fail_parser(p, "expected second struct field name")
+    }
+    p.struct_field1 = p.lx.lexeme
+    p = advance_sig(p)
+    p = parse_type_name(p, "expected struct field type")
+    if !p.ok { return p }
+    if p.value_type != tiny_i32_type_kind() {
+        return unsupported_parser(p, "self codegen currently supports two- or three-field i32 structs")
+    }
+    p.struct_fields = 2
+    if p.lx.kind == tok.ident() {
+        p.struct_field2 = p.lx.lexeme
+        p = advance_sig(p)
+        p = parse_type_name(p, "expected struct field type")
+        if !p.ok { return p }
+        if p.value_type != tiny_i32_type_kind() {
+            return unsupported_parser(p, "self codegen currently supports two- or three-field i32 structs")
+        }
+        p.struct_fields = 3
+    }
+    if p.lx.kind != tok.rbrace() {
+        return unsupported_parser(p, "self codegen currently supports two or three i32 struct fields")
+    }
+    p.saw_struct = true
     return advance_sig(p)
 }
 
@@ -1013,6 +1207,8 @@ fn scan_program_decls(p TinyIrParser) TinyIrParser {
     for (; p.ok && p.lx.kind != tok.eof(); ) {
         if p.lx.kind == tok.kw_extern() {
             p = scan_extern_decl(p)
+        } else if p.lx.kind == tok.kw_struct() {
+            p = scan_struct_decl(p)
         } else {
             p = scan_function_decl(p)
         }
@@ -1097,6 +1293,33 @@ fn parse_factor(p TinyIrParser) TinyIrParser {
         name := p.lx.lexeme
         p = advance_sig(p)
         if !p.ok { return p }
+
+        if p.lx.kind == tok.lbrack() {
+            p = lookup_slot(p, name)
+            if !p.ok { return p }
+            slot := p.value
+            slot_type := p.value_type
+            if slot_type != tiny_i32_array3_type_kind() {
+                return unsupported_parser(p, "self codegen index currently supports i32[3] local arrays")
+            }
+            p = advance_sig(p)
+            p = parse_expr(p)
+            if !p.ok { return p }
+            p = ensure_i32_value(p, "self codegen array index currently requires i32")
+            if !p.ok { return p }
+            index_value := p.value
+            if p.lx.kind != tok.rbrack() {
+                return fail_parser(p, "expected ']' after array index")
+            }
+            element_ptr := build_checked_i32_array3_element_ptr(p, slot, index_value, "arrayidx")
+            p.value = llvm.build_load2(p.builder, p.i32_type, element_ptr, "arrayload")
+            p.value_type = tiny_i32_type_kind()
+            if sign < 0 {
+                zero := llvm.const_int(p.i32_type, 0, 1)
+                p.value = llvm.build_sub(p.builder, zero, p.value, "negtmp")
+            }
+            return advance_sig(p)
+        }
 
         if p.lx.kind == tok.lparen() {
             p = advance_sig(p)
@@ -1210,6 +1433,31 @@ fn parse_factor(p TinyIrParser) TinyIrParser {
             return advance_sig(p)
         }
 
+        if p.lx.kind == tok.dot() {
+            p = lookup_slot(p, name)
+            if !p.ok { return p }
+            slot := p.value
+            slot_type := p.value_type
+            if slot_type != tiny_i32_struct2_type_kind() && slot_type != tiny_i32_struct3_type_kind() {
+                return unsupported_parser(p, "self codegen member access currently supports two- or three-field i32 structs")
+            }
+            p = advance_sig(p)
+            if p.lx.kind != tok.ident() {
+                return fail_parser(p, "expected member name after '.'")
+            }
+            field_ptr := build_i32_struct_field_ptr(p, slot, slot_type, p.lx.lexeme, "memberptr")
+            if field_ptr == none {
+                return fail_parser(p, "unknown struct field")
+            }
+            p.value = llvm.build_load2(p.builder, p.i32_type, field_ptr, "memberload")
+            p.value_type = tiny_i32_type_kind()
+            if sign < 0 {
+                zero := llvm.const_int(p.i32_type, 0, 1)
+                p.value = llvm.build_sub(p.builder, zero, p.value, "negtmp")
+            }
+            return advance_sig(p)
+        }
+
         p = lookup_slot(p, name)
         if !p.ok { return p }
         loaded_type := p.value_type
@@ -1225,6 +1473,180 @@ fn parse_factor(p TinyIrParser) TinyIrParser {
     }
 
     return unsupported_parser(p, "self codegen currently supports i32/bool literals, locals, and helper call expressions")
+}
+
+fn parse_i32_array3_local(p TinyIrParser, name string) TinyIrParser {
+    array_type := llvm.array_type(p.i32_type, 3)
+    slot := llvm.build_alloca(p.builder, array_type, name)
+    p = advance_sig(p)
+
+    p = parse_expr_or_comparison(p)
+    if !p.ok { return p }
+    p = ensure_i32_value(p, "self codegen i32 array literal requires i32 elements")
+    if !p.ok { return p }
+    p = store_i32_array3_element(p, slot, 0, p.value)
+    if p.lx.kind != tok.comma() {
+        return fail_parser(p, "expected ',' in i32 array literal")
+    }
+    p = advance_sig(p)
+
+    p = parse_expr_or_comparison(p)
+    if !p.ok { return p }
+    p = ensure_i32_value(p, "self codegen i32 array literal requires i32 elements")
+    if !p.ok { return p }
+    p = store_i32_array3_element(p, slot, 1, p.value)
+    if p.lx.kind != tok.comma() {
+        return fail_parser(p, "expected ',' in i32 array literal")
+    }
+    p = advance_sig(p)
+
+    p = parse_expr_or_comparison(p)
+    if !p.ok { return p }
+    p = ensure_i32_value(p, "self codegen i32 array literal requires i32 elements")
+    if !p.ok { return p }
+    p = store_i32_array3_element(p, slot, 2, p.value)
+    if p.lx.kind != tok.rbrack() {
+        return fail_parser(p, "expected ']' after i32 array literal")
+    }
+    p = advance_sig(p)
+    return set_slot(p, name, slot, tiny_i32_array3_type_kind())
+}
+
+fn parse_struct2_local(p TinyIrParser, name string) TinyIrParser {
+    if !p.saw_struct {
+        return unsupported_parser(p, "self codegen struct literal requires a struct declaration")
+    }
+    if p.lx.kind != tok.ident() || !str.eq(p.lx.lexeme, p.struct_name) {
+        return unsupported_parser(p, "self codegen struct literal type mismatch")
+    }
+    struct_type_kind := tiny_i32_struct2_type_kind()
+    struct_type := p.struct2_type
+    if p.struct_fields == 3 {
+        struct_type_kind = tiny_i32_struct3_type_kind()
+        struct_type = p.struct3_type
+    }
+    slot := llvm.build_alloca(p.builder, struct_type, name)
+    p = advance_sig(p)
+    if p.lx.kind != tok.lbrace() {
+        return fail_parser(p, "expected '{' after struct literal type")
+    }
+    p = advance_sig(p)
+    if p.lx.kind != tok.ident() || !str.eq(p.lx.lexeme, p.struct_field0) {
+        return fail_parser(p, "expected first struct field initializer")
+    }
+    p = advance_sig(p)
+    if p.lx.kind != tok.colon() {
+        return fail_parser(p, "expected ':' after struct field name")
+    }
+    p = advance_sig(p)
+    p = parse_expr_or_comparison(p)
+    if !p.ok { return p }
+    p = ensure_i32_value(p, "self codegen struct field initializer requires i32")
+    if !p.ok { return p }
+    field0_ptr := llvm.build_struct_gep2(p.builder, struct_type, slot, 0, "memberptr")
+    llvm.build_store(p.builder, p.value, field0_ptr)
+    if p.lx.kind == tok.comma() {
+        p = advance_sig(p)
+    }
+    if p.lx.kind != tok.ident() || !str.eq(p.lx.lexeme, p.struct_field1) {
+        return fail_parser(p, "expected second struct field initializer")
+    }
+    p = advance_sig(p)
+    if p.lx.kind != tok.colon() {
+        return fail_parser(p, "expected ':' after struct field name")
+    }
+    p = advance_sig(p)
+    p = parse_expr_or_comparison(p)
+    if !p.ok { return p }
+    p = ensure_i32_value(p, "self codegen struct field initializer requires i32")
+    if !p.ok { return p }
+    field1_ptr := llvm.build_struct_gep2(p.builder, struct_type, slot, 1, "memberptr")
+    llvm.build_store(p.builder, p.value, field1_ptr)
+    if p.struct_fields == 3 {
+        if p.lx.kind == tok.comma() {
+            p = advance_sig(p)
+        }
+        if p.lx.kind != tok.ident() || !str.eq(p.lx.lexeme, p.struct_field2) {
+            return fail_parser(p, "expected third struct field initializer")
+        }
+        p = advance_sig(p)
+        if p.lx.kind != tok.colon() {
+            return fail_parser(p, "expected ':' after struct field name")
+        }
+        p = advance_sig(p)
+        p = parse_expr_or_comparison(p)
+        if !p.ok { return p }
+        p = ensure_i32_value(p, "self codegen struct field initializer requires i32")
+        if !p.ok { return p }
+        field2_ptr := llvm.build_struct_gep2(p.builder, struct_type, slot, 2, "memberptr")
+        llvm.build_store(p.builder, p.value, field2_ptr)
+    }
+    if p.lx.kind != tok.rbrace() {
+        return fail_parser(p, "expected '}' after struct literal")
+    }
+    p = advance_sig(p)
+    return set_slot(p, name, slot, struct_type_kind)
+}
+
+fn parse_array3_assignment(p TinyIrParser, name string) TinyIrParser {
+    p = lookup_slot(p, name)
+    if !p.ok { return p }
+    slot := p.value
+    if p.value_type != tiny_i32_array3_type_kind() {
+        return unsupported_parser(p, "self codegen indexed assignment requires i32[3] local")
+    }
+    p = advance_sig(p)
+    p = parse_expr_or_comparison(p)
+    if !p.ok { return p }
+    p = ensure_i32_value(p, "self codegen array index requires i32")
+    if !p.ok { return p }
+    index_value := p.value
+    if p.lx.kind != tok.rbrack() {
+        return fail_parser(p, "expected ']' after array index")
+    }
+    p = advance_sig(p)
+    if p.lx.kind != tok.assign() {
+        return fail_parser(p, "expected '=' after indexed assignment target")
+    }
+    p = advance_sig(p)
+    p = parse_expr_or_comparison(p)
+    if !p.ok { return p }
+    p = ensure_i32_value(p, "self codegen indexed assignment requires i32 value")
+    if !p.ok { return p }
+    element_ptr := build_checked_i32_array3_element_ptr(p, slot, index_value, "arrayidx")
+    llvm.build_store(p.builder, p.value, element_ptr)
+    p.value_type = tiny_void_type_kind()
+    return p
+}
+
+fn parse_struct2_member_assignment(p TinyIrParser, name string) TinyIrParser {
+    p = lookup_slot(p, name)
+    if !p.ok { return p }
+    slot := p.value
+    slot_type := p.value_type
+    if slot_type != tiny_i32_struct2_type_kind() && slot_type != tiny_i32_struct3_type_kind() {
+        return unsupported_parser(p, "self codegen member assignment currently supports two- or three-field i32 structs")
+    }
+    p = advance_sig(p)
+    if p.lx.kind != tok.ident() {
+        return fail_parser(p, "expected member name after '.'")
+    }
+    field_ptr := build_i32_struct_field_ptr(p, slot, slot_type, p.lx.lexeme, "memberptr")
+    if field_ptr == none {
+        return fail_parser(p, "unknown struct field")
+    }
+    p = advance_sig(p)
+    if p.lx.kind != tok.assign() {
+        return fail_parser(p, "expected '=' after member assignment target")
+    }
+    p = advance_sig(p)
+    p = parse_expr_or_comparison(p)
+    if !p.ok { return p }
+    p = ensure_i32_value(p, "self codegen member assignment requires i32 value")
+    if !p.ok { return p }
+    llvm.build_store(p.builder, p.value, field_ptr)
+    p.value_type = tiny_void_type_kind()
+    return p
 }
 
 fn parse_term(p TinyIrParser) TinyIrParser {
@@ -1332,8 +1754,22 @@ fn parse_var_or_assign(p TinyIrParser) TinyIrParser {
     p = advance_sig(p)
     if !p.ok { return p }
 
+    if p.lx.kind == tok.lbrack() {
+        return parse_array3_assignment(p, name)
+    }
+
+    if p.lx.kind == tok.dot() {
+        return parse_struct2_member_assignment(p, name)
+    }
+
     if is_declare_assign(p.lx.kind, p.lx.lexeme) {
         p = advance_sig(p)
+        if p.lx.kind == tok.lbrack() {
+            return parse_i32_array3_local(p, name)
+        }
+        if p.saw_struct && p.lx.kind == tok.ident() && str.eq(p.lx.lexeme, p.struct_name) {
+            return parse_struct2_local(p, name)
+        }
         p = parse_expr_or_comparison(p)
         if !p.ok { return p }
         inferred_type := p.value_type
@@ -1349,6 +1785,9 @@ fn parse_var_or_assign(p TinyIrParser) TinyIrParser {
         p = advance_sig(p)
         if p.lx.kind == tok.assign() {
             p = advance_sig(p)
+            if p.saw_struct && p.lx.kind == tok.ident() && str.eq(p.lx.lexeme, p.struct_name) {
+                return parse_struct2_local(p, name)
+            }
             p = parse_expr_or_comparison(p)
             if !p.ok { return p }
             inferred_type := p.value_type
@@ -1416,12 +1855,21 @@ fn parse_if_statement(p TinyIrParser) TinyIrParser {
     llvm.position_builder_at_end(p.builder, then_block)
     p = advance_sig(p)
     then_returned := false
+    then_transferred := false
     for (; p.ok && p.lx.kind != tok.rbrace() && p.lx.kind != tok.eof(); ) {
         p = parse_statement(p)
         if !p.ok { return p }
         if p.returned {
             then_returned = true
             p.returned = false
+        }
+        if p.loop_break || p.loop_continue {
+            then_transferred = true
+            p.loop_break = false
+            p.loop_continue = false
+            p = skip_to_block_end(p)
+            if !p.ok { return p }
+            break
         }
         if p.lx.kind == tok.semicolon() {
             p = advance_sig(p)
@@ -1431,13 +1879,14 @@ fn parse_if_statement(p TinyIrParser) TinyIrParser {
     if p.lx.kind != tok.rbrace() {
         return fail_parser(p, "expected '}' after if body")
     }
-    if !then_returned {
+    if !then_returned && !then_transferred {
         llvm.build_br(p.builder, done_block)
     }
     p = advance_sig(p)
 
     llvm.position_builder_at_end(p.builder, else_block)
     else_returned := false
+    else_transferred := false
     if p.lx.kind == tok.kw_else() {
         p = advance_sig(p)
         if p.lx.kind != tok.lbrace() {
@@ -1451,6 +1900,14 @@ fn parse_if_statement(p TinyIrParser) TinyIrParser {
                 else_returned = true
                 p.returned = false
             }
+            if p.loop_break || p.loop_continue {
+                else_transferred = true
+                p.loop_break = false
+                p.loop_continue = false
+                p = skip_to_block_end(p)
+                if !p.ok { return p }
+                break
+            }
             if p.lx.kind == tok.semicolon() {
                 p = advance_sig(p)
             }
@@ -1461,15 +1918,191 @@ fn parse_if_statement(p TinyIrParser) TinyIrParser {
         }
         p = advance_sig(p)
     }
-    if !else_returned {
+    if !else_returned && !else_transferred {
         llvm.build_br(p.builder, done_block)
     }
     llvm.position_builder_at_end(p.builder, done_block)
     return p
 }
 
+fn parse_for_in_statement(p TinyIrParser, item_name string) TinyIrParser {
+    p = advance_sig(p)
+    if p.lx.kind == tok.ident() {
+        array_name := p.lx.lexeme
+        probe := lookup_slot(p, array_name)
+        if probe.ok && probe.value_type == tiny_i32_array3_type_kind() {
+            p = probe
+            array_slot := p.value
+            p = advance_sig(p)
+            if p.lx.kind != tok.lbrace() {
+                return fail_parser(p, "expected '{' after for-in header")
+            }
+
+            index_slot := llvm.build_alloca(p.builder, p.i32_type, "tiny_for_in_index")
+            item_slot := llvm.build_alloca(p.builder, p.i32_type, item_name)
+            zero := llvm.const_int(p.i32_type, 0, 1)
+            one := llvm.const_int(p.i32_type, 1, 1)
+            three := llvm.const_int(p.i32_type, 3, 1)
+            llvm.build_store(p.builder, zero, index_slot)
+            p = set_slot(p, item_name, item_slot, tiny_i32_type_kind())
+            if !p.ok { return p }
+
+            check_block := llvm.append_basic_block_in_context(p.ctx, p.current_fn, "tiny_for_in_check")
+            body_block := llvm.append_basic_block_in_context(p.ctx, p.current_fn, "tiny_for_in_body")
+            update_block := llvm.append_basic_block_in_context(p.ctx, p.current_fn, "tiny_for_in_update")
+            done_block := llvm.append_basic_block_in_context(p.ctx, p.current_fn, "tiny_for_in_done")
+            outer_break_block := p.current_break_block
+            outer_continue_block := p.current_continue_block
+            p.current_break_block = done_block
+            p.current_continue_block = update_block
+            llvm.build_br(p.builder, check_block)
+
+            llvm.position_builder_at_end(p.builder, check_block)
+            loaded_index := llvm.build_load2(p.builder, p.i32_type, index_slot, "tiny_for_in_index_value")
+            has_next := llvm.build_icmp(p.builder, llvm.int_slt(), loaded_index, three, "tiny_for_in_has_next")
+            llvm.build_cond_br(p.builder, has_next, body_block, done_block)
+
+            llvm.position_builder_at_end(p.builder, body_block)
+            element_ptr := build_checked_i32_array3_element_ptr(p, array_slot, loaded_index, "tiny_for_in_arrayidx")
+            item_value := llvm.build_load2(p.builder, p.i32_type, element_ptr, "tiny_for_in_item")
+            llvm.build_store(p.builder, item_value, item_slot)
+            p = advance_sig(p)
+            body_terminated := false
+            for (; p.ok && p.lx.kind != tok.rbrace() && p.lx.kind != tok.eof(); ) {
+                p = parse_statement(p)
+                if !p.ok { return p }
+                if p.returned {
+                    body_terminated = true
+                    p.returned = false
+                    p = skip_to_block_end(p)
+                    if !p.ok { return p }
+                    break
+                }
+                if p.loop_break || p.loop_continue {
+                    body_terminated = true
+                    p = skip_to_block_end(p)
+                    if !p.ok { return p }
+                    break
+                }
+                if p.lx.kind == tok.semicolon() {
+                    p = advance_sig(p)
+                }
+            }
+            if !p.ok { return p }
+            if p.lx.kind != tok.rbrace() {
+                return fail_parser(p, "expected '}' after for-in body")
+            }
+            if !body_terminated {
+                llvm.build_br(p.builder, update_block)
+            }
+
+            llvm.position_builder_at_end(p.builder, update_block)
+            update_index := llvm.build_load2(p.builder, p.i32_type, index_slot, "tiny_for_in_update_index")
+            next_index := llvm.build_add(p.builder, update_index, one, "tiny_for_in_next_index")
+            llvm.build_store(p.builder, next_index, index_slot)
+            llvm.build_br(p.builder, check_block)
+
+            llvm.position_builder_at_end(p.builder, done_block)
+            p.current_break_block = outer_break_block
+            p.current_continue_block = outer_continue_block
+            p.loop_break = false
+            p.loop_continue = false
+            return advance_sig(p)
+        }
+    }
+
+    p = parse_expr_or_comparison(p)
+    if !p.ok { return p }
+    p = ensure_i32_value(p, "self codegen numeric for-in limit requires i32")
+    if !p.ok { return p }
+    limit_value := p.value
+    if p.lx.kind != tok.lbrace() {
+        return fail_parser(p, "expected '{' after for-in header")
+    }
+
+    index_slot := llvm.build_alloca(p.builder, p.i32_type, "tiny_for_in_index")
+    item_slot := llvm.build_alloca(p.builder, p.i32_type, item_name)
+    limit_slot := llvm.build_alloca(p.builder, p.i32_type, "tiny_for_in_limit")
+    zero := llvm.const_int(p.i32_type, 0, 1)
+    one := llvm.const_int(p.i32_type, 1, 1)
+    llvm.build_store(p.builder, zero, index_slot)
+    llvm.build_store(p.builder, limit_value, limit_slot)
+    p = set_slot(p, item_name, item_slot, tiny_i32_type_kind())
+    if !p.ok { return p }
+
+    check_block := llvm.append_basic_block_in_context(p.ctx, p.current_fn, "tiny_for_in_check")
+    body_block := llvm.append_basic_block_in_context(p.ctx, p.current_fn, "tiny_for_in_body")
+    update_block := llvm.append_basic_block_in_context(p.ctx, p.current_fn, "tiny_for_in_update")
+    done_block := llvm.append_basic_block_in_context(p.ctx, p.current_fn, "tiny_for_in_done")
+    outer_break_block := p.current_break_block
+    outer_continue_block := p.current_continue_block
+    p.current_break_block = done_block
+    p.current_continue_block = update_block
+    llvm.build_br(p.builder, check_block)
+
+    llvm.position_builder_at_end(p.builder, check_block)
+    loaded_index := llvm.build_load2(p.builder, p.i32_type, index_slot, "tiny_for_in_index_value")
+    loaded_limit := llvm.build_load2(p.builder, p.i32_type, limit_slot, "tiny_for_in_limit_value")
+    has_next := llvm.build_icmp(p.builder, llvm.int_slt(), loaded_index, loaded_limit, "tiny_for_in_has_next")
+    llvm.build_cond_br(p.builder, has_next, body_block, done_block)
+
+    llvm.position_builder_at_end(p.builder, body_block)
+    llvm.build_store(p.builder, loaded_index, item_slot)
+    p = advance_sig(p)
+    body_terminated := false
+    for (; p.ok && p.lx.kind != tok.rbrace() && p.lx.kind != tok.eof(); ) {
+        p = parse_statement(p)
+        if !p.ok { return p }
+        if p.returned {
+            body_terminated = true
+            p.returned = false
+            p = skip_to_block_end(p)
+            if !p.ok { return p }
+            break
+        }
+        if p.loop_break || p.loop_continue {
+            body_terminated = true
+            p = skip_to_block_end(p)
+            if !p.ok { return p }
+            break
+        }
+        if p.lx.kind == tok.semicolon() {
+            p = advance_sig(p)
+        }
+    }
+    if !p.ok { return p }
+    if p.lx.kind != tok.rbrace() {
+        return fail_parser(p, "expected '}' after for-in body")
+    }
+    if !body_terminated {
+        llvm.build_br(p.builder, update_block)
+    }
+
+    llvm.position_builder_at_end(p.builder, update_block)
+    update_index := llvm.build_load2(p.builder, p.i32_type, index_slot, "tiny_for_in_update_index")
+    next_index := llvm.build_add(p.builder, update_index, one, "tiny_for_in_next_index")
+    llvm.build_store(p.builder, next_index, index_slot)
+    llvm.build_br(p.builder, check_block)
+
+    llvm.position_builder_at_end(p.builder, done_block)
+    p.current_break_block = outer_break_block
+    p.current_continue_block = outer_continue_block
+    p.loop_break = false
+    p.loop_continue = false
+    return advance_sig(p)
+}
+
 fn parse_for_statement(p TinyIrParser) TinyIrParser {
     p = advance_sig(p)
+    if p.lx.kind == tok.ident() {
+        item_name := p.lx.lexeme
+        probe := p
+        probe = advance_sig(probe)
+        if !probe.ok { return probe }
+        if probe.lx.kind == tok.kw_in() {
+            return parse_for_in_statement(probe, item_name)
+        }
+    }
     if p.lx.kind != tok.lparen() {
         return unsupported_parser(p, "self codegen currently supports C-style for loops only")
     }
@@ -1487,6 +2120,10 @@ fn parse_for_statement(p TinyIrParser) TinyIrParser {
     body_block := llvm.append_basic_block_in_context(p.ctx, p.current_fn, "tiny_for_body")
     update_block := llvm.append_basic_block_in_context(p.ctx, p.current_fn, "tiny_for_update")
     done_block := llvm.append_basic_block_in_context(p.ctx, p.current_fn, "tiny_for_done")
+    outer_break_block := p.current_break_block
+    outer_continue_block := p.current_continue_block
+    p.current_break_block = done_block
+    p.current_continue_block = update_block
     llvm.build_br(p.builder, check_block)
 
     llvm.position_builder_at_end(p.builder, check_block)
@@ -1516,11 +2153,22 @@ fn parse_for_statement(p TinyIrParser) TinyIrParser {
     }
     llvm.position_builder_at_end(p.builder, body_block)
     p = advance_sig(p)
+    body_terminated := false
     for (; p.ok && p.lx.kind != tok.rbrace() && p.lx.kind != tok.eof(); ) {
         p = parse_statement(p)
         if !p.ok { return p }
         if p.returned {
-            return unsupported_parser(p, "self codegen does not support return inside for yet")
+            body_terminated = true
+            p.returned = false
+            p = skip_to_block_end(p)
+            if !p.ok { return p }
+            break
+        }
+        if p.loop_break || p.loop_continue {
+            body_terminated = true
+            p = skip_to_block_end(p)
+            if !p.ok { return p }
+            break
         }
         if p.lx.kind == tok.semicolon() {
             p = advance_sig(p)
@@ -1530,12 +2178,36 @@ fn parse_for_statement(p TinyIrParser) TinyIrParser {
     if p.lx.kind != tok.rbrace() {
         return fail_parser(p, "expected '}' after for-loop body")
     }
-    llvm.build_br(p.builder, update_block)
+    if !body_terminated {
+        llvm.build_br(p.builder, update_block)
+    }
     llvm.position_builder_at_end(p.builder, done_block)
+    p.current_break_block = outer_break_block
+    p.current_continue_block = outer_continue_block
+    p.loop_break = false
+    p.loop_continue = false
     return advance_sig(p)
 }
 
 fn parse_statement(p TinyIrParser) TinyIrParser {
+    if p.lx.kind == tok.kw_break() {
+        if p.current_break_block == none {
+            return unsupported_parser(p, "break is only supported inside a self-codegen loop")
+        }
+        llvm.build_br(p.builder, p.current_break_block)
+        p.loop_break = true
+        return advance_sig(p)
+    }
+
+    if p.lx.kind == tok.kw_continue() {
+        if p.current_continue_block == none {
+            return unsupported_parser(p, "continue is only supported inside a self-codegen loop")
+        }
+        llvm.build_br(p.builder, p.current_continue_block)
+        p.loop_continue = true
+        return advance_sig(p)
+    }
+
     if p.lx.kind == tok.kw_return() {
         p = advance_sig(p)
         if p.current_return_type == tiny_void_type_kind() {
@@ -1683,6 +2355,11 @@ fn parse_function(p TinyIrParser) TinyIrParser {
     for (; p.ok && p.lx.kind != tok.rbrace() && p.lx.kind != tok.eof(); ) {
         p = parse_statement(p)
         if !p.ok { return p }
+        if p.returned || p.loop_break || p.loop_continue {
+            p = skip_to_block_end(p)
+            if !p.ok { return p }
+            break
+        }
         if p.lx.kind == tok.semicolon() {
             p = advance_sig(p)
         }
@@ -1713,6 +2390,8 @@ fn parse_program(p TinyIrParser) TinyIrParser {
     for (; p.ok && p.lx.kind != tok.eof(); ) {
         if p.lx.kind == tok.kw_extern() {
             p = skip_extern_decl(p)
+        } else if p.lx.kind == tok.kw_struct() {
+            p = scan_struct_decl(p)
         } else {
             p = parse_function(p)
         }
@@ -1735,6 +2414,8 @@ pub fn emit_file(path string, source string, out_dir string) TinyIrResult {
     i64_type := llvm.int64_type_in_context(ctx)
     ptr_type := llvm.pointer_type(i8_type, 0)
     i32_type := llvm.int32_type_in_context(ctx)
+    struct2_type := llvm.struct_type2(ctx, i32_type, i32_type, 0)
+    struct3_type := llvm.struct_type3(ctx, i32_type, i32_type, i32_type, 0)
     fn_type := llvm.function_type(i32_type, none, 0, 0)
     fn_type1 := llvm.function_type1(i32_type, i32_type, 0)
     fn_type2 := llvm.function_type2(i32_type, i32_type, i32_type, 0)
@@ -1744,8 +2425,10 @@ pub fn emit_file(path string, source string, out_dir string) TinyIrResult {
     string_fn_type := llvm.function_type(string_type, none, 0, 0)
     string_fn_type1 := llvm.function_type1(string_type, i32_type, 0)
     string_fn_type2 := llvm.function_type2(string_type, i32_type, i32_type, 0)
+    abort_fn_type := llvm.function_type(void_type, none, 0, 0)
+    abort_fn := llvm.add_function(mod, "abort", abort_fn_type)
 
-    p := TinyIrParser{lx: lexer.new(path, source), ok: true, supported: true, message: "", line: 1, col: 1, ctx: ctx, mod: mod, builder: builder, void_type: void_type, bool_type: bool_type, string_type: string_type, i64_type: i64_type, ptr_type: ptr_type, i32_type: i32_type, fn_type: fn_type, fn_type1: fn_type1, fn_type2: fn_type2, bool_fn_type: bool_fn_type, bool_fn_type1: bool_fn_type1, bool_fn_type2: bool_fn_type2, string_fn_type: string_fn_type, string_fn_type1: string_fn_type1, string_fn_type2: string_fn_type2, current_fn: none, current_return_type: 0, main_fn: none, helper_fn: none, helper_fn_type: fn_type, helper_return_type: tiny_i32_type_kind(), helper_name: "", helper_param_name: "", helper_param_count: 0, helper_count: 0, helper0_name: "", helper1_name: "", helper2_name: "", helper3_name: "", helper4_name: "", helper5_name: "", helper6_name: "", helper7_name: "", helper0_fn: none, helper1_fn: none, helper2_fn: none, helper3_fn: none, helper4_fn: none, helper5_fn: none, helper6_fn: none, helper7_fn: none, helper0_type: none, helper1_type: none, helper2_type: none, helper3_type: none, helper4_type: none, helper5_type: none, helper6_type: none, helper7_type: none, helper0_params: 0, helper1_params: 0, helper2_params: 0, helper3_params: 0, helper4_params: 0, helper5_params: 0, helper6_params: 0, helper7_params: 0, helper_signature: 0, helper0_signature: 0, helper1_signature: 0, helper2_signature: 0, helper3_signature: 0, helper4_signature: 0, helper5_signature: 0, helper6_signature: 0, helper7_signature: 0, helper0_return_type: 0, helper1_return_type: 0, helper2_return_type: 0, helper3_return_type: 0, helper4_return_type: 0, helper5_return_type: 0, helper6_return_type: 0, helper7_return_type: 0, value: none, value_type: 0, vars: 0, name0: "", name1: "", name2: "", name3: "", name4: "", name5: "", name6: "", name7: "", slot0: none, slot1: none, slot2: none, slot3: none, slot4: none, slot5: none, slot6: none, slot7: none, type0: 0, type1: 0, type2: 0, type3: 0, type4: 0, type5: 0, type6: 0, type7: 0, saw_main: false, returned: false}
+    p := TinyIrParser{lx: lexer.new(path, source), ok: true, supported: true, message: "", line: 1, col: 1, ctx: ctx, mod: mod, builder: builder, void_type: void_type, bool_type: bool_type, string_type: string_type, struct2_type: struct2_type, struct3_type: struct3_type, i64_type: i64_type, ptr_type: ptr_type, i32_type: i32_type, fn_type: fn_type, fn_type1: fn_type1, fn_type2: fn_type2, bool_fn_type: bool_fn_type, bool_fn_type1: bool_fn_type1, bool_fn_type2: bool_fn_type2, string_fn_type: string_fn_type, string_fn_type1: string_fn_type1, string_fn_type2: string_fn_type2, abort_fn_type: abort_fn_type, abort_fn: abort_fn, current_break_block: none, current_continue_block: none, current_fn: none, current_return_type: 0, main_fn: none, helper_fn: none, helper_fn_type: fn_type, helper_return_type: tiny_i32_type_kind(), helper_name: "", helper_param_name: "", helper_param_count: 0, helper_count: 0, helper0_name: "", helper1_name: "", helper2_name: "", helper3_name: "", helper4_name: "", helper5_name: "", helper6_name: "", helper7_name: "", helper0_fn: none, helper1_fn: none, helper2_fn: none, helper3_fn: none, helper4_fn: none, helper5_fn: none, helper6_fn: none, helper7_fn: none, helper0_type: none, helper1_type: none, helper2_type: none, helper3_type: none, helper4_type: none, helper5_type: none, helper6_type: none, helper7_type: none, helper0_params: 0, helper1_params: 0, helper2_params: 0, helper3_params: 0, helper4_params: 0, helper5_params: 0, helper6_params: 0, helper7_params: 0, helper_signature: 0, helper0_signature: 0, helper1_signature: 0, helper2_signature: 0, helper3_signature: 0, helper4_signature: 0, helper5_signature: 0, helper6_signature: 0, helper7_signature: 0, helper0_return_type: 0, helper1_return_type: 0, helper2_return_type: 0, helper3_return_type: 0, helper4_return_type: 0, helper5_return_type: 0, helper6_return_type: 0, helper7_return_type: 0, value: none, value_type: 0, vars: 0, name0: "", name1: "", name2: "", name3: "", name4: "", name5: "", name6: "", name7: "", slot0: none, slot1: none, slot2: none, slot3: none, slot4: none, slot5: none, slot6: none, slot7: none, type0: 0, type1: 0, type2: 0, type3: 0, type4: 0, type5: 0, type6: 0, type7: 0, saw_main: false, returned: false, loop_break: false, loop_continue: false, saw_struct: false, struct_name: "", struct_fields: 0, struct_field0: "", struct_field1: "", struct_field2: ""}
     p = scan_program_decls(p)
     if !p.ok {
         llvm.dispose_builder(builder)
@@ -1764,6 +2447,10 @@ pub fn emit_file(path string, source string, out_dir string) TinyIrResult {
     p.col = 1
     p.saw_main = false
     p.returned = false
+    p.current_break_block = none
+    p.current_continue_block = none
+    p.loop_break = false
+    p.loop_continue = false
     p.current_return_type = 0
     p = parse_program(p)
     if !p.ok {

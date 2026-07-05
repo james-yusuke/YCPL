@@ -88,7 +88,10 @@ fn lookup_name_type(table NameTypeTable, name string) i32 {
 }
 
 fn type_kind_from_name(name string) i32 {
-    if str.eq(name, "i32") || str.eq(name, "i64") || str.eq(name, "byte") {
+    if str.eq(name, "i64") {
+        return expr.i64_type_kind()
+    }
+    if str.eq(name, "i32") || str.eq(name, "byte") {
         return expr.i32_type_kind()
     }
     if str.eq(name, "bool") {
@@ -100,12 +103,15 @@ fn type_kind_from_name(name string) i32 {
     if str.eq(name, "none") || str.eq(name, "void") {
         return expr.none_type_kind()
     }
-    return expr.unknown_type_kind()
+    return expr.struct_type_kind()
 }
 
 fn type_kind_from_token(kind i32, text string, pointer_pending bool) i32 {
     if pointer_pending {
         return expr.pointer_type_kind()
+    }
+    if kind == tok.lbrack() {
+        return expr.slice_type_kind()
     }
     if kind == tok.kw_byte() {
         return expr.i32_type_kind()

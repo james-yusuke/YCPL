@@ -123,7 +123,7 @@ stage-2 self-host gate
 ├─ statement-owned expression は local/assignment/call/return/control lowering の前に statement ごとの AST value へ畳み込まれ、summary-only body lowering path をさらに減らしている
 ├─ statement ごとの AST value は aggregate state 更新だけでなく、direct local/assignment/call/return LLVM alloca/store/load/call path に流れる
 ├─ statement ごとの AST value は parser/resolver 由来の expression type tag と結合され、resolved local/assignment/call/return state lowering に流れる
-├─ statement-owned expression の typed value は i32/bool/string/pointer/none/unknown の型カテゴリ別 state にも流れ、function-body environment に合成される
+├─ statement-owned expression の typed value は i32/i64/bool/string/pointer/slice/reference/none/unknown の型カテゴリ別 state にも流れ、function-body environment に合成される
 ├─ statement/expression の role/type flow lowering は `codegen/bodyflow.yc` module に分離し、`projectir.yc` は module 経由で呼び出す
 ├─ identifier/literal/call/member/index/binary/unary expression lowering は `codegen/exprlower.yc` module に分離し、index expression は LLVM slice-header len/cap、bounds-check branch、array-type GEP/load IR を生成し、member expression は parse した member-name hash と project field-table index から bounded LLVM struct GEP/load IR を生成する
 ├─ local/assignment/call/return/if/for/else/break/continue/for-in body statement lowering は `codegen/stmtlower.yc` module に分離し、`projectir.yc` は per-function orchestration に集中する
@@ -156,12 +156,25 @@ stage-2 self-host gate
 ├─ 生成された stage2/stage3 binary は fallback 位置で `dyn_seed()` helper の `return <整数>` を読み、固定 fixture なしで zero-arg helper call IR を生成する
 ├─ 生成された stage2/stage3 binary は fallback 位置で `probe := <整数>; if probe == 0 { return <整数> }; return <整数>` を読み、固定 fixture なしで conditional branch IR を生成する
 ├─ 生成された stage2/stage3 binary は fallback 位置で `sum := <整数>; for (i := 0; i < <整数>; i = i + 1) { sum = sum + <整数> }; return sum` を読み、固定 fixture なしで loop check/body/update/done IR を生成する
+├─ checker/tinyir は固定長 3 要素の i32 array literal、index load、element assignment、`for value in items`、`for i in n`、loop 内および `if` 内の `break` / `continue` を型検査し、LLVM array alloca/GEP/store/load/loop IR に lower する。動的 index は `icmp sge`/`icmp slt` bounds check を通し、OOB path は `abort` + `unreachable` に落とす
+├─ checker/tinyir は numeric for-in と C-style for の body 内 `return` を実 control-flow として扱い、return path は LLVM `ret` で終端し、loop 後の通常 path は後続 statement へ流す
+├─ checker/tinyir は 2/3-field i32 struct declaration、struct literal local、member load/member assignment、2/3-field struct helper parameter call、2/3-field struct helper return を扱い、LLVM struct alloca と `LLVMBuildStructGEP2`/load/store/call/ret IR に lower する
+├─ 生成された stage2/stage3 binary は array/index self-codegen fixture を array alloca/GEP/load/store IR に lower する
+├─ 生成された stage4/stage5 IR は compiler project の body-node count と statement-expression link から resolved local/assignment/call/return lowering probe を実行する
+├─ project body lowering は compact gate のまま、実際の `scan.node_*` / `scan.expr_*` 先頭ノードを bounded に `stmtlower` / `exprlower` / `bodyflow` へ流し、resolved statement value/type と local/assignment/call/return state に接続する
+├─ project_body.ll は bounded 実 AST lowering state を function_body_lowered_total に合成し、summary-only total から一段外れている
+├─ project_body.ll は実 statement-expression lowering 上限も名前付き IR marker として gate し、次段の拡張点を明示している
 ├─ tiny single-file codegen は if/else body 内の return を終端済み block として扱い、余分な branch を出さずに後続 block へ進める
 ├─ function body lowering は statement/expression owner を 1 個固定ではなく、各関数の body node sequence から上限付きで複数 lower し、owner count/limit を IR gate として検証
 ├─ function body lowering は BodyNodeSequence の kind/meta/source-position/payload/semantic-role/expression-count を generated function body の AST node sequence state に lower
 ├─ function body lowering は AST node sequence を local/assignment/call/return/control の semantic sequence state に分岐して lower
 ├─ function body lowering は expression table の identifier/literal/string/bool/none/member/index category を scan に取り込み、literal type/access/call surface を IR value flow に lower
 ├─ 生成された stage2/stage3 binary は未対応 file build-ir input を project compiler IR として成功扱いしない
+├─ YCPL_NO_BOOTSTRAP=1 の通常 ycc-ycpl build/build-ir path は bootstrap fallback を禁止し、未対応 input を明示診断で失敗させる
+├─ project_body.ll は固定 expression probe を使わず、statement-owned expression と remaining tail expression を実 scan.expr_* sequence から lower する
+├─ project_body.ll の実 AST lowering cap は body node 16、expression 32、statement expression 16、statement owner 16 まで広げ、IR gate で値を固定している
+├─ project_body.ll は実 lowering 済み node/expression count と未 lowering node/expression count を名前付き IR marker として出し、summary/smoke の取り残しを CI で検出できる
+├─ traversal project gate は i64 と []T/slice parameter を typed AST flow に載せ、i64/reference statement-expression marker を生成 IR で検証する
 └─ compiler として等価な native ycc-ycpl は次の実装ステップ
 ```
 
