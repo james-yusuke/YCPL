@@ -173,7 +173,7 @@ stage-2 self-host gate
 ├─ generated stage2/stage3 binaries reject unsupported file build-ir inputs instead of returning project compiler IR
 ├─ regular ycc-ycpl build/build-ir paths now forbid bootstrap fallback under YCPL_NO_BOOTSTRAP=1 and fail unsupported inputs with an explicit diagnostic
 ├─ project_body.ll no longer relies on fixed expression probes in the compact path; it lowers statement-owned expressions and remaining tail expressions from the real scan.expr_* sequence
-├─ project_body.ll now raises the real AST lowering caps to 16 body nodes, 32 expressions, 16 statement expressions, and 16 statement owners, with IR gates pinning those values
+├─ project_body.ll now raises the real AST lowering caps to 32 body nodes, 64 expressions, 32 statement expressions, and 32 statement owners, with IR gates pinning those values
 ├─ project_body.ll now emits named IR markers for lowered and still-unlowered real node/expression counts, so CI can detect remaining summary/smoke coverage
 ├─ traversal project gates now carry i64 and []T/slice parameters through typed AST flow and verify i64/reference statement-expression markers in generated IR
 └─ compiler-equivalent native ycc-ycpl is still the next implementation step

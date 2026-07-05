@@ -62,7 +62,7 @@ jobs:
             echo "LLVM_DIR=$LLVM_DIR"
             echo "LLC=$LLVM_BINDIR/llc"
             echo "CLANG=$LLVM_BINDIR/clang"
-            echo "LINKFLAGS=--no-pie -fuse-ld=lld"
+            echo "LINKFLAGS=-no-pie -fuse-ld=lld"
           } >> "$GITHUB_ENV"
           echo "$LLVM_BINDIR" >> "$GITHUB_PATH"
 
