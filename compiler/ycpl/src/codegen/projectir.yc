@@ -1486,7 +1486,7 @@ fn emit_compact_function_body_lowering(ctx *byte, mod *byte, builder *byte, i32_
         bodyflow.begin_statement_value(builder, i32_type, real_statement_value_slot, node_kind, node_meta, node_pos, node_payload, node_role, node_exprs)
         bodyflow.begin_statement_resolved_type(builder, i32_type, real_statement_type_slot)
         per_statement_expr := 0
-        for (; per_statement_expr < node_exprs && actual_expr_cursor < scan.expr_len && per_statement_expr < max_real_statement_expr_lowering_nodes(); per_statement_expr++) {
+        for (; per_statement_expr < node_exprs && actual_expr_cursor < scan.expr_len && actual_expr_cursor < max_real_expr_lowering_nodes() && per_statement_expr < max_real_statement_expr_lowering_nodes(); per_statement_expr++) {
             exprlower.lower_expr_node(ctx, body_fn, builder, i32_type, fn_type, call_helper, score_slot, expr_value_state_slot, expr_type_state_slot, scan.expr_kind_data[actual_expr_cursor], scan.expr_meta_data[actual_expr_cursor], scan.expr_pos_data[actual_expr_cursor], scan.expr_op_data[actual_expr_cursor], scan.expr_type_data[actual_expr_cursor])
             real_expr_value := llvm.build_load2(builder, i32_type, expr_value_state_slot, "function_body_real_statement_expr_value")
             real_expr_type := llvm.build_load2(builder, i32_type, expr_type_state_slot, "function_body_real_statement_expr_type")
