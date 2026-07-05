@@ -34,3 +34,33 @@ test("workspace index resolves local definitions and references", () => {
   assert.ok(index.findReferences("value", true).length >= 1);
   assert.equal(index.symbolAt(document.uri, Position.create(0, 3))?.name, "main");
 });
+
+test("function parameters are not indexed as duplicate variables", () => {
+  const document = parser.parse("file:///params.yc", 1, [
+    "fn echo(message string) void {",
+    "    fmt.println(message)",
+    "}"
+  ].join("\n"));
+
+  assert.equal(document.diagnostics.some((diagnostic) => diagnostic.message.includes("Duplicate variable 'message'")), false);
+  assert.equal(document.symbols.filter((symbol) => symbol.name === "message" && symbol.category === "parameter").length, 1);
+  assert.equal(document.symbols.some((symbol) => symbol.name === "message" && symbol.category === "variable"), false);
+});
+
+test("struct fields are indexed as fields, not variables", () => {
+  const document = parser.parse("file:///diagnostic.yc", 1, [
+    "pub struct Diagnostic {",
+    "    ok bool",
+    "    message string",
+    "}",
+    "",
+    "pub fn ok(path string) Diagnostic {",
+    "    return Diagnostic{ok: true, message: \"\"}",
+    "}"
+  ].join("\n"));
+
+  assert.equal(document.symbols.some((symbol) => symbol.name === "ok" && symbol.category === "field" && symbol.containerName === "Diagnostic"), true);
+  assert.equal(document.symbols.some((symbol) => symbol.name === "ok" && symbol.category === "function"), true);
+  assert.equal(document.symbols.some((symbol) => symbol.name === "ok" && symbol.category === "variable"), false);
+  assert.equal(document.diagnostics.some((diagnostic) => diagnostic.message.includes("Duplicate variable 'ok'")), false);
+});

@@ -70,9 +70,23 @@ export class WorkspaceIndex {
       .sort((left, right) => rangeSize(left.selectionRange) - rangeSize(right.selectionRange))[0];
   }
 
+  /** Finds a declaration whose selected identifier contains the position. */
+  declarationAt(uri: string, position: Position): YcplSymbol | undefined {
+    const document = this.documents.get(uri);
+    if (!document) {
+      return undefined;
+    }
+    return document.symbols.find((symbol) => rangeContains(symbol.selectionRange, position));
+  }
+
   /** Finds a definition by name, preferring the current document. */
   findDefinition(name: string, currentUri?: string): DefinitionResult | undefined {
-    const symbols = this.symbolsByName.get(name) ?? [];
+    return this.findDefinitionWhere(name, currentUri, () => true);
+  }
+
+  /** Finds a definition by name and predicate, preferring the current document. */
+  findDefinitionWhere(name: string, currentUri: string | undefined, predicate: (symbol: YcplSymbol) => boolean): DefinitionResult | undefined {
+    const symbols = (this.symbolsByName.get(name) ?? []).filter(predicate);
     const symbol = symbols.find((entry) => entry.uri === currentUri) ?? symbols[0];
     if (!symbol) {
       return undefined;

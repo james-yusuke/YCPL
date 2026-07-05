@@ -126,6 +126,7 @@ struct ProjectExprTypeTable {
     col i32
     name_data string
     type_data string
+    arity_data string
     len i32
     cap i32
     typed_returns i32
@@ -293,11 +294,11 @@ fn max_real_statement_expr_lowering_nodes() i32 {
 }
 
 fn project_expr_type_table_ok() ProjectExprTypeTable {
-    return ProjectExprTypeTable{ok: true, message: "", line: 1, col: 1, name_data: none, type_data: none, len: 0, cap: 0, typed_returns: 0, field_name_data: none, field_index_data: none, field_len: 0, field_cap: 0, field_count: 0, field_digest: 17}
+    return ProjectExprTypeTable{ok: true, message: "", line: 1, col: 1, name_data: none, type_data: none, arity_data: none, len: 0, cap: 0, typed_returns: 0, field_name_data: none, field_index_data: none, field_len: 0, field_cap: 0, field_count: 0, field_digest: 17}
 }
 
 fn project_expr_type_table_fail(line i32, col i32, message string) ProjectExprTypeTable {
-    return ProjectExprTypeTable{ok: false, message: message, line: line, col: col, name_data: none, type_data: none, len: 0, cap: 0, typed_returns: 0, field_name_data: none, field_index_data: none, field_len: 0, field_cap: 0, field_count: 0, field_digest: 17}
+    return ProjectExprTypeTable{ok: false, message: message, line: line, col: col, name_data: none, type_data: none, arity_data: none, len: 0, cap: 0, typed_returns: 0, field_name_data: none, field_index_data: none, field_len: 0, field_cap: 0, field_count: 0, field_digest: 17}
 }
 
 fn expr_type_hash(name string) i32 {
@@ -348,6 +349,16 @@ fn expr_type_kind_from_token(kind i32, text string, pointer_pending bool) i32 {
     return astexpr.unknown_type_kind()
 }
 
+fn bounded_project_arity(value i32) i32 {
+    if value < 0 {
+        return 0
+    }
+    if value > 250 {
+        return 250
+    }
+    return value
+}
+
 fn ensure_project_expr_type_table(table ProjectExprTypeTable, needed i32) ProjectExprTypeTable {
     if table.cap >= needed {
         return table
@@ -362,32 +373,38 @@ fn ensure_project_expr_type_table(table ProjectExprTypeTable, needed i32) Projec
     if table.name_data == none {
         table.name_data = mem.calloc(next_cap + 1, 1)
         table.type_data = mem.calloc(next_cap + 1, 1)
+        table.arity_data = mem.calloc(next_cap + 1, 1)
     } else {
         table.name_data = mem.realloc(table.name_data, next_cap + 1)
         table.type_data = mem.realloc(table.type_data, next_cap + 1)
+        table.arity_data = mem.realloc(table.arity_data, next_cap + 1)
     }
     table.cap = next_cap
     return table
 }
 
-fn add_project_expr_type(table ProjectExprTypeTable, name string, type_kind i32) ProjectExprTypeTable {
+fn add_project_expr_type(table ProjectExprTypeTable, name string, type_kind i32, arity i32) ProjectExprTypeTable {
     if !table.ok || type_kind <= 0 {
         return table
     }
     name_hash := expr_type_hash(name)
+    bounded_arity := bounded_project_arity(arity)
     i := 0
     for (; i < table.len; i++) {
         if table.name_data[i] == name_hash {
             table.type_data[i] = type_kind
+            table.arity_data[i] = bounded_arity
             return table
         }
     }
     table = ensure_project_expr_type_table(table, table.len + 1)
     table.name_data[table.len] = name_hash
     table.type_data[table.len] = type_kind
+    table.arity_data[table.len] = bounded_arity
     table.len += 1
     table.name_data[table.len] = 0
     table.type_data[table.len] = 0
+    table.arity_data[table.len] = 0
     table.typed_returns += 1
     return table
 }
@@ -403,6 +420,19 @@ fn lookup_project_expr_type(table ProjectExprTypeTable, name_hash i32) i32 {
         }
     }
     return astexpr.unknown_type_kind()
+}
+
+fn lookup_project_expr_arity(table ProjectExprTypeTable, name_hash i32) i32 {
+    if !table.ok || name_hash <= 0 {
+        return -1
+    }
+    i := 0
+    for (; i < table.len; i++) {
+        if table.name_data[i] == name_hash {
+            return table.arity_data[i]
+        }
+    }
+    return -1
 }
 
 fn ensure_project_field_table(table ProjectExprTypeTable, needed i32) ProjectExprTypeTable {
@@ -481,9 +511,12 @@ fn scan_project_expr_types_in_source(table ProjectExprTypeTable, path string, te
     await_function_lparen := false
     in_function_params := false
     function_param_depth := 0
+    function_param_commas := 0
+    function_param_tokens := 0
     await_return_type := false
     pointer_return_type := false
     function_name := ""
+    function_params := 0
     function_return_type := astexpr.unknown_type_kind()
 
     for (; true; ) {
@@ -504,13 +537,30 @@ fn scan_project_expr_types_in_source(table ProjectExprTypeTable, path string, te
         if in_function_params {
             if lx.kind == tok.lparen() {
                 function_param_depth += 1
+                if function_param_depth > 1 {
+                    function_param_tokens += 1
+                }
             } else if lx.kind == tok.rparen() {
                 function_param_depth -= 1
                 if function_param_depth == 0 {
+                    function_params = 0
+                    if function_param_tokens > 0 {
+                        function_params = function_param_commas + 1
+                    }
                     in_function_params = false
+                    function_param_commas = 0
+                    function_param_tokens = 0
                     await_return_type = true
                     pointer_return_type = false
                     function_return_type = astexpr.unknown_type_kind()
+                } else {
+                    function_param_tokens += 1
+                }
+            } else {
+                if function_param_depth == 1 && lx.kind == tok.comma() {
+                    function_param_commas += 1
+                } else if lx.kind != tok.newline() {
+                    function_param_tokens += 1
                 }
             }
         } else if await_return_type {
@@ -522,10 +572,11 @@ fn scan_project_expr_types_in_source(table ProjectExprTypeTable, path string, te
                     function_return_type = detected
                 }
                 if lx.kind == tok.lbrace() || lx.kind == tok.newline() || lx.kind == tok.kw_as() {
-                    table = add_project_expr_type(table, function_name, function_return_type)
+                    table = add_project_expr_type(table, function_name, function_return_type, function_params)
                     await_return_type = false
                     pointer_return_type = false
                     function_name = ""
+                    function_params = 0
                     function_return_type = astexpr.unknown_type_kind()
                 }
             }
@@ -537,12 +588,14 @@ fn scan_project_expr_types_in_source(table ProjectExprTypeTable, path string, te
         if await_function_lparen && lx.kind == tok.lparen() {
             in_function_params = true
             function_param_depth = 1
+            function_param_commas = 0
+            function_param_tokens = 0
             await_function_lparen = false
         }
     }
 
     if await_return_type {
-        table = add_project_expr_type(table, function_name, function_return_type)
+        table = add_project_expr_type(table, function_name, function_return_type, function_params)
     }
     return table
 }
@@ -580,6 +633,11 @@ fn apply_project_expr_types(table ExpressionTable, project_types ProjectExprType
     i := 0
     for (; i < table.node_len; i++) {
         if table.kind_data[i] == astexpr.call_expr_kind() {
+            resolved_arity := lookup_project_expr_arity(project_types, table.meta_data[i])
+            if resolved_arity >= 0 {
+                table.op_data[i] = resolved_arity + 1
+                table.digest = table.digest * 31 + table.op_data[i]
+            }
             if table.type_data[i] <= astexpr.unknown_type_kind() {
                 resolved := lookup_project_expr_type(project_types, table.meta_data[i])
                 if resolved > 0 {

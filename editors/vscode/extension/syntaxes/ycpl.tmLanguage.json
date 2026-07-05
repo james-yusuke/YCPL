@@ -72,7 +72,7 @@
               "name": "storage.modifier.ycpl"
             },
             "2": {
-              "name": "keyword.declaration.function.ycpl"
+              "name": "keyword.declaration.ycpl"
             },
             "3": {
               "name": "entity.name.function.ycpl"
@@ -87,7 +87,7 @@
               "name": "storage.modifier.ycpl"
             },
             "2": {
-              "name": "keyword.declaration.type.ycpl"
+              "name": "keyword.declaration.ycpl"
             },
             "3": {
               "name": "entity.name.type.ycpl"
@@ -133,8 +133,12 @@
     "types": {
       "patterns": [
         {
-          "name": "storage.type.primitive.ycpl",
+          "name": "entity.name.type.ycpl",
           "match": "\\b(i32|i64|bool|char|byte|string|float|double|void|size_t|Type|T|any)\\b"
+        },
+        {
+          "name": "entity.name.type.ycpl",
+          "match": "\\b[A-Z][A-Za-z0-9_]*\\b"
         }
       ]
     },
