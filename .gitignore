@@ -97,7 +97,9 @@ wheelhouse/
 # Editors & IDEs
 # ------------------------
 # VS Code
-.vscode/
+.vscode/*
+!.vscode/launch.json
+!.vscode/tasks.json
 .history/
 # JetBrains
 .idea/

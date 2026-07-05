@@ -1,0 +1,6 @@
+fn main() i32 {
+    items := [4, 2, 7]
+    total := items[0] + items[1]
+    total = total + items[2]
+    return total
+}

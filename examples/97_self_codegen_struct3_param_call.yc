@@ -1,0 +1,14 @@
+struct Triple {
+    left i32
+    middle i32
+    right i32
+}
+
+fn sum(triple Triple) i32 {
+    return triple.left + triple.middle + triple.right
+}
+
+fn main() i32 {
+    triple := Triple{left: 4, middle: 2, right: 7}
+    return sum(triple)
+}

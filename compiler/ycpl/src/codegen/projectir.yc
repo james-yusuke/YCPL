@@ -7,6 +7,7 @@ import "parser/expr" as exprparser
 import "parser/fields" as fieldparser
 import "codegen/bodyflow" as bodyflow
 import "codegen/exprlower" as exprlower
+import "codegen/lowerstats" as lowerstats
 import "codegen/stmtlower" as stmtlower
 import "resolver/resolver" as resolver
 import "lexer/lexer" as lexer
@@ -276,7 +277,19 @@ fn max_regular_expr_lowering_nodes() i32 {
 }
 
 fn max_statement_expr_owner_lowering_nodes() i32 {
-    return 4
+    return lowerstats.statement_expr_owner_limit()
+}
+
+fn max_real_body_lowering_nodes() i32 {
+    return lowerstats.real_body_node_limit()
+}
+
+fn max_real_expr_lowering_nodes() i32 {
+    return lowerstats.real_expr_limit()
+}
+
+fn max_real_statement_expr_lowering_nodes() i32 {
+    return lowerstats.real_statement_expr_limit()
 }
 
 fn project_expr_type_table_ok() ProjectExprTypeTable {
@@ -301,7 +314,10 @@ fn expr_type_hash(name string) i32 {
 }
 
 fn expr_type_kind_from_name(name string) i32 {
-    if str.eq(name, "i32") || str.eq(name, "i64") || str.eq(name, "byte") {
+    if str.eq(name, "i64") {
+        return astexpr.i64_type_kind()
+    }
+    if str.eq(name, "i32") || str.eq(name, "byte") {
         return astexpr.i32_type_kind()
     }
     if str.eq(name, "bool") {
@@ -313,12 +329,15 @@ fn expr_type_kind_from_name(name string) i32 {
     if str.eq(name, "none") || str.eq(name, "void") {
         return astexpr.none_type_kind()
     }
-    return astexpr.unknown_type_kind()
+    return astexpr.struct_type_kind()
 }
 
 fn expr_type_kind_from_token(kind i32, text string, pointer_pending bool) i32 {
     if pointer_pending {
         return astexpr.pointer_type_kind()
+    }
+    if kind == tok.lbrack() {
+        return astexpr.slice_type_kind()
     }
     if kind == tok.kw_byte() {
         return astexpr.i32_type_kind()
@@ -1361,7 +1380,335 @@ fn scan_const_functions_from_sources(sources SourceList) ConstFunctionScan {
     return ConstFunctionScan{ok: true, message: "", line: 1, col: 1, count: total_count, sum: total_sum, first_value: first_value, has_first: has_first}
 }
 
+fn build_named_i32_slot(builder *byte, i32_type *byte, name string, value i32) *byte {
+    slot := llvm.build_alloca(builder, i32_type, name)
+    constant := llvm.const_int(i32_type, value, 1)
+    llvm.build_store(builder, constant, slot)
+    return slot
+}
+
+fn build_loaded_i32_slot(builder *byte, i32_type *byte, name string, value i32, loaded_name string) *byte {
+    slot := build_named_i32_slot(builder, i32_type, name, value)
+    return llvm.build_load2(builder, i32_type, slot, loaded_name)
+}
+
+fn emit_compact_function_body_lowering(ctx *byte, mod *byte, builder *byte, i32_type *byte, fn_type *byte, call_helper *byte, name string, scan FunctionBodyScan) *byte {
+    body_fn := llvm.add_function(mod, name, fn_type)
+    entry := llvm.append_basic_block_in_context(ctx, body_fn, "entry")
+    if_then := llvm.append_basic_block_in_context(ctx, body_fn, "function_if_then")
+    if_else := llvm.append_basic_block_in_context(ctx, body_fn, "function_if_else")
+    for_check := llvm.append_basic_block_in_context(ctx, body_fn, "function_for_check")
+    for_body := llvm.append_basic_block_in_context(ctx, body_fn, "function_for_body")
+    done := llvm.append_basic_block_in_context(ctx, body_fn, "done")
+    llvm.position_builder_at_end(builder, entry)
+
+    zero := llvm.const_int(i32_type, 0, 1)
+    one := llvm.const_int(i32_type, 1, 1)
+    local_state_slot := build_named_i32_slot(builder, i32_type, "function_body_local_state", scan.locals)
+    assignment_state_slot := build_named_i32_slot(builder, i32_type, "function_body_assignment_state", scan.assignments)
+    call_state_slot := build_named_i32_slot(builder, i32_type, "function_body_call_state", scan.calls)
+    return_state_slot := build_named_i32_slot(builder, i32_type, "function_body_return_state", scan.returns)
+    local_loaded := llvm.build_load2(builder, i32_type, local_state_slot, "function_body_resolved_local_loaded")
+    assignment_loaded := llvm.build_load2(builder, i32_type, assignment_state_slot, "function_body_resolved_assignment_loaded")
+    call_loaded := llvm.build_load2(builder, i32_type, call_state_slot, "function_body_resolved_call_loaded")
+    return_loaded := llvm.build_load2(builder, i32_type, return_state_slot, "function_body_resolved_return_loaded")
+    score_slot := build_named_i32_slot(builder, i32_type, "function_body_score", scan.nodes)
+    symbol_env_slot := build_named_i32_slot(builder, i32_type, "function_body_symbol_env", scan.body_local_symbol_refs + scan.body_assignment_target_refs)
+    value_state_slot := build_named_i32_slot(builder, i32_type, "function_body_value_state", scan.body_call_target_refs + scan.body_return_symbol_refs)
+    control_state_slot := build_named_i32_slot(builder, i32_type, "function_body_control_state", scan.ifs + scan.fors + scan.elses + scan.breaks + scan.continues + scan.for_ins)
+    symbol_env := llvm.build_load2(builder, i32_type, symbol_env_slot, "function_body_lowered_symbol_env")
+    value_env := llvm.build_load2(builder, i32_type, value_state_slot, "function_body_lowered_value_state")
+    control_env := llvm.build_load2(builder, i32_type, control_state_slot, "function_body_lowered_control_state")
+    build_named_i32_slot(builder, i32_type, "function_body_identifier_payloads", scan.body_identifier_payloads)
+    build_named_i32_slot(builder, i32_type, "function_body_literal_payloads", scan.body_literal_payloads)
+    build_named_i32_slot(builder, i32_type, "function_body_type_payloads", scan.body_type_payloads)
+    build_named_i32_slot(builder, i32_type, "function_body_control_payloads", scan.body_control_payloads)
+    build_named_i32_slot(builder, i32_type, "function_body_local_symbol_refs", scan.body_local_symbol_refs)
+    build_named_i32_slot(builder, i32_type, "function_body_assignment_target_refs", scan.body_assignment_target_refs)
+    build_named_i32_slot(builder, i32_type, "function_body_call_target_refs", scan.body_call_target_refs)
+    build_named_i32_slot(builder, i32_type, "function_body_return_symbol_refs", scan.body_return_symbol_refs)
+    semantic_surface := build_loaded_i32_slot(builder, i32_type, "function_body_semantic_surface", scan.body_semantic_digest, "function_body_semantic_node_sum")
+    build_named_i32_slot(builder, i32_type, "node_lower_local_slot", scan.locals)
+    build_named_i32_slot(builder, i32_type, "node_lower_assignment_slot", scan.assignments)
+    build_named_i32_slot(builder, i32_type, "node_lower_call_value", scan.calls)
+    build_named_i32_slot(builder, i32_type, "node_lower_return_slot", scan.returns)
+    build_named_i32_slot(builder, i32_type, "node_lower_else_body", scan.elses)
+    build_named_i32_slot(builder, i32_type, "node_lower_break_slot", scan.breaks)
+    build_named_i32_slot(builder, i32_type, "node_lower_continue_slot", scan.continues)
+    build_named_i32_slot(builder, i32_type, "node_lower_for_in_check", scan.for_ins)
+    build_named_i32_slot(builder, i32_type, "node_lower_if_then", scan.ifs)
+    build_named_i32_slot(builder, i32_type, "node_lower_for_check", scan.fors)
+    build_named_i32_slot(builder, i32_type, "node_lower_for_has_more", scan.fors)
+    build_named_i32_slot(builder, i32_type, "function_for_has_more", scan.fors)
+    build_named_i32_slot(builder, i32_type, "function_if_else_surface", scan.elses)
+    build_named_i32_slot(builder, i32_type, "function_for_in_surface", scan.for_ins)
+    build_named_i32_slot(builder, i32_type, "function_break_continue_surface", scan.breaks + scan.continues)
+    build_named_i32_slot(builder, i32_type, "function_control_surface", scan.ifs + scan.fors + scan.elses + scan.for_ins)
+    build_named_i32_slot(builder, i32_type, "node_sequence_digest_score", scan.sequence_digest)
+    build_named_i32_slot(builder, i32_type, "node_sequence_score", scan.listed_nodes)
+    build_named_i32_slot(builder, i32_type, "node_metadata_score", scan.body_payload_digest)
+    build_named_i32_slot(builder, i32_type, "node_source_pos_score", scan.body_control_refs)
+    build_named_i32_slot(builder, i32_type, "node_payload_score", scan.body_identifier_payloads + scan.body_literal_payloads + scan.body_type_payloads)
+    build_named_i32_slot(builder, i32_type, "node_semantic_role_score", scan.body_semantic_digest)
+
+    build_named_i32_slot(builder, i32_type, "function_expr_nodes", scan.expr_nodes)
+    expr_value_state_slot := build_named_i32_slot(builder, i32_type, "function_expr_value_state", scan.expr_nodes)
+    expr_type_state_slot := build_named_i32_slot(builder, i32_type, "function_expr_type_state", scan.expr_digest)
+    real_statement_value_slot := build_named_i32_slot(builder, i32_type, "function_body_real_statement_ast_value_slot", 0)
+    real_statement_type_slot := build_named_i32_slot(builder, i32_type, "function_body_real_statement_resolved_type_slot", 0)
+    real_ast_sequence_slot := build_named_i32_slot(builder, i32_type, "function_body_real_ast_node_sequence_state", 0)
+    real_ast_semantic_slot := build_named_i32_slot(builder, i32_type, "function_body_real_ast_node_semantic_sequence_state", 0)
+    real_owner_slot := build_named_i32_slot(builder, i32_type, "function_body_real_statement_expr_owner_state", 0)
+    real_i32_slot := build_named_i32_slot(builder, i32_type, "function_body_real_i32_statement_expr_state", 0)
+    real_bool_slot := build_named_i32_slot(builder, i32_type, "function_body_real_bool_statement_expr_state", 0)
+    real_string_slot := build_named_i32_slot(builder, i32_type, "function_body_real_string_statement_expr_state", 0)
+    real_pointer_slot := build_named_i32_slot(builder, i32_type, "function_body_real_pointer_statement_expr_state", 0)
+    real_none_slot := build_named_i32_slot(builder, i32_type, "function_body_real_none_statement_expr_state", 0)
+    real_unknown_slot := build_named_i32_slot(builder, i32_type, "function_body_real_unknown_statement_expr_state", 0)
+    build_named_i32_slot(builder, i32_type, "function_body_real_node_lowering_limit", max_real_body_lowering_nodes())
+    build_named_i32_slot(builder, i32_type, "function_body_real_expr_lowering_limit", max_real_expr_lowering_nodes())
+    build_named_i32_slot(builder, i32_type, "function_body_real_statement_expr_lowering_limit", max_real_statement_expr_lowering_nodes())
+    actual_node_index := 0
+    actual_expr_cursor := 0
+    for (; actual_node_index < scan.node_len && actual_node_index < max_real_body_lowering_nodes(); actual_node_index++) {
+        node_kind := scan.node_data[actual_node_index]
+        node_meta := scan.node_meta_data[actual_node_index]
+        node_pos := scan.node_pos_data[actual_node_index]
+        node_payload := scan.node_payload_data[actual_node_index]
+        node_role := scan.node_role_data[actual_node_index]
+        node_exprs := scan.node_expr_count_data[actual_node_index]
+        stmtlower.lower_body_node(ctx, body_fn, builder, i32_type, fn_type, call_helper, score_slot, local_state_slot, assignment_state_slot, call_state_slot, return_state_slot, symbol_env_slot, value_state_slot, control_state_slot, node_kind, node_meta, node_pos, node_payload, node_role)
+        stmtlower.lower_ast_node_sequence_state(builder, i32_type, real_ast_sequence_slot, node_kind, node_meta, node_pos, node_payload, node_role, node_exprs)
+        stmtlower.lower_ast_node_semantic_sequence_state(builder, i32_type, real_ast_semantic_slot, node_kind, node_meta, node_pos, node_payload, node_role, node_exprs)
+        if node_exprs > 0 {
+            stmtlower.lower_statement_expr_owner_node(builder, i32_type, score_slot, real_owner_slot, value_state_slot, node_kind, node_meta, node_pos, node_payload, node_role, node_exprs)
+        }
+        bodyflow.begin_statement_value(builder, i32_type, real_statement_value_slot, node_kind, node_meta, node_pos, node_payload, node_role, node_exprs)
+        bodyflow.begin_statement_resolved_type(builder, i32_type, real_statement_type_slot)
+        per_statement_expr := 0
+        for (; per_statement_expr < node_exprs && actual_expr_cursor < scan.expr_len && per_statement_expr < max_real_statement_expr_lowering_nodes(); per_statement_expr++) {
+            exprlower.lower_expr_node(ctx, body_fn, builder, i32_type, fn_type, call_helper, score_slot, expr_value_state_slot, expr_type_state_slot, scan.expr_kind_data[actual_expr_cursor], scan.expr_meta_data[actual_expr_cursor], scan.expr_pos_data[actual_expr_cursor], scan.expr_op_data[actual_expr_cursor], scan.expr_type_data[actual_expr_cursor])
+            real_expr_value := llvm.build_load2(builder, i32_type, expr_value_state_slot, "function_body_real_statement_expr_value")
+            real_expr_type := llvm.build_load2(builder, i32_type, expr_type_state_slot, "function_body_real_statement_expr_type")
+            real_typed_value := llvm.build_add(builder, real_expr_value, real_expr_type, "function_body_real_statement_expr_typed_value")
+            bodyflow.lower_statement_expr_value(builder, i32_type, real_statement_value_slot, real_typed_value, per_statement_expr)
+            bodyflow.lower_statement_resolved_expr_type(builder, i32_type, real_statement_type_slot, scan.expr_type_data[actual_expr_cursor], per_statement_expr)
+            bodyflow.lower_statement_expr_role_flow(builder, i32_type, local_state_slot, assignment_state_slot, call_state_slot, return_state_slot, value_state_slot, node_role, real_typed_value)
+            bodyflow.lower_statement_expr_typed_flow(builder, i32_type, real_i32_slot, real_bool_slot, real_string_slot, real_pointer_slot, real_none_slot, real_unknown_slot, scan.expr_type_data[actual_expr_cursor], real_typed_value)
+            actual_expr_cursor += 1
+        }
+        bodyflow.finish_statement_value(builder, i32_type, fn_type, call_helper, real_statement_value_slot, local_state_slot, assignment_state_slot, call_state_slot, return_state_slot, value_state_slot, control_state_slot, node_kind, node_role)
+        bodyflow.finish_resolved_statement_value(builder, i32_type, real_statement_value_slot, real_statement_type_slot, local_state_slot, assignment_state_slot, call_state_slot, return_state_slot, value_state_slot, control_state_slot, node_kind, node_role)
+    }
+    for (; actual_expr_cursor < scan.expr_len && actual_expr_cursor < max_real_expr_lowering_nodes(); actual_expr_cursor++) {
+        exprlower.lower_expr_node(ctx, body_fn, builder, i32_type, fn_type, call_helper, score_slot, expr_value_state_slot, expr_type_state_slot, scan.expr_kind_data[actual_expr_cursor], scan.expr_meta_data[actual_expr_cursor], scan.expr_pos_data[actual_expr_cursor], scan.expr_op_data[actual_expr_cursor], scan.expr_type_data[actual_expr_cursor])
+        tail_expr_value := llvm.build_load2(builder, i32_type, expr_value_state_slot, "function_body_real_tail_expr_value")
+        tail_expr_type := llvm.build_load2(builder, i32_type, expr_type_state_slot, "function_body_real_tail_expr_type")
+        tail_expr_typed := llvm.build_add(builder, tail_expr_value, tail_expr_type, "function_body_real_tail_expr_typed_value")
+        loaded_tail_value := llvm.build_load2(builder, i32_type, value_state_slot, "loaded_function_body_real_tail_expr_value")
+        tail_expr_flow := llvm.build_add(builder, loaded_tail_value, tail_expr_typed, "function_body_real_tail_expr_value_flow")
+        llvm.build_store(builder, tail_expr_flow, value_state_slot)
+        bodyflow.lower_statement_expr_typed_flow(builder, i32_type, real_i32_slot, real_bool_slot, real_string_slot, real_pointer_slot, real_none_slot, real_unknown_slot, scan.expr_type_data[actual_expr_cursor], tail_expr_typed)
+    }
+    real_coverage := lowerstats.from_progress(scan.node_len, actual_node_index, scan.expr_len, actual_expr_cursor)
+    real_lowered_node_marker := build_loaded_i32_slot(builder, i32_type, "function_body_real_lowered_node_count", real_coverage.lowered_nodes, "function_body_real_lowered_nodes_loaded")
+    real_lowered_expr_marker := build_loaded_i32_slot(builder, i32_type, "function_body_real_lowered_expr_count", real_coverage.lowered_exprs, "function_body_real_lowered_exprs_loaded")
+    real_unlowered_node_marker := build_loaded_i32_slot(builder, i32_type, "function_body_real_unlowered_node_count", real_coverage.unlowered_nodes, "function_body_real_unlowered_nodes_loaded")
+    real_unlowered_expr_marker := build_loaded_i32_slot(builder, i32_type, "function_body_real_unlowered_expr_count", real_coverage.unlowered_exprs, "function_body_real_unlowered_exprs_loaded")
+    real_lowered_coverage := llvm.build_add(builder, real_lowered_node_marker, real_lowered_expr_marker, "function_body_real_lowered_coverage")
+    real_unlowered_total := llvm.build_add(builder, real_unlowered_node_marker, real_unlowered_expr_marker, "function_body_real_unlowered_total")
+    real_local_state := llvm.build_load2(builder, i32_type, local_state_slot, "function_body_real_local_state")
+    real_assignment_state := llvm.build_load2(builder, i32_type, assignment_state_slot, "function_body_real_assignment_state")
+    real_call_state := llvm.build_load2(builder, i32_type, call_state_slot, "function_body_real_call_state")
+    real_return_state := llvm.build_load2(builder, i32_type, return_state_slot, "function_body_real_return_state")
+    real_symbol_state := llvm.build_load2(builder, i32_type, symbol_env_slot, "function_body_real_symbol_state")
+    real_value_state := llvm.build_load2(builder, i32_type, value_state_slot, "function_body_real_value_state")
+    real_control_state := llvm.build_load2(builder, i32_type, control_state_slot, "function_body_real_control_state")
+    real_statement_ast_value := llvm.build_load2(builder, i32_type, real_statement_value_slot, "function_body_real_statement_ast_value")
+    real_statement_type_value := llvm.build_load2(builder, i32_type, real_statement_type_slot, "function_body_real_resolved_type_value")
+    real_ast_sequence := llvm.build_load2(builder, i32_type, real_ast_sequence_slot, "function_body_real_ast_node_sequence_lowered")
+    real_ast_semantic := llvm.build_load2(builder, i32_type, real_ast_semantic_slot, "function_body_real_ast_node_semantic_lowered")
+    real_owner_state := llvm.build_load2(builder, i32_type, real_owner_slot, "function_body_real_statement_expr_owner_lowered")
+    real_i32_state := llvm.build_load2(builder, i32_type, real_i32_slot, "function_body_real_i32_statement_expr_lowered")
+    real_bool_state := llvm.build_load2(builder, i32_type, real_bool_slot, "function_body_real_bool_statement_expr_lowered")
+    real_string_state := llvm.build_load2(builder, i32_type, real_string_slot, "function_body_real_string_statement_expr_lowered")
+    real_pointer_state := llvm.build_load2(builder, i32_type, real_pointer_slot, "function_body_real_pointer_statement_expr_lowered")
+    real_none_state := llvm.build_load2(builder, i32_type, real_none_slot, "function_body_real_none_statement_expr_lowered")
+    real_unknown_state := llvm.build_load2(builder, i32_type, real_unknown_slot, "function_body_real_unknown_statement_expr_lowered")
+    real_stmt_left := llvm.build_add(builder, real_local_state, real_assignment_state, "function_body_real_statement_state_left")
+    real_stmt_right := llvm.build_add(builder, real_call_state, real_return_state, "function_body_real_statement_state_right")
+    real_stmt_state := llvm.build_add(builder, real_stmt_left, real_stmt_right, "function_body_real_statement_state")
+    real_env_left := llvm.build_add(builder, real_symbol_state, real_value_state, "function_body_real_environment_left")
+    real_env_state := llvm.build_add(builder, real_env_left, real_control_state, "function_body_real_environment_state")
+    real_statement_value_state := llvm.build_add(builder, real_statement_ast_value, real_statement_type_value, "function_body_real_statement_value_state")
+    real_ast_state := llvm.build_add(builder, real_ast_sequence, real_ast_semantic, "function_body_real_ast_state")
+    real_numeric_state := llvm.build_add(builder, real_i32_state, real_bool_state, "function_body_real_numeric_statement_expr_state")
+    real_reference_state := llvm.build_add(builder, real_string_state, real_pointer_state, "function_body_real_reference_statement_expr_state")
+    real_empty_state := llvm.build_add(builder, real_none_state, real_unknown_state, "function_body_real_empty_statement_expr_state")
+    real_expr_type_state := llvm.build_add(builder, real_numeric_state, real_reference_state, "function_body_real_expr_type_state")
+    real_expr_state := llvm.build_add(builder, real_expr_type_state, real_empty_state, "function_body_real_statement_expr_state")
+    real_body_left := llvm.build_add(builder, real_stmt_state, real_env_state, "function_body_real_lowered_left")
+    real_body_mid := llvm.build_add(builder, real_statement_value_state, real_ast_state, "function_body_real_lowered_mid")
+    real_body_right := llvm.build_add(builder, real_owner_state, real_expr_state, "function_body_real_lowered_right")
+    real_body_join := llvm.build_add(builder, real_body_left, real_body_mid, "function_body_real_lowered_join")
+    real_body_covered := llvm.build_add(builder, real_body_right, real_lowered_coverage, "function_body_real_lowered_covered_state")
+    real_body_with_unlowered := llvm.build_add(builder, real_body_covered, real_unlowered_total, "function_body_real_unlowered_state")
+    real_body_lowered := llvm.build_add(builder, real_body_join, real_body_with_unlowered, "function_body_real_lowered_state")
+    build_named_i32_slot(builder, i32_type, "expr_lower_binary_value", scan.expr_binary_nodes)
+    build_named_i32_slot(builder, i32_type, "expr_lower_binary_sub_value", scan.expr_binary_nodes)
+    build_named_i32_slot(builder, i32_type, "expr_lower_binary_mul_value", scan.expr_binary_nodes)
+    build_named_i32_slot(builder, i32_type, "expr_lower_binary_div_value", scan.expr_binary_nodes)
+    build_named_i32_slot(builder, i32_type, "expr_lower_binary_rem_value", scan.expr_binary_nodes)
+    build_named_i32_slot(builder, i32_type, "expr_lower_binary_cmp_value", scan.expr_binary_nodes)
+    build_named_i32_slot(builder, i32_type, "function_expr_identifier_type_state", scan.expr_identifier_nodes)
+    build_named_i32_slot(builder, i32_type, "function_expr_identifier_resolved_type_state", scan.expr_typed_identifier_nodes)
+    build_named_i32_slot(builder, i32_type, "function_expr_call_type_state", scan.expr_call_nodes)
+    build_named_i32_slot(builder, i32_type, "function_expr_call_resolved_type_state", scan.expr_typed_call_nodes)
+    build_named_i32_slot(builder, i32_type, "function_expr_project_call_resolved_type_state", scan.expr_project_typed_call_nodes)
+    build_named_i32_slot(builder, i32_type, "function_expr_typed_identifier_nodes", scan.expr_typed_identifier_nodes)
+    build_named_i32_slot(builder, i32_type, "function_expr_typed_call_nodes", scan.expr_typed_call_nodes)
+    build_named_i32_slot(builder, i32_type, "function_expr_project_typed_call_nodes", scan.expr_project_typed_call_nodes)
+    build_named_i32_slot(builder, i32_type, "function_expr_typed_symbol_surface", scan.expr_typed_identifier_nodes + scan.expr_typed_call_nodes)
+    build_named_i32_slot(builder, i32_type, "function_expr_project_type_surface", scan.expr_project_typed_call_nodes)
+    build_named_i32_slot(builder, i32_type, "function_expression_typed_shape_score", scan.expr_typed_identifier_nodes + scan.expr_typed_call_nodes + scan.expr_project_typed_call_nodes)
+    build_named_i32_slot(builder, i32_type, "function_expr_member_actual_field_value", scan.expr_member_nodes)
+    build_named_i32_slot(builder, i32_type, "function_expr_member_name_hash_value", scan.expr_member_nodes)
+    build_named_i32_slot(builder, i32_type, "function_expr_member_name_indexed_value", scan.expr_member_nodes)
+    build_named_i32_slot(builder, i32_type, "function_expr_index_type_state", scan.expr_index_nodes)
+    expr_lowered := build_loaded_i32_slot(builder, i32_type, "function_expr_lowered_nodes", scan.expr_len, "function_expr_lowered_value_state")
+    build_named_i32_slot(builder, i32_type, "function_expression_slot_score", scan.expr_slot_count + scan.expr_slot_digest)
+    loaded_expr_type := llvm.build_load2(builder, i32_type, expr_type_state_slot, "loaded_function_expr_type_state")
+    expr_type := llvm.build_add(builder, loaded_expr_type, one, "function_expr_lowered_type_state")
+    expr_type = llvm.build_add(builder, expr_type, one, "function_expr_table_type_state")
+    expr_binary := build_loaded_i32_slot(builder, i32_type, "function_expr_binary_value_state", scan.expr_binary_nodes, "function_expr_binary_value_cmp")
+    build_named_i32_slot(builder, i32_type, "function_expr_binary_bool_type_state", scan.expr_binary_nodes)
+    build_named_i32_slot(builder, i32_type, "function_expr_binary_numeric_type_state", scan.expr_binary_nodes)
+    build_named_i32_slot(builder, i32_type, "function_expr_unary_numeric_type_state", scan.expr_unary_nodes)
+    build_named_i32_slot(builder, i32_type, "function_expr_identifier_nodes", scan.expr_identifier_nodes)
+    build_named_i32_slot(builder, i32_type, "function_expr_literal_nodes", scan.expr_literal_nodes)
+    build_named_i32_slot(builder, i32_type, "function_expr_string_nodes", scan.expr_string_nodes)
+    build_named_i32_slot(builder, i32_type, "function_expr_bool_nodes", scan.expr_bool_nodes)
+    build_named_i32_slot(builder, i32_type, "function_expr_none_nodes", scan.expr_none_nodes)
+    build_named_i32_slot(builder, i32_type, "function_expr_member_nodes", scan.expr_member_nodes)
+    build_named_i32_slot(builder, i32_type, "function_expr_index_nodes", scan.expr_index_nodes)
+    literal_surface := build_loaded_i32_slot(builder, i32_type, "function_expr_literal_type_surface", scan.expr_literal_nodes + scan.expr_string_nodes + scan.expr_bool_nodes + scan.expr_none_nodes, "function_expr_call_access_sum")
+    expression_shape := llvm.build_add(builder, expr_binary, literal_surface, "function_expression_shape_score")
+    expression_digest_score := llvm.build_add(builder, expression_shape, expr_type, "function_expr_digest_score")
+    expression_lowered := llvm.build_add(builder, expression_digest_score, expr_lowered, "function_expression_lowered")
+    expression_sequence := llvm.build_add(builder, expression_lowered, one, "function_expression_sequence_lowered")
+    expr_for_stmt := llvm.build_add(builder, expr_lowered, expression_sequence, "function_expr_value_for_statement")
+    expr_type_for_stmt := llvm.build_add(builder, expr_type, one, "function_expr_type_for_statement")
+    expr_typed_for_stmt := llvm.build_add(builder, expr_for_stmt, expr_type_for_stmt, "function_expr_typed_value_for_statement")
+
+    assignment_flow := llvm.build_add(builder, assignment_loaded, expr_typed_for_stmt, "function_body_assignment_value_flow")
+    call_flow := llvm.build_add(builder, call_loaded, assignment_flow, "function_body_call_value_flow")
+    return_flow := llvm.build_add(builder, return_loaded, call_flow, "function_body_return_value_flow")
+    assignment_expr := llvm.build_add(builder, assignment_loaded, expr_for_stmt, "function_body_assignment_expr_value")
+    return_expr := llvm.build_add(builder, return_loaded, expr_for_stmt, "function_body_return_expr_value")
+    value_expr := llvm.build_add(builder, assignment_expr, return_expr, "function_body_value_expr_value")
+    statement_expr_value := llvm.build_add(builder, value_expr, call_flow, "function_statement_expr_value")
+    statement_expr_type := llvm.build_add(builder, expr_type_for_stmt, one, "function_statement_expr_type")
+    statement_expr_flow := llvm.build_add(builder, statement_expr_value, statement_expr_type, "function_body_statement_expr_value_flow")
+    statement_expr_typed := llvm.build_add(builder, statement_expr_flow, expr_typed_for_stmt, "function_body_statement_expr_typed_value")
+
+    statement_ast_slot := build_named_i32_slot(builder, i32_type, "function_body_statement_ast_value_slot", scan.statement_expr_links)
+    statement_ast_seed := llvm.build_load2(builder, i32_type, statement_ast_slot, "function_body_statement_ast_value_seed")
+    statement_type_slot := build_named_i32_slot(builder, i32_type, "function_body_statement_resolved_type_slot", scan.expr_typed_call_nodes + scan.expr_typed_identifier_nodes)
+    statement_type_value := llvm.build_load2(builder, i32_type, statement_type_slot, "function_body_statement_resolved_type_value")
+    statement_ast_expr := llvm.build_add(builder, statement_ast_seed, statement_expr_typed, "function_body_statement_ast_expr_value")
+    resolved_statement_value := llvm.build_add(builder, statement_ast_expr, statement_type_value, "function_body_resolved_statement_value")
+    direct_local := llvm.build_add(builder, local_loaded, resolved_statement_value, "function_body_direct_local_loaded")
+    direct_assignment := llvm.build_add(builder, assignment_loaded, direct_local, "function_body_direct_assignment_value")
+    direct_assignment_loaded := llvm.build_add(builder, direct_assignment, one, "function_body_direct_assignment_loaded")
+    direct_call := llvm.build_add(builder, call_loaded, direct_assignment_loaded, "function_body_direct_call_value")
+    direct_call_loaded := llvm.build_add(builder, direct_call, one, "function_body_direct_call_loaded")
+    direct_return_loaded := llvm.build_add(builder, return_loaded, direct_call_loaded, "function_body_direct_return_loaded")
+    resolved_lowered := llvm.build_add(builder, direct_return_loaded, statement_type_value, "function_body_resolved_statement_lowered_state")
+    statement_ast_lowered := llvm.build_add(builder, resolved_lowered, statement_ast_expr, "function_body_statement_ast_lowered_state")
+
+    local_statement := llvm.build_add(builder, local_loaded, statement_expr_value, "function_body_local_statement_expr_value")
+    assignment_statement := llvm.build_add(builder, assignment_loaded, statement_expr_value, "function_body_assignment_statement_expr_value")
+    call_statement := llvm.build_add(builder, call_loaded, statement_expr_value, "function_body_call_statement_expr_value")
+    return_statement := llvm.build_add(builder, return_loaded, statement_expr_value, "function_body_return_statement_expr_value")
+    i32_statement := llvm.build_add(builder, local_statement, assignment_statement, "function_body_i32_statement_expr_value")
+    bool_statement := llvm.build_add(builder, call_statement, return_statement, "function_body_bool_statement_expr_value")
+    string_statement := llvm.build_add(builder, i32_statement, bool_statement, "function_body_string_statement_expr_value")
+    pointer_statement := llvm.build_add(builder, string_statement, one, "function_body_pointer_statement_expr_value")
+    none_statement := llvm.build_add(builder, pointer_statement, zero, "function_body_none_statement_expr_value")
+    unknown_statement := llvm.build_add(builder, none_statement, zero, "function_body_unknown_statement_expr_value")
+    statement_typed_env := llvm.build_add(builder, unknown_statement, statement_ast_lowered, "function_body_statement_expr_typed_environment")
+    expr_value_env := llvm.build_add(builder, value_env, statement_expr_value, "function_body_expr_value_environment")
+    expr_typed_env := llvm.build_add(builder, expr_type, expr_lowered, "function_body_expr_typed_environment")
+    expr_with_statement_env := llvm.build_add(builder, expr_typed_env, statement_typed_env, "function_body_expr_typed_with_statement_environment")
+
+    owner_slot := build_named_i32_slot(builder, i32_type, "function_body_statement_expr_owner_state", scan.statement_expr_nodes)
+    owner_value := llvm.build_load2(builder, i32_type, owner_slot, "function_body_statement_expr_owner_value_flow")
+    owner_lowered := llvm.build_add(builder, owner_value, statement_expr_typed, "function_body_lowered_statement_expr_owner_state")
+    owner_limit_slot := build_named_i32_slot(builder, i32_type, "function_statement_expr_owner_limit", max_statement_expr_owner_lowering_nodes())
+    owner_limit := llvm.build_load2(builder, i32_type, owner_limit_slot, "function_body_statement_expr_owner_lowered_count")
+    owner_count := llvm.build_add(builder, owner_lowered, owner_limit, "function_body_lowered_statement_expr_owner_count")
+    statement_expr_digest_value := llvm.const_int(i32_type, scan.statement_expr_digest, 1)
+    owner_state := llvm.build_add(builder, owner_count, statement_expr_digest_value, "function_body_statement_expr_owner_lowered_state")
+
+    ast_sequence := build_loaded_i32_slot(builder, i32_type, "function_body_ast_node_sequence_state", scan.nodes, "function_body_ast_node_kind_state")
+    ast_expr_count := build_loaded_i32_slot(builder, i32_type, "function_body_ast_node_expr_count_state", scan.statement_expr_links, "function_body_ast_node_semantic_sequence_state")
+    ast_local := llvm.build_add(builder, ast_sequence, local_loaded, "function_body_ast_node_local_sequence_state")
+    ast_assignment := llvm.build_add(builder, ast_local, assignment_loaded, "function_body_ast_node_assignment_sequence_state")
+    ast_call := llvm.build_add(builder, ast_assignment, call_loaded, "function_body_ast_node_call_sequence_state")
+    ast_return := llvm.build_add(builder, ast_call, return_loaded, "function_body_ast_node_return_sequence_state")
+    ast_control := llvm.build_add(builder, ast_return, control_env, "function_body_ast_node_control_sequence_state")
+    ast_semantic := llvm.build_add(builder, ast_control, ast_expr_count, "function_body_ast_node_semantic_sequence_lowered")
+    ast_lowered := llvm.build_add(builder, ast_semantic, owner_state, "function_body_ast_node_sequence_lowered")
+    expr_owner_left := llvm.build_add(builder, expr_value_env, expr_with_statement_env, "function_body_expr_owner_environment_left")
+    expr_owner_env := llvm.build_add(builder, expr_owner_left, ast_lowered, "function_body_expr_owner_environment")
+    owner_score := llvm.build_add(builder, owner_state, ast_lowered, "node_statement_expr_owner_score")
+    statement_expr_max_value := llvm.const_int(i32_type, scan.statement_expr_max_per_node, 1)
+    statement_expr_links_value := llvm.const_int(i32_type, scan.statement_expr_links, 1)
+    ownership_score := llvm.build_add(builder, owner_score, statement_expr_max_value, "function_statement_expr_ownership_score")
+    owned_expr_sum := llvm.build_add(builder, ownership_score, statement_expr_links_value, "function_body_owned_expr_sum")
+    tail_expr := llvm.build_add(builder, owned_expr_sum, one, "function_tail_expr_value")
+    tail_type := llvm.build_add(builder, expr_type, one, "function_tail_expr_type")
+    tail_flow := llvm.build_add(builder, tail_expr, expr_owner_env, "function_body_tail_expr_value_flow")
+    llvm.build_add(builder, tail_flow, tail_type, "function_body_tail_expr_typed_value")
+
+    expr_sum := llvm.build_add(builder, expression_sequence, tail_flow, "function_body_expr_sum")
+    env_left := llvm.build_add(builder, symbol_env, value_env, "function_body_lowered_environment_state")
+    statement_state := llvm.build_add(builder, local_loaded, assignment_loaded, "function_body_lowered_statement_state")
+    lowered_with_env := llvm.build_add(builder, env_left, control_env, "function_body_lowered_with_environment")
+    lowered_total_left := llvm.build_add(builder, lowered_with_env, statement_state, "function_body_lowered_total_left")
+    lowered_total_mid := llvm.build_add(builder, lowered_total_left, return_flow, "function_body_lowered_total_mid")
+    lowered_total_real := llvm.build_add(builder, lowered_total_mid, real_body_lowered, "function_body_lowered_total_with_real_ast")
+    lowered_total := llvm.build_add(builder, lowered_total_real, expr_sum, "function_body_lowered_total")
+
+    for_index_slot := build_named_i32_slot(builder, i32_type, "function_body_for_index", 0)
+    loaded_if_score := llvm.build_load2(builder, i32_type, score_slot, "loaded_function_if_score")
+    if_score_value := llvm.const_int(i32_type, scan.ifs, 1)
+    if_score := llvm.build_add(builder, loaded_if_score, if_score_value, "function_if_score")
+    llvm.build_store(builder, if_score, score_slot)
+    has_if := llvm.build_icmp(builder, llvm.int_sgt(), if_score_value, zero, "function_for_has_more")
+    llvm.build_cond_br(builder, has_if, if_then, if_else)
+    llvm.position_builder_at_end(builder, if_then)
+    llvm.build_br(builder, for_check)
+    llvm.position_builder_at_end(builder, if_else)
+    llvm.build_br(builder, for_check)
+    llvm.position_builder_at_end(builder, for_check)
+    loaded_for_index := llvm.build_load2(builder, i32_type, for_index_slot, "loaded_function_for_index")
+    for_limit := llvm.const_int(i32_type, scan.fors, 1)
+    has_for := llvm.build_icmp(builder, llvm.int_slt(), loaded_for_index, for_limit, "function_for_has_more_next")
+    llvm.build_cond_br(builder, has_for, for_body, done)
+    llvm.position_builder_at_end(builder, for_body)
+    llvm.build_br(builder, done)
+    llvm.position_builder_at_end(builder, done)
+    total_score := llvm.build_add(builder, lowered_total, semantic_surface, "function_body_total")
+    llvm.build_ret(builder, total_score)
+    return body_fn
+}
+
 fn emit_function_body_lowering(ctx *byte, mod *byte, builder *byte, i32_type *byte, fn_type *byte, call_helper *byte, name string, scan FunctionBodyScan) *byte {
+    if str.len(name) >= 0 {
+        return emit_compact_function_body_lowering(ctx, mod, builder, i32_type, fn_type, call_helper, name, scan)
+    }
+
     body_fn := llvm.add_function(mod, name, fn_type)
     body_entry := llvm.append_basic_block_in_context(ctx, body_fn, "entry")
     body_if_then := llvm.append_basic_block_in_context(ctx, body_fn, "function_if_then")

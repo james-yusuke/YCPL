@@ -1,0 +1,11 @@
+fn main() i32 {
+    items := [4, 2, 7]
+    total := 0
+    for value in items {
+        if value == 7 {
+            break
+        }
+        total = total + value
+    }
+    return total + 7
+}

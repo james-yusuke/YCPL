@@ -1,0 +1,6 @@
+fn main() i32 {
+    items := [4, 2, 7]
+    index := 1
+    items[index] = items[0] + items[2]
+    return items[index] + 2
+}

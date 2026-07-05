@@ -1,0 +1,10 @@
+struct Pair {
+    left i32
+    right i32
+}
+
+fn main() i32 {
+    pair := Pair{left: 5, right: 1}
+    pair.right = pair.left + 8
+    return pair.right
+}

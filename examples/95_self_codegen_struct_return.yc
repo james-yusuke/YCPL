@@ -1,0 +1,14 @@
+struct Pair {
+    left i32
+    right i32
+}
+
+fn make_pair() Pair {
+    pair := Pair{left: 6, right: 7}
+    return pair
+}
+
+fn main() i32 {
+    pair := make_pair()
+    return pair.left + pair.right
+}

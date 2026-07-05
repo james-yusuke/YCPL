@@ -42,6 +42,7 @@ extern fn c_build_sext(builder_ref *byte, value_ref *byte, dest_type *byte, name
 extern fn c_build_icmp(builder_ref *byte, predicate i32, lhs *byte, rhs *byte, name string) *byte as "LLVMBuildICmp"
 extern fn c_build_br(builder_ref *byte, dest *byte) *byte as "LLVMBuildBr"
 extern fn c_build_cond_br(builder_ref *byte, cond *byte, then_block *byte, else_block *byte) *byte as "LLVMBuildCondBr"
+extern fn c_build_unreachable(builder_ref *byte) *byte as "LLVMBuildUnreachable"
 extern fn c_build_call2(builder_ref *byte, function_type *byte, function_ref *byte, args *byte, arg_count i32, name string) *byte as "LLVMBuildCall2"
 extern fn c_build_struct_gep2(builder_ref *byte, type_ref *byte, pointer_ref *byte, index i32, name string) *byte as "LLVMBuildStructGEP2"
 extern fn c_build_gep2(builder_ref *byte, type_ref *byte, pointer_ref *byte, indices *byte, index_count i32, name string) *byte as "LLVMBuildGEP2"
@@ -298,6 +299,10 @@ pub fn build_br(builder *byte, dest *byte) *byte {
 
 pub fn build_cond_br(builder *byte, cond *byte, then_block *byte, else_block *byte) *byte {
     return c_build_cond_br(builder, cond, then_block, else_block)
+}
+
+pub fn build_unreachable(builder *byte) *byte {
+    return c_build_unreachable(builder)
 }
 
 pub fn build_call2(builder *byte, function_type *byte, function *byte, args *byte, arg_count i32, name string) *byte {

@@ -66,6 +66,11 @@ fn traversal_flow_surface(items []i32) i32 {
     }
     return total
 }
+
+fn traversal_i64_surface(seed i64) i64 {
+    value: i64 := seed
+    return value
+}
 YCPL
 "$YCC_YCPL" parse "$traversal_dir/ycpl" >/tmp/ycc-ycpl-traversal-parse.out
 require_project_file_count /tmp/ycc-ycpl-traversal-parse.out 24 "recursive traversal in $traversal_dir/ycpl"
@@ -75,6 +80,8 @@ grep -q 'node_lower_else_body' "$traversal_ir_dir/project_body.ll"
 grep -q 'node_lower_break_slot' "$traversal_ir_dir/project_body.ll"
 grep -q 'node_lower_continue_slot' "$traversal_ir_dir/project_body.ll"
 grep -q 'node_lower_for_in_check' "$traversal_ir_dir/project_body.ll"
+grep -q 'function_body_i64_statement_expr_value' "$traversal_ir_dir/project_body.ll"
+grep -q 'function_body_reference_statement_expr_value' "$traversal_ir_dir/project_body.ll"
 grep -q 'fn_digest=' /tmp/ycc-ycpl-project-parse.out
 grep -q 'body_digest=' /tmp/ycc-ycpl-project-parse.out
 grep -q 'body_tokens=' /tmp/ycc-ycpl-project-parse.out
@@ -175,6 +182,42 @@ grep -q 'value=13' /tmp/ycc-ycpl-check-llvm-function-type.out
 grep -q 'value=13' /tmp/ycc-ycpl-check-llvm-builder-memory.out
 "$YCC_YCPL" check examples/72_self_codegen_llvm_call2_icmp_call.yc >/tmp/ycc-ycpl-check-llvm-call2-icmp.out
 grep -q 'value=13' /tmp/ycc-ycpl-check-llvm-call2-icmp.out
+"$YCC_YCPL" check examples/81_self_codegen_array_index.yc >/tmp/ycc-ycpl-check-array.out
+grep -q 'value=13' /tmp/ycc-ycpl-check-array.out
+"$YCC_YCPL" check examples/82_self_codegen_array_assignment.yc >/tmp/ycc-ycpl-check-array-assign.out
+grep -q 'value=13' /tmp/ycc-ycpl-check-array-assign.out
+"$YCC_YCPL" check examples/83_self_codegen_array_dynamic_index.yc >/tmp/ycc-ycpl-check-array-dynamic.out
+grep -q 'value=13' /tmp/ycc-ycpl-check-array-dynamic.out
+"$YCC_YCPL" check examples/84_self_codegen_array_for_in.yc >/tmp/ycc-ycpl-check-array-for-in.out
+grep -q 'value=13' /tmp/ycc-ycpl-check-array-for-in.out
+"$YCC_YCPL" check examples/85_self_codegen_array_for_in_break.yc >/tmp/ycc-ycpl-check-array-for-in-break.out
+grep -q 'value=13' /tmp/ycc-ycpl-check-array-for-in-break.out
+"$YCC_YCPL" check examples/86_self_codegen_array_for_in_continue.yc >/tmp/ycc-ycpl-check-array-for-in-continue.out
+grep -q 'value=13' /tmp/ycc-ycpl-check-array-for-in-continue.out
+"$YCC_YCPL" check examples/87_self_codegen_array_for_in_if_continue.yc >/tmp/ycc-ycpl-check-array-for-in-if-continue.out
+grep -q 'value=13' /tmp/ycc-ycpl-check-array-for-in-if-continue.out
+"$YCC_YCPL" check examples/88_self_codegen_array_for_in_if_break.yc >/tmp/ycc-ycpl-check-array-for-in-if-break.out
+grep -q 'value=13' /tmp/ycc-ycpl-check-array-for-in-if-break.out
+"$YCC_YCPL" check examples/89_self_codegen_numeric_for_in.yc >/tmp/ycc-ycpl-check-numeric-for-in.out
+grep -q 'value=13' /tmp/ycc-ycpl-check-numeric-for-in.out
+"$YCC_YCPL" check examples/90_self_codegen_numeric_for_in_return.yc >/tmp/ycc-ycpl-check-numeric-for-in-return.out
+grep -q 'value=13' /tmp/ycc-ycpl-check-numeric-for-in-return.out
+"$YCC_YCPL" check examples/91_self_codegen_c_for_return.yc >/tmp/ycc-ycpl-check-c-for-return.out
+grep -q 'value=13' /tmp/ycc-ycpl-check-c-for-return.out
+"$YCC_YCPL" check examples/92_self_codegen_struct_member.yc >/tmp/ycc-ycpl-check-struct-member.out
+grep -q 'value=13' /tmp/ycc-ycpl-check-struct-member.out
+"$YCC_YCPL" check examples/93_self_codegen_struct_member_assignment.yc >/tmp/ycc-ycpl-check-struct-member-assignment.out
+grep -q 'value=13' /tmp/ycc-ycpl-check-struct-member-assignment.out
+"$YCC_YCPL" check examples/94_self_codegen_struct_param_call.yc >/tmp/ycc-ycpl-check-struct-param-call.out
+grep -q 'value=13' /tmp/ycc-ycpl-check-struct-param-call.out
+"$YCC_YCPL" check examples/95_self_codegen_struct_return.yc >/tmp/ycc-ycpl-check-struct-return.out
+grep -q 'value=13' /tmp/ycc-ycpl-check-struct-return.out
+"$YCC_YCPL" check examples/96_self_codegen_struct3_member.yc >/tmp/ycc-ycpl-check-struct3-member.out
+grep -q 'value=13' /tmp/ycc-ycpl-check-struct3-member.out
+"$YCC_YCPL" check examples/97_self_codegen_struct3_param_call.yc >/tmp/ycc-ycpl-check-struct3-param-call.out
+grep -q 'value=13' /tmp/ycc-ycpl-check-struct3-param-call.out
+"$YCC_YCPL" check examples/98_self_codegen_struct3_return.yc >/tmp/ycc-ycpl-check-struct3-return.out
+grep -q 'value=13' /tmp/ycc-ycpl-check-struct3-return.out
 if "$YCC_YCPL" check examples/55_self_codegen_unknown_failure.yc >/tmp/ycc-ycpl-check-failure.out 2>&1; then
   printf 'Expected ycc-ycpl check to reject unknown local symbol\n' >&2
   exit 1
@@ -184,6 +227,17 @@ if ! grep -q 'unknown local symbol' /tmp/ycc-ycpl-check-failure.out; then
   cat /tmp/ycc-ycpl-check-failure.out >&2
   exit 1
 fi
+strict_no_fallback_dir="$(mktemp -d "${TMPDIR:-/tmp}/ycpl-no-fallback.XXXXXX")"
+set +e
+YCPL_NO_BOOTSTRAP=1 "$YCC_YCPL" build-ir examples/01_hello.yc -o "$strict_no_fallback_dir" >/tmp/ycc-ycpl-strict-no-fallback.out 2>&1
+strict_no_fallback_rc=$?
+set -e
+if [ "$strict_no_fallback_rc" -eq 0 ]; then
+  printf 'Expected YCPL_NO_BOOTSTRAP=1 to reject unsupported build-ir without bootstrap fallback\n' >&2
+  cat /tmp/ycc-ycpl-strict-no-fallback.out >&2
+  exit 1
+fi
+grep -q 'unsupported by YCPL self-host compiler without bootstrap fallback' /tmp/ycc-ycpl-strict-no-fallback.out
 
 for file in examples/*.yc; do
   case "$file" in
@@ -286,6 +340,7 @@ grep -q '@.stage3.tinyllvmcapi.ir' "$work_dir/merged.ll"
 grep -q '@.stage3.tinyexternmalloc.ir' "$work_dir/merged.ll"
 grep -q '@.stage3.tinyexternstring.ir' "$work_dir/merged.ll"
 grep -q '@.stage3.tinystring.ir' "$work_dir/merged.ll"
+grep -q '@.stage3.tinyarray.ir' "$work_dir/merged.ll"
 grep -q '@.stage3.tinyboolhelper.ir' "$work_dir/merged.ll"
 grep -q '@.stage3.tinybool.ir' "$work_dir/merged.ll"
 grep -q '@.stage3.tinyelse.ir' "$work_dir/merged.ll"
@@ -314,6 +369,7 @@ grep -q '@.ycpl.tinyllvmcapi.ir' "$work_dir/merged.ll"
 grep -q '@.ycpl.tinyexternmalloc.ir' "$work_dir/merged.ll"
 grep -q '@.ycpl.tinyexternstring.ir' "$work_dir/merged.ll"
 grep -q '@.ycpl.tinystring.ir' "$work_dir/merged.ll"
+grep -q '@.ycpl.tinyarray.ir' "$work_dir/merged.ll"
 grep -q '@.ycpl.tinyboolhelper.ir' "$work_dir/merged.ll"
 grep -q '@.ycpl.tinybool.ir' "$work_dir/merged.ll"
 grep -q '@.ycpl.tinyelse.ir' "$work_dir/merged.ll"
@@ -379,7 +435,7 @@ grep -q 'call i32 @ycpl_project_dynamic_range_body_6' "$work_dir/merged.ll"
 grep -q 'statement_nodes' "$work_dir/merged.ll"
 grep -q 'expression_nodes' "$work_dir/merged.ll"
 grep -q 'function_body_statement_resolved_type_slot' "$work_dir/merged.ll"
-grep -q 'function_body_statement_resolved_expr_type' "$work_dir/merged.ll"
+grep -q 'function_body_statement_resolved_type_value' "$work_dir/merged.ll"
 grep -q 'function_body_resolved_statement_value' "$work_dir/merged.ll"
 grep -q 'function_body_resolved_local_loaded' "$work_dir/merged.ll"
 grep -q 'function_body_resolved_assignment_loaded' "$work_dir/merged.ll"
@@ -387,7 +443,7 @@ grep -q 'function_body_resolved_call_loaded' "$work_dir/merged.ll"
 grep -q 'function_body_resolved_return_loaded' "$work_dir/merged.ll"
 grep -q 'function_body_resolved_statement_lowered_state' "$work_dir/merged.ll"
 grep -q 'function_body_statement_resolved_type_slot' "$work_dir/project_body.ll"
-grep -q 'function_body_statement_resolved_expr_type' "$work_dir/project_body.ll"
+grep -q 'function_body_statement_resolved_type_value' "$work_dir/project_body.ll"
 grep -q 'function_body_resolved_statement_value' "$work_dir/project_body.ll"
 grep -q 'function_body_resolved_local_loaded' "$work_dir/project_body.ll"
 grep -q 'function_body_resolved_assignment_loaded' "$work_dir/project_body.ll"
@@ -806,6 +862,33 @@ grep -q 'function_tail_expr_value' "$work_dir/project_body.ll"
 grep -q 'function_tail_expr_type' "$work_dir/project_body.ll"
 grep -q 'function_body_tail_expr_value_flow' "$work_dir/project_body.ll"
 grep -q 'function_body_tail_expr_typed_value' "$work_dir/project_body.ll"
+grep -q 'function_body_real_statement_ast_value_slot' "$work_dir/project_body.ll"
+grep -q 'function_body_real_statement_expr_typed_value' "$work_dir/project_body.ll"
+grep -q 'function_body_real_ast_node_sequence_lowered' "$work_dir/project_body.ll"
+grep -q 'function_body_real_ast_node_semantic_lowered' "$work_dir/project_body.ll"
+grep -q 'function_body_real_statement_expr_owner_lowered' "$work_dir/project_body.ll"
+grep -q 'function_body_real_tail_expr_value_flow' "$work_dir/project_body.ll"
+grep -q 'function_body_real_lowered_node_count' "$work_dir/project_body.ll"
+grep -q 'function_body_real_lowered_expr_count' "$work_dir/project_body.ll"
+grep -q 'function_body_real_unlowered_node_count' "$work_dir/project_body.ll"
+grep -q 'function_body_real_unlowered_expr_count' "$work_dir/project_body.ll"
+grep -q 'function_body_real_lowered_coverage' "$work_dir/project_body.ll"
+grep -q 'function_body_real_unlowered_total' "$work_dir/project_body.ll"
+grep -q 'function_body_real_lowered_covered_state' "$work_dir/project_body.ll"
+grep -q 'function_body_real_unlowered_state' "$work_dir/project_body.ll"
+grep -q 'function_body_real_lowered_state' "$work_dir/project_body.ll"
+grep -q 'function_body_lowered_total_with_real_ast' "$work_dir/project_body.ll"
+grep -q 'function_body_real_node_lowering_limit' "$work_dir/project_body.ll"
+grep -q 'function_body_real_expr_lowering_limit' "$work_dir/project_body.ll"
+grep -q 'function_body_real_statement_expr_lowering_limit' "$work_dir/project_body.ll"
+grep -q 'store i32 16, ptr %function_body_real_node_lowering_limit' "$work_dir/project_body.ll"
+grep -q 'store i32 32, ptr %function_body_real_expr_lowering_limit' "$work_dir/project_body.ll"
+grep -q 'store i32 16, ptr %function_body_real_statement_expr_lowering_limit' "$work_dir/project_body.ll"
+grep -q 'store i32 16, ptr %function_body_real_lowered_node_count' "$work_dir/project_body.ll"
+grep -q 'store i32 32, ptr %function_body_real_lowered_expr_count' "$work_dir/project_body.ll"
+grep -Eq 'store i32 ([1-9][0-9]*), ptr %function_body_real_unlowered_node_count' "$work_dir/project_body.ll"
+grep -Eq 'store i32 ([1-9][0-9]*), ptr %function_body_real_unlowered_expr_count' "$work_dir/project_body.ll"
+grep -q 'store i32 16, ptr %function_statement_expr_owner_limit' "$work_dir/project_body.ll"
 grep -Eq 'store i32 ([6-9][0-9][0-9]|[1-9][0-9][0-9][0-9]), ptr %function_expr_lowered_nodes' "$work_dir/project_body.ll"
 grep -q 'function_expression_slot_score' "$work_dir/project_body.ll"
 grep -q 'function_expr_identifier_nodes' "$work_dir/project_body.ll"
@@ -1110,6 +1193,148 @@ grep -q 'ptr null' "$self_llvm_call2_icmp_dir/merged.ll"
 grep -q '@strlit' "$self_llvm_call2_icmp_dir/merged.ll"
 grep -q 'ret i32 13' "$self_llvm_call2_icmp_dir/merged.ll"
 
+self_array_dir="$(mktemp -d "${TMPDIR:-/tmp}/ycpl-self-array.XXXXXX")"
+"$YCC_YCPL" build-ir-self examples/81_self_codegen_array_index.yc -o "$self_array_dir" >/dev/null
+grep -q 'alloca \[3 x i32\]' "$self_array_dir/merged.ll"
+grep -q 'getelementptr \[3 x i32\]' "$self_array_dir/merged.ll"
+grep -q 'store i32 4' "$self_array_dir/merged.ll"
+grep -q 'store i32 2' "$self_array_dir/merged.ll"
+grep -q 'store i32 7' "$self_array_dir/merged.ll"
+grep -q 'load i32, ptr %arrayidx' "$self_array_dir/merged.ll"
+grep -Eq 'ret i32 %loadtmp[0-9]*' "$self_array_dir/merged.ll"
+
+self_array_assign_dir="$(mktemp -d "${TMPDIR:-/tmp}/ycpl-self-array-assign.XXXXXX")"
+"$YCC_YCPL" build-ir-self examples/82_self_codegen_array_assignment.yc -o "$self_array_assign_dir" >/dev/null
+grep -q 'alloca \[3 x i32\]' "$self_array_assign_dir/merged.ll"
+grep -q 'getelementptr \[3 x i32\]' "$self_array_assign_dir/merged.ll"
+grep -q 'store i32 %addtmp' "$self_array_assign_dir/merged.ll"
+grep -q 'load i32, ptr %arrayidx' "$self_array_assign_dir/merged.ll"
+grep -Eq 'ret i32 %addtmp[0-9]*' "$self_array_assign_dir/merged.ll"
+
+self_array_dynamic_dir="$(mktemp -d "${TMPDIR:-/tmp}/ycpl-self-array-dynamic.XXXXXX")"
+"$YCC_YCPL" build-ir-self examples/83_self_codegen_array_dynamic_index.yc -o "$self_array_dynamic_dir" >/dev/null
+grep -q 'declare void @abort()' "$self_array_dynamic_dir/merged.ll"
+grep -q 'icmp sge i32 %loadtmp' "$self_array_dynamic_dir/merged.ll"
+grep -q 'icmp slt i32 %loadtmp' "$self_array_dynamic_dir/merged.ll"
+grep -q 'call void @abort()' "$self_array_dynamic_dir/merged.ll"
+grep -q 'unreachable' "$self_array_dynamic_dir/merged.ll"
+grep -q 'store i32 %addtmp' "$self_array_dynamic_dir/merged.ll"
+grep -Eq 'ret i32 %addtmp[0-9]*' "$self_array_dynamic_dir/merged.ll"
+
+self_array_for_in_dir="$(mktemp -d "${TMPDIR:-/tmp}/ycpl-self-array-for-in.XXXXXX")"
+"$YCC_YCPL" build-ir-self examples/84_self_codegen_array_for_in.yc -o "$self_array_for_in_dir" >/dev/null
+grep -q 'tiny_for_in_check' "$self_array_for_in_dir/merged.ll"
+grep -q 'tiny_for_in_body' "$self_array_for_in_dir/merged.ll"
+grep -q 'tiny_for_in_update' "$self_array_for_in_dir/merged.ll"
+grep -q 'tiny_for_in_done' "$self_array_for_in_dir/merged.ll"
+grep -q 'tiny_for_in_arrayidx' "$self_array_for_in_dir/merged.ll"
+grep -q 'tiny_for_in_item' "$self_array_for_in_dir/merged.ll"
+grep -q 'call void @abort()' "$self_array_for_in_dir/merged.ll"
+grep -q 'unreachable' "$self_array_for_in_dir/merged.ll"
+
+self_array_for_in_break_dir="$(mktemp -d "${TMPDIR:-/tmp}/ycpl-self-array-for-in-break.XXXXXX")"
+"$YCC_YCPL" build-ir-self examples/85_self_codegen_array_for_in_break.yc -o "$self_array_for_in_break_dir" >/dev/null
+grep -q 'br label %tiny_for_in_done' "$self_array_for_in_break_dir/merged.ll"
+if grep -q 'add i32 .*100' "$self_array_for_in_break_dir/merged.ll"; then
+  printf 'Expected break lowering to skip unreachable post-break addition\n' >&2
+  exit 1
+fi
+
+self_array_for_in_continue_dir="$(mktemp -d "${TMPDIR:-/tmp}/ycpl-self-array-for-in-continue.XXXXXX")"
+"$YCC_YCPL" build-ir-self examples/86_self_codegen_array_for_in_continue.yc -o "$self_array_for_in_continue_dir" >/dev/null
+grep -q 'br label %tiny_for_in_update' "$self_array_for_in_continue_dir/merged.ll"
+if grep -q 'add i32 .*%value' "$self_array_for_in_continue_dir/merged.ll"; then
+  printf 'Expected continue lowering to skip unreachable post-continue addition\n' >&2
+  exit 1
+fi
+
+self_array_for_in_if_continue_dir="$(mktemp -d "${TMPDIR:-/tmp}/ycpl-self-array-for-in-if-continue.XXXXXX")"
+"$YCC_YCPL" build-ir-self examples/87_self_codegen_array_for_in_if_continue.yc -o "$self_array_for_in_if_continue_dir" >/dev/null
+grep -q 'tiny_if_then' "$self_array_for_in_if_continue_dir/merged.ll"
+grep -q 'tiny_if_else' "$self_array_for_in_if_continue_dir/merged.ll"
+grep -q 'tiny_if_done' "$self_array_for_in_if_continue_dir/merged.ll"
+grep -q 'br label %tiny_for_in_update' "$self_array_for_in_if_continue_dir/merged.ll"
+
+self_array_for_in_if_break_dir="$(mktemp -d "${TMPDIR:-/tmp}/ycpl-self-array-for-in-if-break.XXXXXX")"
+"$YCC_YCPL" build-ir-self examples/88_self_codegen_array_for_in_if_break.yc -o "$self_array_for_in_if_break_dir" >/dev/null
+grep -q 'tiny_if_then' "$self_array_for_in_if_break_dir/merged.ll"
+grep -q 'tiny_if_else' "$self_array_for_in_if_break_dir/merged.ll"
+grep -q 'tiny_if_done' "$self_array_for_in_if_break_dir/merged.ll"
+grep -q 'br label %tiny_for_in_done' "$self_array_for_in_if_break_dir/merged.ll"
+
+self_numeric_for_in_dir="$(mktemp -d "${TMPDIR:-/tmp}/ycpl-self-numeric-for-in.XXXXXX")"
+"$YCC_YCPL" build-ir-self examples/89_self_codegen_numeric_for_in.yc -o "$self_numeric_for_in_dir" >/dev/null
+grep -q 'tiny_for_in_limit' "$self_numeric_for_in_dir/merged.ll"
+grep -q 'tiny_for_in_limit_value' "$self_numeric_for_in_dir/merged.ll"
+grep -q 'icmp slt i32 %tiny_for_in_index_value, %tiny_for_in_limit_value' "$self_numeric_for_in_dir/merged.ll"
+grep -q 'store i32 %tiny_for_in_index_value, ptr %i' "$self_numeric_for_in_dir/merged.ll"
+grep -q 'br label %tiny_for_in_update' "$self_numeric_for_in_dir/merged.ll"
+grep -q 'br label %tiny_for_in_done' "$self_numeric_for_in_dir/merged.ll"
+
+self_numeric_for_in_return_dir="$(mktemp -d "${TMPDIR:-/tmp}/ycpl-self-numeric-for-in-return.XXXXXX")"
+"$YCC_YCPL" build-ir-self examples/90_self_codegen_numeric_for_in_return.yc -o "$self_numeric_for_in_return_dir" >/dev/null
+grep -q 'tiny_for_in_body' "$self_numeric_for_in_return_dir/merged.ll"
+grep -q 'ret i32 %addtmp' "$self_numeric_for_in_return_dir/merged.ll"
+grep -q 'ret i32 0' "$self_numeric_for_in_return_dir/merged.ll"
+
+self_c_for_return_dir="$(mktemp -d "${TMPDIR:-/tmp}/ycpl-self-c-for-return.XXXXXX")"
+"$YCC_YCPL" build-ir-self examples/91_self_codegen_c_for_return.yc -o "$self_c_for_return_dir" >/dev/null
+grep -q 'tiny_for_body' "$self_c_for_return_dir/merged.ll"
+grep -q 'ret i32 %addtmp' "$self_c_for_return_dir/merged.ll"
+grep -q 'ret i32 0' "$self_c_for_return_dir/merged.ll"
+
+self_struct_member_dir="$(mktemp -d "${TMPDIR:-/tmp}/ycpl-self-struct-member.XXXXXX")"
+"$YCC_YCPL" build-ir-self examples/92_self_codegen_struct_member.yc -o "$self_struct_member_dir" >/dev/null
+grep -q 'alloca { i32, i32 }' "$self_struct_member_dir/merged.ll"
+grep -q 'getelementptr .*{ i32, i32 }' "$self_struct_member_dir/merged.ll"
+grep -q 'store i32 5' "$self_struct_member_dir/merged.ll"
+grep -q 'store i32 8' "$self_struct_member_dir/merged.ll"
+grep -q 'load i32, ptr %memberptr' "$self_struct_member_dir/merged.ll"
+grep -q 'ret i32 %addtmp' "$self_struct_member_dir/merged.ll"
+
+self_struct_member_assignment_dir="$(mktemp -d "${TMPDIR:-/tmp}/ycpl-self-struct-member-assignment.XXXXXX")"
+"$YCC_YCPL" build-ir-self examples/93_self_codegen_struct_member_assignment.yc -o "$self_struct_member_assignment_dir" >/dev/null
+grep -q 'alloca { i32, i32 }' "$self_struct_member_assignment_dir/merged.ll"
+grep -q 'getelementptr .*{ i32, i32 }' "$self_struct_member_assignment_dir/merged.ll"
+grep -q 'store i32 %addtmp' "$self_struct_member_assignment_dir/merged.ll"
+grep -q 'ret i32 %memberload' "$self_struct_member_assignment_dir/merged.ll"
+
+self_struct_param_dir="$(mktemp -d "${TMPDIR:-/tmp}/ycpl-self-struct-param.XXXXXX")"
+"$YCC_YCPL" build-ir-self examples/94_self_codegen_struct_param_call.yc -o "$self_struct_param_dir" >/dev/null
+grep -q 'define i32 @sum({ i32, i32 }' "$self_struct_param_dir/merged.ll"
+grep -q 'call i32 @sum({ i32, i32 }' "$self_struct_param_dir/merged.ll"
+grep -q 'getelementptr .*{ i32, i32 }' "$self_struct_param_dir/merged.ll"
+grep -q 'ret i32 %addtmp' "$self_struct_param_dir/merged.ll"
+
+self_struct_return_dir="$(mktemp -d "${TMPDIR:-/tmp}/ycpl-self-struct-return.XXXXXX")"
+"$YCC_YCPL" build-ir-self examples/95_self_codegen_struct_return.yc -o "$self_struct_return_dir" >/dev/null
+grep -q 'define { i32, i32 } @make_pair()' "$self_struct_return_dir/merged.ll"
+grep -q 'ret { i32, i32 } %loadtmp' "$self_struct_return_dir/merged.ll"
+grep -q 'call { i32, i32 } @make_pair()' "$self_struct_return_dir/merged.ll"
+grep -q 'ret i32 %addtmp' "$self_struct_return_dir/merged.ll"
+
+self_struct3_dir="$(mktemp -d "${TMPDIR:-/tmp}/ycpl-self-struct3.XXXXXX")"
+"$YCC_YCPL" build-ir-self examples/96_self_codegen_struct3_member.yc -o "$self_struct3_dir" >/dev/null
+grep -q 'alloca { i32, i32, i32 }' "$self_struct3_dir/merged.ll"
+grep -q 'getelementptr .*{ i32, i32, i32 }' "$self_struct3_dir/merged.ll"
+grep -q 'store i32 7' "$self_struct3_dir/merged.ll"
+grep -q 'store i32 %addtmp' "$self_struct3_dir/merged.ll"
+grep -q 'ret i32 %addtmp' "$self_struct3_dir/merged.ll"
+
+self_struct3_param_dir="$(mktemp -d "${TMPDIR:-/tmp}/ycpl-self-struct3-param.XXXXXX")"
+"$YCC_YCPL" build-ir-self examples/97_self_codegen_struct3_param_call.yc -o "$self_struct3_param_dir" >/dev/null
+grep -q 'define i32 @sum({ i32, i32, i32 }' "$self_struct3_param_dir/merged.ll"
+grep -q 'call i32 @sum({ i32, i32, i32 }' "$self_struct3_param_dir/merged.ll"
+grep -q 'getelementptr .*{ i32, i32, i32 }' "$self_struct3_param_dir/merged.ll"
+grep -q 'ret i32 %addtmp' "$self_struct3_param_dir/merged.ll"
+
+self_struct3_return_dir="$(mktemp -d "${TMPDIR:-/tmp}/ycpl-self-struct3-return.XXXXXX")"
+"$YCC_YCPL" build-ir-self examples/98_self_codegen_struct3_return.yc -o "$self_struct3_return_dir" >/dev/null
+grep -q 'define { i32, i32, i32 } @make_triple()' "$self_struct3_return_dir/merged.ll"
+grep -q 'ret { i32, i32, i32 } %loadtmp' "$self_struct3_return_dir/merged.ll"
+grep -q 'call { i32, i32, i32 } @make_triple()' "$self_struct3_return_dir/merged.ll"
+grep -q 'ret i32 %addtmp' "$self_struct3_return_dir/merged.ll"
+
 self_native_dir="$(mktemp -d "${TMPDIR:-/tmp}/ycpl-self-native.XXXXXX")"
 "$YCC_YCPL" build examples/54_self_codegen_arithmetic.yc -o "$self_native_dir" >/dev/null
 set +e
@@ -1118,6 +1343,105 @@ native_status=$?
 set -e
 if [ "$native_status" -ne 13 ]; then
   printf 'Expected self-built native binary to exit 13, got %d\n' "$native_status" >&2
+  exit 1
+fi
+
+self_numeric_for_in_return_native_dir="$(mktemp -d "${TMPDIR:-/tmp}/ycpl-self-numeric-for-in-return-native.XXXXXX")"
+"$YCC_YCPL" build examples/90_self_codegen_numeric_for_in_return.yc -o "$self_numeric_for_in_return_native_dir" >/dev/null
+set +e
+"$self_numeric_for_in_return_native_dir/merged" >/dev/null 2>&1
+numeric_for_in_return_native_status=$?
+set -e
+if [ "$numeric_for_in_return_native_status" -ne 13 ]; then
+  printf 'Expected self-built numeric for-in return native binary to exit 13, got %d\n' "$numeric_for_in_return_native_status" >&2
+  exit 1
+fi
+
+self_c_for_return_native_dir="$(mktemp -d "${TMPDIR:-/tmp}/ycpl-self-c-for-return-native.XXXXXX")"
+"$YCC_YCPL" build examples/91_self_codegen_c_for_return.yc -o "$self_c_for_return_native_dir" >/dev/null
+set +e
+"$self_c_for_return_native_dir/merged" >/dev/null 2>&1
+c_for_return_native_status=$?
+set -e
+if [ "$c_for_return_native_status" -ne 13 ]; then
+  printf 'Expected self-built C-style for return native binary to exit 13, got %d\n' "$c_for_return_native_status" >&2
+  exit 1
+fi
+
+self_struct_member_native_dir="$(mktemp -d "${TMPDIR:-/tmp}/ycpl-self-struct-member-native.XXXXXX")"
+"$YCC_YCPL" build examples/92_self_codegen_struct_member.yc -o "$self_struct_member_native_dir" >/dev/null
+set +e
+"$self_struct_member_native_dir/merged" >/dev/null 2>&1
+struct_member_native_status=$?
+set -e
+if [ "$struct_member_native_status" -ne 13 ]; then
+  printf 'Expected self-built struct member native binary to exit 13, got %d\n' "$struct_member_native_status" >&2
+  exit 1
+fi
+
+self_struct_member_assignment_native_dir="$(mktemp -d "${TMPDIR:-/tmp}/ycpl-self-struct-member-assignment-native.XXXXXX")"
+"$YCC_YCPL" build examples/93_self_codegen_struct_member_assignment.yc -o "$self_struct_member_assignment_native_dir" >/dev/null
+set +e
+"$self_struct_member_assignment_native_dir/merged" >/dev/null 2>&1
+struct_member_assignment_native_status=$?
+set -e
+if [ "$struct_member_assignment_native_status" -ne 13 ]; then
+  printf 'Expected self-built struct member assignment native binary to exit 13, got %d\n' "$struct_member_assignment_native_status" >&2
+  exit 1
+fi
+
+self_struct_param_native_dir="$(mktemp -d "${TMPDIR:-/tmp}/ycpl-self-struct-param-native.XXXXXX")"
+"$YCC_YCPL" build examples/94_self_codegen_struct_param_call.yc -o "$self_struct_param_native_dir" >/dev/null
+set +e
+"$self_struct_param_native_dir/merged" >/dev/null 2>&1
+struct_param_native_status=$?
+set -e
+if [ "$struct_param_native_status" -ne 13 ]; then
+  printf 'Expected self-built struct param native binary to exit 13, got %d\n' "$struct_param_native_status" >&2
+  exit 1
+fi
+
+self_struct_return_native_dir="$(mktemp -d "${TMPDIR:-/tmp}/ycpl-self-struct-return-native.XXXXXX")"
+"$YCC_YCPL" build examples/95_self_codegen_struct_return.yc -o "$self_struct_return_native_dir" >/dev/null
+set +e
+"$self_struct_return_native_dir/merged" >/dev/null 2>&1
+struct_return_native_status=$?
+set -e
+if [ "$struct_return_native_status" -ne 13 ]; then
+  printf 'Expected self-built struct return native binary to exit 13, got %d\n' "$struct_return_native_status" >&2
+  exit 1
+fi
+
+self_struct3_native_dir="$(mktemp -d "${TMPDIR:-/tmp}/ycpl-self-struct3-native.XXXXXX")"
+"$YCC_YCPL" build examples/96_self_codegen_struct3_member.yc -o "$self_struct3_native_dir" >/dev/null
+set +e
+"$self_struct3_native_dir/merged" >/dev/null 2>&1
+struct3_native_status=$?
+set -e
+if [ "$struct3_native_status" -ne 13 ]; then
+  printf 'Expected self-built struct3 native binary to exit 13, got %d\n' "$struct3_native_status" >&2
+  exit 1
+fi
+
+self_struct3_param_native_dir="$(mktemp -d "${TMPDIR:-/tmp}/ycpl-self-struct3-param-native.XXXXXX")"
+"$YCC_YCPL" build examples/97_self_codegen_struct3_param_call.yc -o "$self_struct3_param_native_dir" >/dev/null
+set +e
+"$self_struct3_param_native_dir/merged" >/dev/null 2>&1
+struct3_param_native_status=$?
+set -e
+if [ "$struct3_param_native_status" -ne 13 ]; then
+  printf 'Expected self-built struct3 param native binary to exit 13, got %d\n' "$struct3_param_native_status" >&2
+  exit 1
+fi
+
+self_struct3_return_native_dir="$(mktemp -d "${TMPDIR:-/tmp}/ycpl-self-struct3-return-native.XXXXXX")"
+"$YCC_YCPL" build examples/98_self_codegen_struct3_return.yc -o "$self_struct3_return_native_dir" >/dev/null
+set +e
+"$self_struct3_return_native_dir/merged" >/dev/null 2>&1
+struct3_return_native_status=$?
+set -e
+if [ "$struct3_return_native_status" -ne 13 ]; then
+  printf 'Expected self-built struct3 return native binary to exit 13, got %d\n' "$struct3_return_native_status" >&2
   exit 1
 fi
 

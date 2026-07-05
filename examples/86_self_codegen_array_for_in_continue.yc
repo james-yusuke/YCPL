@@ -1,0 +1,9 @@
+fn main() i32 {
+    items := [4, 2, 7]
+    total := 0
+    for value in items {
+        continue
+        total = total + value
+    }
+    return total + 13
+}
