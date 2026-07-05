@@ -146,6 +146,7 @@ stage-2 self-host gate
 ├─ 生成された stage2 binary は native stage3 compiler-smoke output を build
 ├─ 生成された stage3 binary は parse/check/build-ir/build compiler/ycpl に対応し、llc-valid な stage4 LLVM IR/native output を出力する
 ├─ 生成された stage4 binary は parse/check/build-ir/build compiler/ycpl に対応し、llc-valid な stage5 LLVM IR/native output を出力する
+├─ 生成された stage native driver は `LLC`/`CLANG`/`LLVM_BINDIR` を優先し、未指定時は `/usr` を変更せず command-local `PATH` で Homebrew/apt 系 LLVM prefix を探索する
 ├─ 生成された stage3 binary は source 内容で tiny arithmetic、call/assignment、control-flow、else/helper、1 引数 i32 helper-call、multi-helper chain、2 引数 helper-call、forward helper-call、bool/string/extern/LLVM C API smoke input を別々の IR output に lower する
 ├─ 生成された stage2 binary は source 内容で tiny arithmetic、call/assignment、control-flow、else/helper、1 引数 i32 helper-call、multi-helper chain、2 引数 helper-call、forward helper-call、bool/string/extern/LLVM C API smoke input を実行可能 IR に lower
 ├─ 生成された stage2/stage3 binary は fallback 位置で source の `return <整数>` を読み、固定 fixture なしで dynamic constant-return IR を生成する

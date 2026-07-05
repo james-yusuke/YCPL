@@ -146,6 +146,7 @@ stage-2 self-host gate
 ├─ generated stage2 binary builds native stage3 compiler-smoke output
 ├─ generated stage3 binary supports parse/check/build-ir/build compiler/ycpl and emits llc-valid stage4 LLVM IR/native output
 ├─ generated stage4 binary supports parse/check/build-ir/build compiler/ycpl and emits llc-valid stage5 LLVM IR/native output
+├─ generated stage native drivers prefer `LLC`/`CLANG`/`LLVM_BINDIR`, then search Homebrew/apt LLVM prefixes through command-local `PATH` without mutating `/usr`
 ├─ generated stage3 binary lowers tiny arithmetic, call/assignment, control-flow, else/helper, one-argument i32 helper-call, multi-helper chain, two-argument helper-call, forward helper-call, and bool/string/extern/LLVM C API smoke inputs to distinct IR output by source content
 ├─ generated stage2 binary lowers tiny arithmetic, call/assignment, control-flow, else/helper, one-argument i32 helper-call, multi-helper chain, two-argument helper-call, forward helper-call, and bool/string/extern/LLVM C API smoke inputs to executable IR by source content
 ├─ generated stage2/stage3 binaries parse `return <integer>` at the fallback position and emit dynamic constant-return IR without a fixed fixture string
