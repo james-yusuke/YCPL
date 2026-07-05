@@ -56,12 +56,18 @@ jobs:
       - name: Export LLVM 22 environment
         run: |
           eval "$(scripts/setup-llvm.sh 22 --print-env)"
+          CLANG_WRAPPER="$RUNNER_TEMP/ycpl-clang"
+          {
+            echo '#!/usr/bin/env bash'
+            printf 'exec %q -no-pie -fuse-ld=lld "$@"\n' "$LLVM_BINDIR/clang"
+          } > "$CLANG_WRAPPER"
+          chmod +x "$CLANG_WRAPPER"
           {
             echo "LLVM_CONFIG=$LLVM_CONFIG"
             echo "LLVM_BINDIR=$LLVM_BINDIR"
             echo "LLVM_DIR=$LLVM_DIR"
             echo "LLC=$LLVM_BINDIR/llc"
-            echo "CLANG=$LLVM_BINDIR/clang"
+            echo "CLANG=$CLANG_WRAPPER"
             echo "LINKFLAGS=-no-pie -fuse-ld=lld"
           } >> "$GITHUB_ENV"
           echo "$LLVM_BINDIR" >> "$GITHUB_PATH"
