@@ -43,6 +43,7 @@ jobs:
             libffi-dev \
             libxml2-dev \
             libzstd-dev \
+            lld \
             nodejs \
             npm \
             python3 \
@@ -108,6 +109,8 @@ jobs:
             --action_env=LLC \
             --action_env=CLANG \
             --action_env=LINKFLAGS \
+            --linkopt=-fuse-ld=lld \
+            --host_linkopt=-fuse-ld=lld \
             //...
 
       - name: Check YCPL compiler gates
@@ -119,6 +122,8 @@ jobs:
             --action_env=LLC \
             --action_env=CLANG \
             --action_env=LINKFLAGS \
+            --linkopt=-fuse-ld=lld \
+            --host_linkopt=-fuse-ld=lld \
             //:ycc //:ycc-ycpl
           bazel test \
             --action_env=PATH \
@@ -127,6 +132,8 @@ jobs:
             --action_env=LLC \
             --action_env=CLANG \
             --action_env=LINKFLAGS \
+            --linkopt=-fuse-ld=lld \
+            --host_linkopt=-fuse-ld=lld \
             --test_timeout=1800 \
             //:examples_test //:lsp_protocol_test //:ycc_ycpl_test //:self_host_stage_test
 
@@ -237,6 +244,8 @@ jobs:
             --action_env=LLC \
             --action_env=CLANG \
             --action_env=LINKFLAGS \
+            --linkopt=-fuse-ld=lld \
+            --host_linkopt=-fuse-ld=lld \
             --test_timeout=1800 \
             //...
 
