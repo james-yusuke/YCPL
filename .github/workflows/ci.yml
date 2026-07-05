@@ -62,7 +62,7 @@ jobs:
             echo "LLVM_DIR=$LLVM_DIR"
             echo "LLC=$LLVM_BINDIR/llc"
             echo "CLANG=$LLVM_BINDIR/clang"
-            echo "LINKFLAGS=--no-pie"
+            echo "LINKFLAGS=--no-pie -fuse-ld=lld"
           } >> "$GITHUB_ENV"
           echo "$LLVM_BINDIR" >> "$GITHUB_PATH"
 
@@ -111,7 +111,14 @@ jobs:
             --action_env=LINKFLAGS \
             --linkopt=-fuse-ld=lld \
             --host_linkopt=-fuse-ld=lld \
-            //...
+            //... || {
+              if [ -f /tmp/ycc-ycpl-build.log ]; then
+                echo "::group::/tmp/ycc-ycpl-build.log"
+                cat /tmp/ycc-ycpl-build.log
+                echo "::endgroup::"
+              fi
+              exit 1
+            }
 
       - name: Check YCPL compiler gates
         run: |
