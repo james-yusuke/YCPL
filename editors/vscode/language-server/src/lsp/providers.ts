@@ -60,6 +60,7 @@ import {
   semanticTokenTypes,
   type ParsedDiagnostic,
   type SemanticKind,
+  type SymbolReference,
   type YcplDocument,
   type YcplSymbol
 } from "../analysis/model.js";
@@ -134,7 +135,7 @@ export class YcplProviders {
     if (!word) {
       return undefined;
     }
-    const symbol = this.index.findDefinition(word.word, document.uri)?.symbol;
+    const symbol = this.symbolForPosition(document, params.position);
     if (!symbol) {
       return {
         contents: { kind: MarkupKind.Markdown, value: `\`${word.word}\`` },
@@ -152,12 +153,12 @@ export class YcplProviders {
 
   /** Provides definition locations. */
   definition(params: DefinitionParams): Location[] {
-    const word = this.wordFor(params.textDocument.uri, params.position);
-    if (!word) {
+    const document = this.requireDocument(params.textDocument.uri);
+    const symbol = this.symbolForPosition(document, params.position);
+    if (!symbol) {
       return [];
     }
-    const result = this.index.findDefinition(word.word, params.textDocument.uri);
-    return result ? [result.location] : [];
+    return [Location.create(symbol.uri, symbol.selectionRange)];
   }
 
   /** Provides implementation locations. */
@@ -216,7 +217,7 @@ export class YcplProviders {
       return undefined;
     }
     const name = match[2] ?? match[1];
-    const symbol = this.index.findDefinition(name, document.uri)?.symbol;
+    const symbol = this.index.findDefinitionWhere(name, document.uri, (entry) => entry.category === "function")?.symbol;
     if (!symbol?.parameters) {
       return undefined;
     }
@@ -234,10 +235,25 @@ export class YcplProviders {
     const document = this.requireDocument(params.textDocument.uri);
     const builder = new SemanticTokensBuilder();
     const pushed = new Set<string>();
+    const tokens: Array<{ range: Range; kind: SemanticKind; modifiers: Array<typeof semanticTokenModifiers[number]> }> = [];
+    const addToken = (range: Range, kind: SemanticKind, modifiers: Array<typeof semanticTokenModifiers[number]> = []) => {
+      const key = rangeKey(range);
+      if (pushed.has(key)) {
+        return;
+      }
+      pushed.add(key);
+      tokens.push({ range, kind, modifiers });
+    };
 
     for (const symbol of document.symbols) {
-      this.pushToken(builder, symbol.selectionRange, categoryToSemanticKind(symbol.category), symbol.exported ? ["declaration"] : []);
-      pushed.add(rangeKey(symbol.selectionRange));
+      addToken(symbol.selectionRange, categoryToSemanticKind(symbol.category), symbol.exported ? ["declaration"] : []);
+    }
+
+    for (const reference of document.references) {
+      const kind = this.semanticKindForReference(document, reference);
+      if (kind) {
+        addToken(reference.range, kind);
+      }
     }
 
     const pattern = /\b(module|package|import|pub|extern|intrinsic|fn|struct|const|mut|if|else|for|in|return|break|continue|as|true|false|none|i32|i64|bool|char|byte|string|float|double|void|size_t|Type|T|any)\b|\/\/.*$|\/\*[\s\S]*?\*\/|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])'|`[^`]*`|0x[0-9A-Fa-f]+|0b[01]+|[0-9]+(?:\.[0-9]+)?|(:=|==|!=|<=|>=|&&|\|\||[=+\-*/%<>!&|.])/gm;
@@ -249,19 +265,23 @@ export class YcplProviders {
         continue;
       }
       if (keywords.includes(value as never)) {
-        this.pushToken(builder, range, "keyword");
+        addToken(range, "keyword");
       } else if (primitiveTypes.includes(value as never)) {
-        this.pushToken(builder, range, "type");
+        addToken(range, "type");
       } else if (value.startsWith("//") || value.startsWith("/*")) {
-        this.pushToken(builder, range, "comment");
+        addToken(range, "comment");
       } else if (value.startsWith("\"") || value.startsWith("'") || value.startsWith("`")) {
-        this.pushToken(builder, range, "string");
+        addToken(range, "string");
       } else if (/^[0-9]/.test(value)) {
-        this.pushToken(builder, range, "number");
+        addToken(range, "number");
       } else {
-        this.pushToken(builder, range, "operator");
+        addToken(range, "operator");
       }
     }
+
+    tokens
+      .sort((left, right) => left.range.start.line - right.range.start.line || left.range.start.character - right.range.start.character)
+      .forEach((token) => this.pushToken(builder, token.range, token.kind, token.modifiers));
     return builder.build();
   }
 
@@ -447,6 +467,93 @@ export class YcplProviders {
   private wordFor(uri: string, position: Position) {
     const document = this.requireDocument(uri);
     return wordAtPosition(document.text, document.lineOffsets, position);
+  }
+
+  private symbolForPosition(document: YcplDocument, position: Position): YcplSymbol | undefined {
+    const word = wordAtPosition(document.text, document.lineOffsets, position);
+    if (!word) {
+      return undefined;
+    }
+
+    const declared = this.index.declarationAt(document.uri, position);
+    if (declared?.name === word.word) {
+      return declared;
+    }
+
+    const literalField = this.structLiteralFieldSymbol(document, word.range);
+    if (literalField?.name === word.word) {
+      return literalField;
+    }
+
+    if (this.isFunctionCall(document, word.range)) {
+      return this.index.findDefinitionWhere(word.word, document.uri, (entry) => entry.category === "function")?.symbol;
+    }
+
+    if (this.isTypeContext(document, word.range)) {
+      const type = this.index.findDefinitionWhere(word.word, document.uri, (entry) => entry.category === "struct")?.symbol;
+      if (type) {
+        return type;
+      }
+    }
+
+    return this.index.findDefinitionWhere(word.word, document.uri, (entry) => entry.category !== "field")?.symbol
+      ?? this.index.findDefinition(word.word, document.uri)?.symbol;
+  }
+
+  private semanticKindForReference(document: YcplDocument, reference: SymbolReference): SemanticKind | undefined {
+    const field = this.structLiteralFieldSymbol(document, reference.range);
+    if (field?.name === reference.name) {
+      return "property";
+    }
+    if (this.isFunctionCall(document, reference.range)) {
+      return "function";
+    }
+    if (this.isTypeContext(document, reference.range)) {
+      const type = this.index.findDefinitionWhere(reference.name, document.uri, (entry) => entry.category === "struct")?.symbol;
+      if (type) {
+        return "struct";
+      }
+    }
+    const symbol = this.index.findDefinitionWhere(reference.name, document.uri, (entry) => entry.category !== "field")?.symbol;
+    return symbol ? categoryToSemanticKind(symbol.category) : undefined;
+  }
+
+  private structLiteralFieldSymbol(document: YcplDocument, range: Range): YcplSymbol | undefined {
+    const start = offsetAt(document.text, document.lineOffsets, range.start);
+    const end = offsetAt(document.text, document.lineOffsets, range.end);
+    if (!/^\s*:/.test(document.text.slice(end, Math.min(document.text.length, end + 16)))) {
+      return undefined;
+    }
+
+    const open = document.text.lastIndexOf("{", start);
+    if (open < 0) {
+      return undefined;
+    }
+    const typeMatch = document.text.slice(0, open).match(/([A-Za-z_][A-Za-z0-9_]*)\s*$/);
+    const typeName = typeMatch?.[1];
+    if (!typeName) {
+      return undefined;
+    }
+    const word = document.text.slice(start, end);
+    return this.index.symbolsNamed(word).find((symbol) => symbol.category === "field" && symbol.containerName === typeName);
+  }
+
+  private isFunctionCall(document: YcplDocument, range: Range): boolean {
+    const end = offsetAt(document.text, document.lineOffsets, range.end);
+    return /^\s*\(/.test(document.text.slice(end, Math.min(document.text.length, end + 16)));
+  }
+
+  private isTypeContext(document: YcplDocument, range: Range): boolean {
+    const start = offsetAt(document.text, document.lineOffsets, range.start);
+    const end = offsetAt(document.text, document.lineOffsets, range.end);
+    const before = document.text.slice(Math.max(0, start - 48), start);
+    const after = document.text.slice(end, Math.min(document.text.length, end + 32));
+    if (/\.\s*$/.test(before)) {
+      return false;
+    }
+    return /\)\s*$/.test(before)
+      || /:\s*$/.test(before)
+      || /\b[A-Za-z_][A-Za-z0-9_]*\s+$/.test(before) && /^\s*(?:,|\)|\{|$)/.test(after);
   }
 
   private requireDocument(uri: string): YcplDocument {

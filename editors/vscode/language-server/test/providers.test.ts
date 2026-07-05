@@ -52,6 +52,29 @@ test("hover, definition, rename, symbols, and semantic tokens work", () => {
   assert.ok(providers.semanticTokens({ textDocument: { uri: document.uri } }).data.length > 0);
 });
 
+test("definition distinguishes same-named struct fields and functions", () => {
+  const parser = new YcplParser();
+  const index = new WorkspaceIndex();
+  const document = parser.parse("file:///diagnostic.yc", 1, [
+    "pub struct Diagnostic {",
+    "    ok bool",
+    "    message string",
+    "}",
+    "",
+    "pub fn ok(path string) Diagnostic {",
+    "    return Diagnostic{ok: true, message: \"\"}",
+    "}"
+  ].join("\n"));
+  index.update(document);
+  const providers = new YcplProviders(index, new StandardLibraryIndex(undefined), new NullCompilerBridge());
+
+  const functionDefinition = providers.definition({ textDocument: { uri: document.uri }, position: Position.create(5, 8) })[0];
+  assert.deepEqual(functionDefinition.range.start, Position.create(5, 7));
+
+  const fieldDefinition = providers.definition({ textDocument: { uri: document.uri }, position: Position.create(6, 23) })[0];
+  assert.deepEqual(fieldDefinition.range.start, Position.create(1, 4));
+});
+
 test("formatting, folding, highlights, inlay hints, codelens, and call hierarchy work", async () => {
   const { document, providers } = fixture();
   assert.ok((await providers.formatDocument({ textDocument: { uri: document.uri }, options: { tabSize: 4, insertSpaces: true } })).length > 0);

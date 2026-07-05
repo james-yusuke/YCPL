@@ -28,6 +28,17 @@ interface Token {
   end: number;
 }
 
+interface Span {
+  start: number;
+  end: number;
+}
+
+interface StructBody extends Span {
+  name: string;
+  bodyStart: number;
+  bodyEnd: number;
+}
+
 /**
  * Parses enough YCPL syntax for editor services. The compiler bridge remains
  * the source of truth for complete parsing and typing when it is available.
@@ -41,7 +52,7 @@ export class YcplParser {
     const commentsAndStringsMasked = maskCommentsAndStrings(text, false);
 
     const imports = this.parseImports(text, lineOffsets);
-    const symbols = this.parseSymbols(uri, text, lineOffsets, tokens);
+    const symbols = this.parseSymbols(uri, text, lineOffsets, tokens, imports);
     const references = this.parseReferences(uri, commentsAndStringsMasked, lineOffsets, tokens);
     const calls = this.parseCalls(uri, commentsAndStringsMasked, lineOffsets);
     const diagnostics = this.parseDiagnostics(text, lineOffsets, symbols, imports);
@@ -78,8 +89,30 @@ export class YcplParser {
     return imports;
   }
 
-  private parseSymbols(uri: string, text: string, lineOffsets: number[], tokens: Token[]): YcplSymbol[] {
+  private parseSymbols(uri: string, text: string, lineOffsets: number[], tokens: Token[], imports: ImportInfo[]): YcplSymbol[] {
     const symbols: YcplSymbol[] = [];
+    for (const imported of imports) {
+      if (imported.alias && imported.aliasRange) {
+        symbols.push({
+          name: imported.alias,
+          category: "namespace",
+          kind: SymbolKind.Namespace,
+          uri,
+          range: imported.range,
+          selectionRange: imported.aliasRange,
+          detail: imported.modulePath,
+          exported: false
+        });
+      }
+    }
+
+    const structBodies = parseStructBodies(text, lineOffsets);
+    for (const body of structBodies) {
+      symbols.push(...parseStructFields(uri, text, lineOffsets, body));
+    }
+
+    const parameterSpans = functionParameterSpans(text);
+    const functionRanges = findFunctionBodies(text);
     for (let i = 0; i < tokens.length; i += 1) {
       const token = tokens[i];
       const previous = tokens[i - 1]?.text;
@@ -98,11 +131,11 @@ export class YcplParser {
       if (token.text === "struct" && next.text) {
         symbols.push(this.createSymbol(uri, text, lineOffsets, next, "struct", token.text, exported));
       }
-      if ((token.text === "const" || token.text === "mut") && next.text) {
-        symbols.push(this.createSymbol(uri, text, lineOffsets, next, token.text === "const" ? "constant" : "variable", this.variableDetail(text, next.end), exported));
+      if ((token.text === "const" || token.text === "mut") && next.text && !isInsideSpan(next, structBodies)) {
+        symbols.push(this.createSymbol(uri, text, lineOffsets, next, token.text === "const" ? "constant" : "variable", this.variableDetail(text, next.end), exported, enclosingFunctionName(next.start, functionRanges)));
       }
-      if (isLikelyVariableDeclaration(tokens, i)) {
-        symbols.push(this.createSymbol(uri, text, lineOffsets, token, "variable", this.variableDetail(text, token.end), false));
+      if (isLikelyVariableDeclaration(text, tokens, i, parameterSpans, structBodies)) {
+        symbols.push(this.createSymbol(uri, text, lineOffsets, token, "variable", this.variableDetail(text, token.end), false, enclosingFunctionName(token.start, functionRanges)));
       }
     }
 
@@ -155,7 +188,8 @@ export class YcplParser {
     name: Token,
     category: SymbolCategory,
     detail: string,
-    exported: boolean
+    exported: boolean,
+    containerName?: string
   ): YcplSymbol {
     return {
       name: name.text,
@@ -166,7 +200,8 @@ export class YcplParser {
       selectionRange: rangeFromOffsets(lineOffsets, name.start, name.end),
       detail,
       typeName: category === "variable" || category === "constant" ? parseTypeAfterName(text, name.end) : undefined,
-      exported
+      exported,
+      containerName
     };
   }
 
@@ -215,8 +250,8 @@ export class YcplParser {
     const diagnostics: ParsedDiagnostic[] = [];
     pushDelimiterDiagnostics(text, lineOffsets, diagnostics);
     const seen = new Map<string, YcplSymbol>();
-    for (const symbol of symbols.filter((entry) => entry.category !== "parameter")) {
-      const key = `${symbol.category}:${symbol.name}`;
+    for (const symbol of symbols.filter((entry) => shouldCheckDuplicate(entry))) {
+      const key = duplicateKey(symbol);
       const existing = seen.get(key);
       if (existing) {
         diagnostics.push({
@@ -314,6 +349,7 @@ function maskCommentsAndStrings(text: string, preserveImportStrings: boolean): s
 function kindForCategory(category: SymbolCategory): SymbolKind {
   switch (category) {
     case "function":
+      return SymbolKind.Function;
     case "constant":
       return SymbolKind.Constant;
     case "struct":
@@ -380,17 +416,35 @@ function parseReturnType(signatureTail: string): string | undefined {
   return match?.[1].replace(/\s+/g, "");
 }
 
-function isLikelyVariableDeclaration(tokens: Token[], index: number): boolean {
+function isLikelyVariableDeclaration(text: string, tokens: Token[], index: number, parameterSpans: Span[], structBodies: Span[]): boolean {
   const token = tokens[index];
   if (!token || declarationKeywords.has(token.text) || keywordSet.has(token.text) || primitiveSet.has(token.text)) {
     return false;
   }
-  const next = tokens[index + 1];
+  if (isInsideSpan(token, parameterSpans) || isInsideSpan(token, structBodies)) {
+    return false;
+  }
   const previous = tokens[index - 1];
   if (previous?.text === "fn" || previous?.text === "struct") {
     return false;
   }
-  return !!next && (next.start - token.end <= 4) && !keywordSet.has(next.text) && primitiveSet.has(next.text);
+
+  const after = text.slice(token.end, Math.min(text.length, token.end + 96));
+  return /^\s*:=/.test(after) || /^\s*:\s*(?:\*?\s*)?(?:\[\]\s*)?[A-Za-z_][A-Za-z0-9_]*\s*:=/.test(after);
+}
+
+function functionParameterSpans(text: string): Array<{ start: number; end: number }> {
+  const spans: Array<{ start: number; end: number }> = [];
+  const pattern = /\bfn\s+[A-Za-z_][A-Za-z0-9_]*\s*\(/g;
+  for (const match of text.matchAll(pattern)) {
+    const open = (match.index ?? 0) + match[0].length - 1;
+    const close = text.indexOf(")", open + 1);
+    const brace = text.indexOf("{", open + 1);
+    if (close > open && (brace < 0 || close < brace)) {
+      spans.push({ start: open + 1, end: close });
+    }
+  }
+  return spans;
 }
 
 function dedupeSymbols(symbols: YcplSymbol[]): YcplSymbol[] {
@@ -414,6 +468,80 @@ function findFunctionBodies(text: string): Array<{ name: string; start: number; 
     ranges.push({ name: match[1], start, end: findMatchingBrace(text, bodyStart) });
   }
   return ranges;
+}
+
+function parseStructBodies(text: string, lineOffsets: number[]): StructBody[] {
+  const bodies: StructBody[] = [];
+  const pattern = /\bstruct\s+([A-Za-z_][A-Za-z0-9_]*)[^{]*\{/g;
+  for (const match of text.matchAll(pattern)) {
+    const start = match.index ?? 0;
+    const open = start + match[0].length - 1;
+    const close = findMatchingBrace(text, open);
+    const nameStart = start + match[0].indexOf(match[1]);
+    if (close > open) {
+      bodies.push({
+        name: match[1],
+        start: nameStart,
+        end: close + 1,
+        bodyStart: open + 1,
+        bodyEnd: close
+      });
+    }
+  }
+  void lineOffsets;
+  return bodies;
+}
+
+function parseStructFields(uri: string, text: string, lineOffsets: number[], body: StructBody): YcplSymbol[] {
+  const fields: YcplSymbol[] = [];
+  const fieldPattern = /^\s*([A-Za-z_][A-Za-z0-9_]*)\s+(\*?\s*(?:\[\]\s*)?[A-Za-z_][A-Za-z0-9_]*)\s*$/gm;
+  const bodyText = text.slice(body.bodyStart, body.bodyEnd);
+  for (const match of bodyText.matchAll(fieldPattern)) {
+    const lineStart = body.bodyStart + (match.index ?? 0);
+    const nameStart = lineStart + match[0].indexOf(match[1]);
+    const nameEnd = nameStart + match[1].length;
+    const typeName = match[2].replace(/\s+/g, "");
+    fields.push({
+      name: match[1],
+      category: "field",
+      kind: SymbolKind.Field,
+      uri,
+      range: rangeFromOffsets(lineOffsets, nameStart, lineStart + match[0].length),
+      selectionRange: rangeFromOffsets(lineOffsets, nameStart, nameEnd),
+      detail: `${match[1]}: ${typeName}`,
+      typeName,
+      exported: false,
+      containerName: body.name
+    });
+  }
+  return fields;
+}
+
+function enclosingFunctionName(offset: number, functionRanges: Array<{ name: string; start: number; end: number }>): string | undefined {
+  return functionRanges.find((range) => offset >= range.start && offset <= range.end)?.name;
+}
+
+function isInsideSpan(token: Token, spans: Span[]): boolean {
+  return spans.some((span) => token.start >= span.start && token.end <= span.end);
+}
+
+function shouldCheckDuplicate(symbol: YcplSymbol): boolean {
+  return symbol.category === "function"
+    || symbol.category === "struct"
+    || symbol.category === "module"
+    || symbol.category === "package"
+    || symbol.category === "constant"
+    || symbol.category === "field";
+}
+
+function duplicateKey(symbol: YcplSymbol): string {
+  if (symbol.category === "field") {
+    return `${symbol.category}:${symbol.containerName ?? ""}:${symbol.name}`;
+  }
+  if (symbol.category === "constant" && symbol.containerName) {
+    return `${symbol.category}:${symbol.containerName}:${symbol.name}`;
+  }
+  return `${symbol.category}:${symbol.name}`;
 }
 
 function findMatchingBrace(text: string, open: number): number {
