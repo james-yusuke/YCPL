@@ -33,6 +33,27 @@ require_project_file_count() {
 
 "$YCC_YCPL" parse compiler/ycpl >/tmp/ycpl-stage-parse.out
 "$YCC_YCPL" check compiler/ycpl >/tmp/ycpl-stage-check.out
+eightarg_stage_dir="$(mktemp -d "${TMPDIR:-/tmp}/ycpl-stage-eightarg-check.XXXXXX")"
+cat >"$eightarg_stage_dir/eightarg.yc" <<'YCPL'
+extern fn sum8(a i32, b i32, c i32, d i32, e i32, f i32, g i32, h i32) i32 as "sum8"
+
+fn main() i32 {
+    return sum8(1, 2, 3, 1, 2, 1, 2, 1)
+}
+YCPL
+"$YCC_YCPL" check "$eightarg_stage_dir/eightarg.yc" >/tmp/ycpl-stage-eightarg-check.out
+grep -q 'value=13' /tmp/ycpl-stage-eightarg-check.out
+cat >"$eightarg_stage_dir/helper8.yc" <<'YCPL'
+fn sum8(a i32, b i32, c i32, d i32, e i32, f i32, g i32, h i32) i32 {
+    return a + b + c + d + e + f + g + h
+}
+
+fn main() i32 {
+    return sum8(1, 2, 3, 1, 2, 1, 2, 1)
+}
+YCPL
+"$YCC_YCPL" check "$eightarg_stage_dir/helper8.yc" >/tmp/ycpl-stage-helper8-check.out
+grep -q 'value=13' /tmp/ycpl-stage-helper8-check.out
 traversal_dir="$(mktemp -d "${TMPDIR:-/tmp}/ycpl-stage-traversal.XXXXXX")"
 cp -R compiler/ycpl "$traversal_dir/ycpl"
 mkdir -p "$traversal_dir/ycpl/src/generated/deep"
@@ -1435,6 +1456,10 @@ fi
 
 "$STAGE2" parse compiler/ycpl >/tmp/ycpl-stage2-parse.out
 "$STAGE2" check compiler/ycpl >/tmp/ycpl-stage2-check.out
+"$STAGE2" check "$eightarg_stage_dir/eightarg.yc" >/tmp/ycpl-stage2-eightarg-check.out
+grep -q 'value=13' /tmp/ycpl-stage2-eightarg-check.out
+"$STAGE2" check "$eightarg_stage_dir/helper8.yc" >/tmp/ycpl-stage2-helper8-check.out
+grep -q 'value=13' /tmp/ycpl-stage2-helper8-check.out
 require_project_file_count /tmp/ycpl-stage2-parse.out 23 "stage2 parse"
 require_project_file_count /tmp/ycpl-stage2-check.out 23 "stage2 check"
 grep -q 'fn_digest=' /tmp/ycpl-stage2-parse.out

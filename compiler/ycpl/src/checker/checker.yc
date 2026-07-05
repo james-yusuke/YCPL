@@ -424,14 +424,18 @@ fn set_struct2_field(p TinyParser, name string, field string, value i32) TinyPar
 }
 
 fn tiny_signature(param_count i32, param0_type i32, param1_type i32) i32 {
-    return tiny_signature6(param_count, param0_type, param1_type, 0, 0, 0, 0)
+    return tiny_signature8(param_count, param0_type, param1_type, 0, 0, 0, 0, 0, 0)
 }
 
 fn tiny_signature4(param_count i32, param0_type i32, param1_type i32, param2_type i32, param3_type i32) i32 {
-    return tiny_signature6(param_count, param0_type, param1_type, param2_type, param3_type, 0, 0)
+    return tiny_signature8(param_count, param0_type, param1_type, param2_type, param3_type, 0, 0, 0, 0)
 }
 
 fn tiny_signature6(param_count i32, param0_type i32, param1_type i32, param2_type i32, param3_type i32, param4_type i32, param5_type i32) i32 {
+    return tiny_signature8(param_count, param0_type, param1_type, param2_type, param3_type, param4_type, param5_type, 0, 0)
+}
+
+fn tiny_signature8(param_count i32, param0_type i32, param1_type i32, param2_type i32, param3_type i32, param4_type i32, param5_type i32, param6_type i32, param7_type i32) i32 {
     if param_count == 0 {
         return 0
     }
@@ -450,7 +454,13 @@ fn tiny_signature6(param_count i32, param0_type i32, param1_type i32, param2_typ
     if param_count == 5 {
         return param0_type + param1_type * 10 + param2_type * 100 + param3_type * 1000 + param4_type * 10000
     }
-    return param0_type + param1_type * 10 + param2_type * 100 + param3_type * 1000 + param4_type * 10000 + param5_type * 100000
+    if param_count == 6 {
+        return param0_type + param1_type * 10 + param2_type * 100 + param3_type * 1000 + param4_type * 10000 + param5_type * 100000
+    }
+    if param_count == 7 {
+        return param0_type + param1_type * 10 + param2_type * 100 + param3_type * 1000 + param4_type * 10000 + param5_type * 100000 + param6_type * 1000000
+    }
+    return param0_type + param1_type * 10 + param2_type * 100 + param3_type * 1000 + param4_type * 10000 + param5_type * 100000 + param6_type * 1000000 + param7_type * 10000000
 }
 
 fn tiny_signature_param(signature i32, index i32) i32 {
@@ -469,7 +479,13 @@ fn tiny_signature_param(signature i32, index i32) i32 {
     if index == 4 {
         return (signature / 10000) % 10
     }
-    return (signature / 100000) % 10
+    if index == 5 {
+        return (signature / 100000) % 10
+    }
+    if index == 6 {
+        return (signature / 1000000) % 10
+    }
+    return (signature / 10000000) % 10
 }
 
 fn reset_locals(p TinyParser) TinyParser {
@@ -1094,6 +1110,8 @@ fn parse_factor(p TinyParser) TinyParser {
             arg3_value := arg_value
             arg4_value := arg_value
             arg5_value := arg_value
+            arg6_value := arg_value
+            arg7_value := arg_value
             arg_count := 1
             if p.lx.kind == tok.comma() {
                 p = advance_sig(p)
@@ -1140,8 +1158,26 @@ fn parse_factor(p TinyParser) TinyParser {
                 arg5_value = p.value
                 arg_count = 6
             }
+            if p.lx.kind == tok.comma() {
+                p = advance_sig(p)
+                p = parse_expr_or_comparison(p)
+                if !p.ok { return p }
+                p = ensure_value_type(p, tiny_signature_param(callee_signature, 6), "self checker helper argument type mismatch")
+                if !p.ok { return p }
+                arg6_value = p.value
+                arg_count = 7
+            }
+            if p.lx.kind == tok.comma() {
+                p = advance_sig(p)
+                p = parse_expr_or_comparison(p)
+                if !p.ok { return p }
+                p = ensure_value_type(p, tiny_signature_param(callee_signature, 7), "self checker helper argument type mismatch")
+                if !p.ok { return p }
+                arg7_value = p.value
+                arg_count = 8
+            }
             if p.lx.kind != tok.rparen() {
-                return unsupported_parser(p, "self checker currently supports up to six helper arguments")
+                return unsupported_parser(p, "self checker currently supports up to eight helper arguments")
             }
             if callee_param_count != arg_count {
                 return unsupported_parser(p, "self checker helper call arity mismatch")
@@ -1160,8 +1196,12 @@ fn parse_factor(p TinyParser) TinyParser {
                 p.value = (arg_value + arg1_value + arg2_value + arg3_value + callee_value) * sign
             } else if arg_count == 5 {
                 p.value = (arg_value + arg1_value + arg2_value + arg3_value + arg4_value + callee_value) * sign
-            } else {
+            } else if arg_count == 6 {
                 p.value = (arg_value + arg1_value + arg2_value + arg3_value + arg4_value + arg5_value + callee_value) * sign
+            } else if arg_count == 7 {
+                p.value = (arg_value + arg1_value + arg2_value + arg3_value + arg4_value + arg5_value + arg6_value + callee_value) * sign
+            } else {
+                p.value = (arg_value + arg1_value + arg2_value + arg3_value + arg4_value + arg5_value + arg6_value + arg7_value + callee_value) * sign
             }
             p.value_type = callee_return_type
             if sign < 0 {
@@ -1495,6 +1535,8 @@ fn scan_extern_value(p TinyParser) TinyParser {
     param3_type := 0
     param4_type := 0
     param5_type := 0
+    param6_type := 0
+    param7_type := 0
     if p.lx.kind != tok.rparen() {
         if p.lx.kind != tok.ident() {
             return fail_parser(p, "expected extern parameter name")
@@ -1559,8 +1601,30 @@ fn scan_extern_value(p TinyParser) TinyParser {
             param5_type = p.value_type
             param_count = 6
         }
+        if p.lx.kind == tok.comma() {
+            p = advance_sig(p)
+            if p.lx.kind != tok.ident() {
+                return fail_parser(p, "expected extern parameter name")
+            }
+            p = advance_sig(p)
+            p = parse_type_name(p, "expected extern parameter type")
+            if !p.ok { return p }
+            param6_type = p.value_type
+            param_count = 7
+        }
+        if p.lx.kind == tok.comma() {
+            p = advance_sig(p)
+            if p.lx.kind != tok.ident() {
+                return fail_parser(p, "expected extern parameter name")
+            }
+            p = advance_sig(p)
+            p = parse_type_name(p, "expected extern parameter type")
+            if !p.ok { return p }
+            param7_type = p.value_type
+            param_count = 8
+        }
         if p.lx.kind != tok.rparen() {
-            return unsupported_parser(p, "self checker currently supports up to six extern parameters")
+            return unsupported_parser(p, "self checker currently supports up to eight extern parameters")
         }
     }
     p = advance_sig(p)
@@ -1584,7 +1648,7 @@ fn scan_extern_value(p TinyParser) TinyParser {
     if return_type == tiny_string_type_kind() || return_type == tiny_bool_type_kind() || return_type == tiny_ptr_type_kind() {
         value = 1
     }
-    signature := tiny_signature6(param_count, param0_type, param1_type, param2_type, param3_type, param4_type, param5_type)
+    signature := tiny_signature8(param_count, param0_type, param1_type, param2_type, param3_type, param4_type, param5_type, param6_type, param7_type)
     return add_helper(p, source_name, value, param_count, signature, return_type)
 }
 
@@ -2180,8 +2244,20 @@ fn parse_function(p TinyParser) TinyParser {
     param_count := 0
     param_name := ""
     param1_name := ""
+    param2_name := ""
+    param3_name := ""
+    param4_name := ""
+    param5_name := ""
+    param6_name := ""
+    param7_name := ""
     param0_type := tiny_i32_type_kind()
     param1_type := tiny_i32_type_kind()
+    param2_type := tiny_i32_type_kind()
+    param3_type := tiny_i32_type_kind()
+    param4_type := tiny_i32_type_kind()
+    param5_type := tiny_i32_type_kind()
+    param6_type := tiny_i32_type_kind()
+    param7_type := tiny_i32_type_kind()
     if p.lx.kind != tok.rparen() {
         if is_main {
             return unsupported_parser(p, "self checker does not support main parameters yet")
@@ -2207,8 +2283,80 @@ fn parse_function(p TinyParser) TinyParser {
             param1_type = p.value_type
             param_count = 2
         }
+        if p.lx.kind == tok.comma() {
+            p = advance_sig(p)
+            if p.lx.kind != tok.ident() {
+                return fail_parser(p, "expected parameter name")
+            }
+            param2_name = p.lx.lexeme
+            p = advance_sig(p)
+            p = parse_type_name(p, "expected parameter type")
+            if !p.ok { return p }
+            param2_type = p.value_type
+            param_count = 3
+        }
+        if p.lx.kind == tok.comma() {
+            p = advance_sig(p)
+            if p.lx.kind != tok.ident() {
+                return fail_parser(p, "expected parameter name")
+            }
+            param3_name = p.lx.lexeme
+            p = advance_sig(p)
+            p = parse_type_name(p, "expected parameter type")
+            if !p.ok { return p }
+            param3_type = p.value_type
+            param_count = 4
+        }
+        if p.lx.kind == tok.comma() {
+            p = advance_sig(p)
+            if p.lx.kind != tok.ident() {
+                return fail_parser(p, "expected parameter name")
+            }
+            param4_name = p.lx.lexeme
+            p = advance_sig(p)
+            p = parse_type_name(p, "expected parameter type")
+            if !p.ok { return p }
+            param4_type = p.value_type
+            param_count = 5
+        }
+        if p.lx.kind == tok.comma() {
+            p = advance_sig(p)
+            if p.lx.kind != tok.ident() {
+                return fail_parser(p, "expected parameter name")
+            }
+            param5_name = p.lx.lexeme
+            p = advance_sig(p)
+            p = parse_type_name(p, "expected parameter type")
+            if !p.ok { return p }
+            param5_type = p.value_type
+            param_count = 6
+        }
+        if p.lx.kind == tok.comma() {
+            p = advance_sig(p)
+            if p.lx.kind != tok.ident() {
+                return fail_parser(p, "expected parameter name")
+            }
+            param6_name = p.lx.lexeme
+            p = advance_sig(p)
+            p = parse_type_name(p, "expected parameter type")
+            if !p.ok { return p }
+            param6_type = p.value_type
+            param_count = 7
+        }
+        if p.lx.kind == tok.comma() {
+            p = advance_sig(p)
+            if p.lx.kind != tok.ident() {
+                return fail_parser(p, "expected parameter name")
+            }
+            param7_name = p.lx.lexeme
+            p = advance_sig(p)
+            p = parse_type_name(p, "expected parameter type")
+            if !p.ok { return p }
+            param7_type = p.value_type
+            param_count = 8
+        }
         if p.lx.kind != tok.rparen() {
-            return unsupported_parser(p, "self checker currently supports up to two helper parameters")
+            return unsupported_parser(p, "self checker currently supports up to eight helper parameters")
         }
     }
 
@@ -2236,6 +2384,78 @@ fn parse_function(p TinyParser) TinyParser {
         p = set_var(p, param_name, 0, param0_type)
         if !p.ok { return p }
         p = set_var(p, param1_name, 0, param1_type)
+        if !p.ok { return p }
+    } else if param_count == 3 {
+        p = set_var(p, param_name, 0, param0_type)
+        if !p.ok { return p }
+        p = set_var(p, param1_name, 0, param1_type)
+        if !p.ok { return p }
+        p = set_var(p, param2_name, 0, param2_type)
+        if !p.ok { return p }
+    } else if param_count == 4 {
+        p = set_var(p, param_name, 0, param0_type)
+        if !p.ok { return p }
+        p = set_var(p, param1_name, 0, param1_type)
+        if !p.ok { return p }
+        p = set_var(p, param2_name, 0, param2_type)
+        if !p.ok { return p }
+        p = set_var(p, param3_name, 0, param3_type)
+        if !p.ok { return p }
+    } else if param_count == 5 {
+        p = set_var(p, param_name, 0, param0_type)
+        if !p.ok { return p }
+        p = set_var(p, param1_name, 0, param1_type)
+        if !p.ok { return p }
+        p = set_var(p, param2_name, 0, param2_type)
+        if !p.ok { return p }
+        p = set_var(p, param3_name, 0, param3_type)
+        if !p.ok { return p }
+        p = set_var(p, param4_name, 0, param4_type)
+        if !p.ok { return p }
+    } else if param_count == 6 {
+        p = set_var(p, param_name, 0, param0_type)
+        if !p.ok { return p }
+        p = set_var(p, param1_name, 0, param1_type)
+        if !p.ok { return p }
+        p = set_var(p, param2_name, 0, param2_type)
+        if !p.ok { return p }
+        p = set_var(p, param3_name, 0, param3_type)
+        if !p.ok { return p }
+        p = set_var(p, param4_name, 0, param4_type)
+        if !p.ok { return p }
+        p = set_var(p, param5_name, 0, param5_type)
+        if !p.ok { return p }
+    } else if param_count == 7 {
+        p = set_var(p, param_name, 0, param0_type)
+        if !p.ok { return p }
+        p = set_var(p, param1_name, 0, param1_type)
+        if !p.ok { return p }
+        p = set_var(p, param2_name, 0, param2_type)
+        if !p.ok { return p }
+        p = set_var(p, param3_name, 0, param3_type)
+        if !p.ok { return p }
+        p = set_var(p, param4_name, 0, param4_type)
+        if !p.ok { return p }
+        p = set_var(p, param5_name, 0, param5_type)
+        if !p.ok { return p }
+        p = set_var(p, param6_name, 0, param6_type)
+        if !p.ok { return p }
+    } else if param_count == 8 {
+        p = set_var(p, param_name, 0, param0_type)
+        if !p.ok { return p }
+        p = set_var(p, param1_name, 0, param1_type)
+        if !p.ok { return p }
+        p = set_var(p, param2_name, 0, param2_type)
+        if !p.ok { return p }
+        p = set_var(p, param3_name, 0, param3_type)
+        if !p.ok { return p }
+        p = set_var(p, param4_name, 0, param4_type)
+        if !p.ok { return p }
+        p = set_var(p, param5_name, 0, param5_type)
+        if !p.ok { return p }
+        p = set_var(p, param6_name, 0, param6_type)
+        if !p.ok { return p }
+        p = set_var(p, param7_name, 0, param7_type)
         if !p.ok { return p }
     }
     if is_main {
@@ -2269,7 +2489,7 @@ fn parse_function(p TinyParser) TinyParser {
         }
     }
     if !is_main {
-        signature := tiny_signature(param_count, param0_type, param1_type)
+        signature := tiny_signature8(param_count, param0_type, param1_type, param2_type, param3_type, param4_type, param5_type, param6_type, param7_type)
         p = add_helper(p, name, p.return_value, param_count, signature, return_type)
         if !p.ok { return p }
         p.helper_param_name = param_name

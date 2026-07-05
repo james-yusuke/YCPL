@@ -101,12 +101,7 @@ export class YcplProviders {
       return this.memberCompletions(document, alias, await this.stdlib.completionItems());
     }
 
-    const localItems = document.symbols.map(symbolToCompletion);
-    const workspaceItems = this.index.workspaceSymbols("").map((symbol) => ({
-      label: symbol.name,
-      kind: CompletionItemKind.Reference,
-      detail: symbol.containerName
-    }));
+    const localItems = this.visibleSymbolsForPosition(document, params.position).map(symbolToCompletion);
     const stdItems = (await this.stdlib.completionItems()).map((item) => ({
       label: item.label,
       kind: item.kind,
@@ -123,7 +118,6 @@ export class YcplProviders {
         detail: "YCPL main function"
       },
       ...localItems,
-      ...workspaceItems,
       ...stdItems
     ];
   }
@@ -168,21 +162,23 @@ export class YcplProviders {
 
   /** Provides references for the symbol under the cursor. */
   references(params: ReferenceParams): Location[] {
-    const word = this.wordFor(params.textDocument.uri, params.position);
-    if (!word) {
+    const document = this.requireDocument(params.textDocument.uri);
+    const symbol = this.symbolForPosition(document, params.position);
+    if (!symbol) {
       return [];
     }
-    return this.index.findReferences(word.word, params.context.includeDeclaration);
+    return this.index.findReferencesBySymbolId(symbol.id, params.context.includeDeclaration);
   }
 
   /** Provides safe workspace edits for symbol renames. */
   rename(params: RenameParams): WorkspaceEdit | undefined {
-    const word = this.wordFor(params.textDocument.uri, params.position);
-    if (!word) {
+    const document = this.requireDocument(params.textDocument.uri);
+    const symbol = this.symbolForPosition(document, params.position);
+    if (!symbol) {
       return undefined;
     }
     const changes: Record<string, TextEdit[]> = {};
-    for (const location of this.index.findReferences(word.word, true)) {
+    for (const location of this.index.findReferencesBySymbolId(symbol.id, true)) {
       changes[location.uri] = changes[location.uri] ?? [];
       changes[location.uri].push(TextEdit.replace(location.range, params.newName));
     }
@@ -191,7 +187,8 @@ export class YcplProviders {
 
   /** Validates a rename request and returns the target range. */
   prepareRename(params: PrepareRenameParams): Range | undefined {
-    return this.wordFor(params.textDocument.uri, params.position)?.range;
+    const document = this.requireDocument(params.textDocument.uri);
+    return this.index.referenceAt(document.uri, params.position)?.range ?? this.index.declarationAt(document.uri, params.position)?.selectionRange;
   }
 
   /** Provides outline symbols for one document. */
@@ -216,8 +213,7 @@ export class YcplProviders {
     if (!match) {
       return undefined;
     }
-    const name = match[2] ?? match[1];
-    const symbol = this.index.findDefinitionWhere(name, document.uri, (entry) => entry.category === "function")?.symbol;
+    const symbol = this.functionSymbolForCallMatch(document, match, offset - prefix.length + (match.index ?? 0));
     if (!symbol?.parameters) {
       return undefined;
     }
@@ -337,11 +333,12 @@ export class YcplProviders {
 
   /** Highlights all occurrences of the current symbol in the document. */
   documentHighlight(params: DocumentHighlightParams): DocumentHighlight[] {
-    const word = this.wordFor(params.textDocument.uri, params.position);
-    if (!word) {
+    const document = this.requireDocument(params.textDocument.uri);
+    const symbol = this.symbolForPosition(document, params.position);
+    if (!symbol) {
       return [];
     }
-    return this.index.findReferences(word.word, true)
+    return this.index.findReferencesBySymbolId(symbol.id, true)
       .filter((location) => location.uri === params.textDocument.uri)
       .map((location) => DocumentHighlight.create(location.range, DocumentHighlightKind.Text));
   }
@@ -375,7 +372,7 @@ export class YcplProviders {
     return document.symbols
       .filter((symbol) => symbol.category === "function" || isTypeCategory(symbol.category))
       .map((symbol) => CodeLens.create(symbol.selectionRange, {
-        title: `${Math.max(0, this.index.findReferences(symbol.name, false).length)} references`,
+        title: `${Math.max(0, this.index.findReferencesBySymbolId(symbol.id, false).length)} references`,
         command: ""
       }));
   }
@@ -391,14 +388,18 @@ export class YcplProviders {
 
   /** Returns incoming calls for a function. */
   incomingCalls(item: CallHierarchyItem): CallHierarchyIncomingCall[] {
+    const symbolId = callHierarchySymbolId(item);
+    if (!symbolId) {
+      return [];
+    }
     const incoming = new Map<string, CallHierarchyIncomingCall>();
     for (const document of this.index.allDocuments()) {
-      for (const call of document.calls.filter((entry) => entry.callee === item.name)) {
-        const caller = this.index.findDefinition(call.caller, document.uri)?.symbol;
-        if (!caller) {
+      for (const call of document.calls.filter((entry) => entry.calleeSymbolId === symbolId)) {
+        const caller = this.index.symbolById(call.callerSymbolId);
+        if (!caller || caller.category !== "function") {
           continue;
         }
-        const key = `${caller.uri}:${caller.name}`;
+        const key = caller.id;
         const existing = incoming.get(key);
         if (existing) {
           existing.fromRanges.push(call.range);
@@ -412,17 +413,21 @@ export class YcplProviders {
 
   /** Returns outgoing calls for a function. */
   outgoingCalls(item: CallHierarchyItem): CallHierarchyOutgoingCall[] {
+    const symbolId = callHierarchySymbolId(item);
+    if (!symbolId) {
+      return [];
+    }
     const document = this.index.getDocument(item.uri);
     if (!document) {
       return [];
     }
     const outgoing = new Map<string, CallHierarchyOutgoingCall>();
-    for (const call of document.calls.filter((entry) => entry.caller === item.name)) {
-      const callee = this.index.findDefinition(call.callee, document.uri)?.symbol;
-      if (!callee) {
+    for (const call of document.calls.filter((entry) => entry.callerSymbolId === symbolId)) {
+      const callee = this.index.symbolById(call.calleeSymbolId);
+      if (!callee || callee.category !== "function") {
         continue;
       }
-      const key = `${callee.uri}:${callee.name}`;
+      const key = callee.id;
       const existing = outgoing.get(key);
       if (existing) {
         existing.fromRanges.push(call.range);
@@ -464,96 +469,47 @@ export class YcplProviders {
     return [...stdlibMembers, ...workspaceMembers];
   }
 
-  private wordFor(uri: string, position: Position) {
-    const document = this.requireDocument(uri);
-    return wordAtPosition(document.text, document.lineOffsets, position);
-  }
-
   private symbolForPosition(document: YcplDocument, position: Position): YcplSymbol | undefined {
-    const word = wordAtPosition(document.text, document.lineOffsets, position);
-    if (!word) {
-      return undefined;
-    }
-
     const declared = this.index.declarationAt(document.uri, position);
-    if (declared?.name === word.word) {
+    if (declared) {
       return declared;
     }
+    return this.index.symbolById(this.index.referenceAt(document.uri, position)?.symbolId);
+  }
 
-    const literalField = this.structLiteralFieldSymbol(document, word.range);
-    if (literalField?.name === word.word) {
-      return literalField;
-    }
-
-    if (this.isFunctionCall(document, word.range)) {
-      return this.index.findDefinitionWhere(word.word, document.uri, (entry) => entry.category === "function")?.symbol;
-    }
-
-    if (this.isTypeContext(document, word.range)) {
-      const type = this.index.findDefinitionWhere(word.word, document.uri, (entry) => entry.category === "struct")?.symbol;
-      if (type) {
-        return type;
-      }
-    }
-
-    return this.index.findDefinitionWhere(word.word, document.uri, (entry) => entry.category !== "field")?.symbol
-      ?? this.index.findDefinition(word.word, document.uri)?.symbol;
+  private functionSymbolForCallMatch(document: YcplDocument, match: RegExpMatchArray, matchStart: number): YcplSymbol | undefined {
+    const name = match[2] ?? match[1];
+    const paren = match[0].lastIndexOf("(");
+    const beforeParen = match[0].slice(0, paren).replace(/\s+$/u, "");
+    const calleeStart = matchStart + beforeParen.length - name.length;
+    const symbol = this.index.symbolById(this.index.referenceAt(document.uri, positionAtIndex(document, calleeStart))?.symbolId);
+    return symbol?.category === "function" ? symbol : undefined;
   }
 
   private semanticKindForReference(document: YcplDocument, reference: SymbolReference): SemanticKind | undefined {
-    const field = this.structLiteralFieldSymbol(document, reference.range);
-    if (field?.name === reference.name) {
-      return "property";
-    }
-    if (this.isFunctionCall(document, reference.range)) {
-      return "function";
-    }
-    if (this.isTypeContext(document, reference.range)) {
-      const type = this.index.findDefinitionWhere(reference.name, document.uri, (entry) => entry.category === "struct")?.symbol;
-      if (type) {
-        return "struct";
-      }
-    }
-    const symbol = this.index.findDefinitionWhere(reference.name, document.uri, (entry) => entry.category !== "field")?.symbol;
+    const symbol = this.index.symbolById(reference.symbolId);
     return symbol ? categoryToSemanticKind(symbol.category) : undefined;
   }
 
-  private structLiteralFieldSymbol(document: YcplDocument, range: Range): YcplSymbol | undefined {
-    const start = offsetAt(document.text, document.lineOffsets, range.start);
-    const end = offsetAt(document.text, document.lineOffsets, range.end);
-    if (!/^\s*:/.test(document.text.slice(end, Math.min(document.text.length, end + 16)))) {
-      return undefined;
+  private visibleSymbolsForPosition(document: YcplDocument, position: Position): YcplSymbol[] {
+    const offset = offsetAt(document.text, document.lineOffsets, position);
+    const scopesById = new Map(document.scopes.map((scope) => [scope.id, scope]));
+    let scope: YcplDocument["scopes"][number] | undefined = document.scopes
+      .filter((candidate) => offset >= candidate.startOffset && offset <= candidate.endOffset)
+      .sort((left, right) => (left.endOffset - left.startOffset) - (right.endOffset - right.startOffset))[0];
+    const visible: YcplSymbol[] = [];
+    const seen = new Set<string>();
+    while (scope) {
+      const scoped = document.symbols.filter((symbol) => symbol.scopeId === scope?.id && symbol.category !== "field");
+      for (const symbol of scoped) {
+        if (!seen.has(symbol.name)) {
+          visible.push(symbol);
+          seen.add(symbol.name);
+        }
+      }
+      scope = scope.parentId ? scopesById.get(scope.parentId) : undefined;
     }
-
-    const open = document.text.lastIndexOf("{", start);
-    if (open < 0) {
-      return undefined;
-    }
-    const typeMatch = document.text.slice(0, open).match(/([A-Za-z_][A-Za-z0-9_]*)\s*$/);
-    const typeName = typeMatch?.[1];
-    if (!typeName) {
-      return undefined;
-    }
-    const word = document.text.slice(start, end);
-    return this.index.symbolsNamed(word).find((symbol) => symbol.category === "field" && symbol.containerName === typeName);
-  }
-
-  private isFunctionCall(document: YcplDocument, range: Range): boolean {
-    const end = offsetAt(document.text, document.lineOffsets, range.end);
-    return /^\s*\(/.test(document.text.slice(end, Math.min(document.text.length, end + 16)));
-  }
-
-  private isTypeContext(document: YcplDocument, range: Range): boolean {
-    const start = offsetAt(document.text, document.lineOffsets, range.start);
-    const end = offsetAt(document.text, document.lineOffsets, range.end);
-    const before = document.text.slice(Math.max(0, start - 48), start);
-    const after = document.text.slice(end, Math.min(document.text.length, end + 32));
-    if (/\.\s*$/.test(before)) {
-      return false;
-    }
-    return /\)\s*$/.test(before)
-      || /:\s*$/.test(before)
-      || /\b[A-Za-z_][A-Za-z0-9_]*\s+$/.test(before) && /^\s*(?:,|\)|\{|$)/.test(after);
+    return visible;
   }
 
   private requireDocument(uri: string): YcplDocument {
@@ -673,6 +629,14 @@ function toCallHierarchyItem(symbol: YcplSymbol): CallHierarchyItem {
     detail: symbol.detail ?? "",
     uri: symbol.uri,
     range: symbol.range,
-    selectionRange: symbol.selectionRange
+    selectionRange: symbol.selectionRange,
+    data: { symbolId: symbol.id }
   };
+}
+
+function callHierarchySymbolId(item: CallHierarchyItem): string | undefined {
+  const data = item.data;
+  return typeof data === "object" && data !== null && "symbolId" in data && typeof data.symbolId === "string"
+    ? data.symbolId
+    : undefined;
 }

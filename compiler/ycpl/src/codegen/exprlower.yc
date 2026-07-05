@@ -39,7 +39,7 @@ fn lower_call_expr_node(builder *byte, i32_type *byte, fn_type *byte, call_helpe
     node_value := llvm.const_int(i32_type, kind + meta + pos, 1)
     if op_kind > 0 {
         arity_value := llvm.const_int(i32_type, op_kind - 1, 1)
-        node_value = llvm.build_add(builder, node_value, arity_value, "expr_lower_call_resolved_arity_value")
+        call_value = llvm.build_add(builder, call_value, arity_value, "expr_lower_call_resolved_arity_value")
     }
     call_node_value := llvm.build_add(builder, call_value, node_value, "expr_lower_call_node_value")
     next_score := llvm.build_add(builder, loaded_score, call_node_value, "expr_lower_call_score")
@@ -241,12 +241,13 @@ fn lower_expr_value_node(ctx *byte, builder *byte, i32_type *byte, fn_type *byte
     } else if kind == astexpr.call_expr_kind() {
         call_value := llvm.build_call2(builder, fn_type, call_helper, none, 0, "function_expr_call_value")
         call_seed := seed
+        call_state := llvm.build_add(builder, call_value, call_seed, "function_expr_call_value_state")
         if op_kind > 0 {
             arity_value := llvm.const_int(i32_type, op_kind - 1, 1)
-            call_seed = llvm.build_add(builder, seed, arity_value, "function_expr_call_resolved_arity_value")
-            next_value = llvm.build_add(builder, call_value, call_seed, "function_expr_call_resolved_arity_state")
+            call_state = llvm.build_add(builder, call_state, arity_value, "function_expr_call_resolved_arity_value")
+            next_value = llvm.build_add(builder, call_state, call_seed, "function_expr_call_resolved_arity_state")
         } else {
-            next_value = llvm.build_add(builder, call_value, call_seed, "function_expr_call_value_state")
+            next_value = call_state
         }
         if type_kind > 16 {
             if op_kind > 0 {

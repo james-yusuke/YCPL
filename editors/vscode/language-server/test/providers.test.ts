@@ -75,6 +75,72 @@ test("definition distinguishes same-named struct fields and functions", () => {
   assert.deepEqual(fieldDefinition.range.start, Position.create(1, 4));
 });
 
+test("definition and rename use resolved symbol ids for shadowed locals", () => {
+  const parser = new YcplParser();
+  const index = new WorkspaceIndex();
+  const document = parser.parse("file:///shadow.yc", 1, [
+    "value := 10",
+    "fn test() i32 {",
+    "    value := 20",
+    "    return value",
+    "}",
+    "fn other() i32 {",
+    "    return value",
+    "}"
+  ].join("\n"));
+  index.update(document);
+  const providers = new YcplProviders(index, new StandardLibraryIndex(undefined), new NullCompilerBridge());
+
+  const innerDefinition = providers.definition({ textDocument: { uri: document.uri }, position: Position.create(3, 13) })[0];
+  assert.deepEqual(innerDefinition.range.start, Position.create(2, 4));
+
+  const outerDefinition = providers.definition({ textDocument: { uri: document.uri }, position: Position.create(6, 13) })[0];
+  assert.deepEqual(outerDefinition.range.start, Position.create(0, 0));
+
+  const edit = providers.rename({ textDocument: { uri: document.uri }, position: Position.create(3, 13), newName: "inner" });
+  assert.deepEqual(edit?.changes?.[document.uri]?.map((change) => change.range.start), [
+    Position.create(2, 4),
+    Position.create(3, 11)
+  ]);
+});
+
+test("rename does not cross files by matching names", () => {
+  const parser = new YcplParser();
+  const index = new WorkspaceIndex();
+  const first = parser.parse("file:///file1.yc", 1, "value := 10\nfn one() i32 {\n    return value\n}");
+  const second = parser.parse("file:///file2.yc", 1, "value := 20\nfn two() i32 {\n    return value\n}");
+  index.update(first);
+  index.update(second);
+  const providers = new YcplProviders(index, new StandardLibraryIndex(undefined), new NullCompilerBridge());
+
+  const edit = providers.rename({ textDocument: { uri: first.uri }, position: Position.create(2, 13), newName: "renamed" });
+  assert.ok(edit?.changes?.[first.uri]);
+  assert.equal(edit?.changes?.[second.uri], undefined);
+});
+
+test("block scopes shadow outer symbols", () => {
+  const parser = new YcplParser();
+  const index = new WorkspaceIndex();
+  const document = parser.parse("file:///blocks.yc", 1, [
+    "value := 1",
+    "fn test(flag bool) i32 {",
+    "    if flag {",
+    "        value := 2",
+    "        return value",
+    "    }",
+    "    return value",
+    "}"
+  ].join("\n"));
+  index.update(document);
+  const providers = new YcplProviders(index, new StandardLibraryIndex(undefined), new NullCompilerBridge());
+
+  const innerDefinition = providers.definition({ textDocument: { uri: document.uri }, position: Position.create(4, 16) })[0];
+  assert.deepEqual(innerDefinition.range.start, Position.create(3, 8));
+
+  const outerDefinition = providers.definition({ textDocument: { uri: document.uri }, position: Position.create(6, 12) })[0];
+  assert.deepEqual(outerDefinition.range.start, Position.create(0, 0));
+});
+
 test("formatting, folding, highlights, inlay hints, codelens, and call hierarchy work", async () => {
   const { document, providers } = fixture();
   assert.ok((await providers.formatDocument({ textDocument: { uri: document.uri }, options: { tabSize: 4, insertSpaces: true } })).length > 0);

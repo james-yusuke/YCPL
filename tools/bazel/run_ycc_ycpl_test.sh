@@ -160,6 +160,27 @@ grep -q 'value=13' /tmp/ycc-ycpl-check-param.out
 grep -q 'value=13' /tmp/ycc-ycpl-check-chain.out
 "$YCC_YCPL" check examples/61_self_codegen_two_arg_call.yc >/tmp/ycc-ycpl-check-twoarg.out
 grep -q 'value=13' /tmp/ycc-ycpl-check-twoarg.out
+eightarg_dir="$(mktemp -d "${TMPDIR:-/tmp}/ycpl-eightarg-check.XXXXXX")"
+cat >"$eightarg_dir/eightarg.yc" <<'YCPL'
+extern fn sum8(a i32, b i32, c i32, d i32, e i32, f i32, g i32, h i32) i32 as "sum8"
+
+fn main() i32 {
+    return sum8(1, 2, 3, 1, 2, 1, 2, 1)
+}
+YCPL
+"$YCC_YCPL" check "$eightarg_dir/eightarg.yc" >/tmp/ycc-ycpl-check-eightarg.out
+grep -q 'value=13' /tmp/ycc-ycpl-check-eightarg.out
+cat >"$eightarg_dir/helper8.yc" <<'YCPL'
+fn sum8(a i32, b i32, c i32, d i32, e i32, f i32, g i32, h i32) i32 {
+    return a + b + c + d + e + f + g + h
+}
+
+fn main() i32 {
+    return sum8(1, 2, 3, 1, 2, 1, 2, 1)
+}
+YCPL
+"$YCC_YCPL" check "$eightarg_dir/helper8.yc" >/tmp/ycc-ycpl-check-helper8.out
+grep -q 'value=13' /tmp/ycc-ycpl-check-helper8.out
 "$YCC_YCPL" check examples/62_self_codegen_forward_call.yc >/tmp/ycc-ycpl-check-forward.out
 grep -q 'value=13' /tmp/ycc-ycpl-check-forward.out
 "$YCC_YCPL" check examples/63_self_codegen_bool_condition.yc >/tmp/ycc-ycpl-check-bool.out
