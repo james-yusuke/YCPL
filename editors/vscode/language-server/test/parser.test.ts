@@ -25,13 +25,16 @@ test("parser indexes declarations, imports, and references", () => {
 });
 
 test("workspace index resolves local definitions and references", () => {
-  const document = parser.parse("file:///sample.yc", 1, "fn main() i32 {\n    value i32\n    return value\n}");
+  const document = parser.parse("file:///sample.yc", 1, "fn main() i32 {\n    value := 1\n    return value\n}");
   const index = new WorkspaceIndex();
   index.update(document);
 
-  const definition = index.findDefinition("main", document.uri);
-  assert.equal(definition?.symbol.name, "main");
-  assert.ok(index.findReferences("value", true).length >= 1);
+  const definition = index.declarationAt(document.uri, Position.create(0, 3));
+  assert.equal(definition?.name, "main");
+  const reference = index.referenceAt(document.uri, Position.create(2, 13));
+  assert.equal(index.symbolById(reference?.symbolId)?.name, "value");
+  assert.ok(reference?.symbolId);
+  assert.ok(index.findReferencesBySymbolId(reference.symbolId, true).length >= 2);
   assert.equal(index.symbolAt(document.uri, Position.create(0, 3))?.name, "main");
 });
 
@@ -63,4 +66,31 @@ test("struct fields are indexed as fields, not variables", () => {
   assert.equal(document.symbols.some((symbol) => symbol.name === "ok" && symbol.category === "function"), true);
   assert.equal(document.symbols.some((symbol) => symbol.name === "ok" && symbol.category === "variable"), false);
   assert.equal(document.diagnostics.some((diagnostic) => diagnostic.message.includes("Duplicate variable 'ok'")), false);
+});
+
+test("strings are not indexed as declarations", () => {
+  const document = parser.parse("file:///strings.yc", 1, [
+    "fn message() string {",
+    "    return \"expected '{' after struct name\"",
+    "}"
+  ].join("\n"));
+
+  assert.equal(document.symbols.some((symbol) => symbol.name === "name" && symbol.category === "struct"), false);
+  assert.equal(document.diagnostics.some((diagnostic) => diagnostic.message.includes("Duplicate struct 'name'")), false);
+});
+
+test("return statements are not indexed as struct fields", () => {
+  const document = parser.parse("file:///return.yc", 1, [
+    "struct Result {",
+    "    ok bool",
+    "}",
+    "",
+    "fn validate(p Result) Result {",
+    "    if !p.ok { return p }",
+    "    return p",
+    "}"
+  ].join("\n"));
+
+  assert.equal(document.symbols.some((symbol) => symbol.name === "return" && symbol.category === "field"), false);
+  assert.equal(document.diagnostics.some((diagnostic) => diagnostic.message.includes("Duplicate field 'return'")), false);
 });

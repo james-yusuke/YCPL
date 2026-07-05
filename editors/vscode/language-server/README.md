@@ -6,10 +6,10 @@ run by any LSP-capable editor.
 
 ## Architecture
 
-- `analysis/parser.ts` extracts editor-facing declarations, references, imports,
-  calls, and lightweight diagnostics from YCPL source.
+- `analysis/parser.ts` extracts editor-facing scopes, declarations, references,
+  imports, calls, and lightweight diagnostics from YCPL source.
 - `analysis/workspaceIndex.ts` stores the incremental workspace symbol and
-  reference index.
+  reference index keyed by `SymbolID`, not by identifier text.
 - `analysis/workspaceScanner.ts` lazily scans `.yc` files, skipping build and
   dependency directories.
 - `analysis/stdlib.ts` discovers YCPL standard-library modules and exported
@@ -24,6 +24,15 @@ run by any LSP-capable editor.
 - Standard-library member completion can attach LSP `additionalTextEdits`, so
   accepting `fmt.println`-style completions can add the missing `import` line.
 - `server.ts` wires the providers to `vscode-languageserver`.
+
+## Symbol Resolution
+
+Each declaration receives a stable `SymbolID` and belongs to a concrete scope.
+References are resolved through the current scope, parent scopes, and the module
+root before LSP providers see them. Go to Definition, Find References, Rename,
+Hover, semantic highlighting, code lens, signature help, and call hierarchy use
+the resolved `SymbolID` instead of global name matching, so shadowed locals and
+same-named symbols in different files remain independent.
 
 ## Build And Test
 

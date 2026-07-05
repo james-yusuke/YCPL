@@ -1,5 +1,4 @@
 import {
-  type Location,
   type Position,
   type Range,
   SymbolKind
@@ -75,6 +74,19 @@ export const semanticTokenModifiers = [
 ] as const;
 
 export type SemanticKind = typeof semanticTokenTypes[number];
+export type SymbolId = string;
+export type ScopeId = string;
+
+export type ScopeKind =
+  | "global"
+  | "module"
+  | "namespace"
+  | "function"
+  | "struct"
+  | "block"
+  | "if"
+  | "else"
+  | "for";
 
 export type SymbolCategory =
   | "function"
@@ -93,11 +105,24 @@ export interface YcplDocument {
   text: string;
   lineOffsets: number[];
   moduleName?: string;
+  scopes: YcplScope[];
   imports: ImportInfo[];
   symbols: YcplSymbol[];
   references: SymbolReference[];
   calls: CallInfo[];
   diagnostics: ParsedDiagnostic[];
+}
+
+export interface YcplScope {
+  id: ScopeId;
+  kind: ScopeKind;
+  uri: string;
+  range: Range;
+  startOffset: number;
+  endOffset: number;
+  parentId?: ScopeId;
+  ownerSymbolId?: SymbolId;
+  name?: string;
 }
 
 export interface ImportInfo {
@@ -108,6 +133,7 @@ export interface ImportInfo {
 }
 
 export interface YcplSymbol {
+  id: SymbolId;
   name: string;
   category: SymbolCategory;
   kind: SymbolKind;
@@ -118,6 +144,7 @@ export interface YcplSymbol {
   typeName?: string;
   documentation?: string;
   exported: boolean;
+  scopeId: ScopeId;
   containerName?: string;
   parameters?: ParameterInfo[];
   returnType?: string;
@@ -133,6 +160,8 @@ export interface SymbolReference {
   name: string;
   uri: string;
   range: Range;
+  scopeId: ScopeId;
+  symbolId?: SymbolId;
 }
 
 export interface CallInfo {
@@ -140,6 +169,8 @@ export interface CallInfo {
   callee: string;
   uri: string;
   range: Range;
+  callerSymbolId?: SymbolId;
+  calleeSymbolId?: SymbolId;
 }
 
 export interface ParsedDiagnostic {
@@ -147,11 +178,6 @@ export interface ParsedDiagnostic {
   range: Range;
   severity: "error" | "warning";
   source: "ycpl";
-}
-
-export interface DefinitionResult {
-  symbol: YcplSymbol;
-  location: Location;
 }
 
 export interface WordAtPosition {
