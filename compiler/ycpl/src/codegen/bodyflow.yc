@@ -187,6 +187,12 @@ pub fn lower_statement_expr_typed_flow(builder *byte, i32_type *byte, i32_state_
         llvm.build_store(builder, next_i32, i32_state_slot)
         return
     }
+    if type_kind == astexpr.i64_type_kind() {
+        loaded_i64 := llvm.build_load2(builder, i32_type, i32_state_slot, "loaded_function_body_i64_statement_expr_state")
+        next_i64 := llvm.build_add(builder, loaded_i64, typed_value, "function_body_i64_statement_expr_value")
+        llvm.build_store(builder, next_i64, i32_state_slot)
+        return
+    }
     if type_kind == astexpr.bool_type_kind() {
         loaded_bool := llvm.build_load2(builder, i32_type, bool_state_slot, "loaded_function_body_bool_statement_expr_state")
         next_bool := llvm.build_add(builder, loaded_bool, typed_value, "function_body_bool_statement_expr_value")
@@ -203,6 +209,12 @@ pub fn lower_statement_expr_typed_flow(builder *byte, i32_type *byte, i32_state_
         loaded_pointer := llvm.build_load2(builder, i32_type, pointer_state_slot, "loaded_function_body_pointer_statement_expr_state")
         next_pointer := llvm.build_add(builder, loaded_pointer, typed_value, "function_body_pointer_statement_expr_value")
         llvm.build_store(builder, next_pointer, pointer_state_slot)
+        return
+    }
+    if type_kind == astexpr.array_type_kind() || type_kind == astexpr.slice_type_kind() || type_kind == astexpr.struct_type_kind() || type_kind == astexpr.function_type_kind() {
+        loaded_reference := llvm.build_load2(builder, i32_type, pointer_state_slot, "loaded_function_body_reference_statement_expr_state")
+        next_reference := llvm.build_add(builder, loaded_reference, typed_value, "function_body_reference_statement_expr_value")
+        llvm.build_store(builder, next_reference, pointer_state_slot)
         return
     }
     if type_kind == astexpr.none_type_kind() {

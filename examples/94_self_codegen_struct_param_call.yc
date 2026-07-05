@@ -1,0 +1,13 @@
+struct Pair {
+    left i32
+    right i32
+}
+
+fn sum(pair Pair) i32 {
+    return pair.left + pair.right
+}
+
+fn main() i32 {
+    pair := Pair{left: 6, right: 7}
+    return sum(pair)
+}

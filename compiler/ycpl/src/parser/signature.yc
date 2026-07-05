@@ -10,7 +10,10 @@ fn is_type_token(kind i32) bool {
 }
 
 fn type_kind_from_name(name string) i32 {
-    if str.eq(name, "i32") || str.eq(name, "i64") || str.eq(name, "byte") {
+    if str.eq(name, "i64") {
+        return 6
+    }
+    if str.eq(name, "i32") || str.eq(name, "byte") {
         return 1
     }
     if str.eq(name, "bool") {
@@ -22,12 +25,15 @@ fn type_kind_from_name(name string) i32 {
     if str.eq(name, "none") || str.eq(name, "void") {
         return 4
     }
-    return 0
+    return 9
 }
 
 fn type_kind_from_token(kind i32, text string, pointer_pending bool) i32 {
     if pointer_pending {
         return 5
+    }
+    if kind == tok.lbrack() {
+        return 8
     }
     if kind == tok.kw_byte() {
         return 1
