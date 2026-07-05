@@ -102,6 +102,7 @@ jobs:
       - name: Build with Bazel
         run: |
           bazel build \
+            --action_env=PATH \
             --action_env=LLVM_CONFIG \
             --action_env=LLVM_BINDIR \
             --action_env=LLC \
@@ -112,6 +113,7 @@ jobs:
       - name: Check YCPL compiler gates
         run: |
           bazel build \
+            --action_env=PATH \
             --action_env=LLVM_CONFIG \
             --action_env=LLVM_BINDIR \
             --action_env=LLC \
@@ -119,6 +121,7 @@ jobs:
             --action_env=LINKFLAGS \
             //:ycc //:ycc-ycpl
           bazel test \
+            --action_env=PATH \
             --action_env=LLVM_CONFIG \
             --action_env=LLVM_BINDIR \
             --action_env=LLC \
@@ -228,6 +231,7 @@ jobs:
       - name: Test with Bazel
         run: |
           bazel test \
+            --action_env=PATH \
             --action_env=LLVM_CONFIG \
             --action_env=LLVM_BINDIR \
             --action_env=LLC \
