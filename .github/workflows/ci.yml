@@ -43,6 +43,7 @@ jobs:
             libffi-dev \
             libxml2-dev \
             libzstd-dev \
+            lld \
             nodejs \
             npm \
             python3 \
@@ -55,13 +56,19 @@ jobs:
       - name: Export LLVM 22 environment
         run: |
           eval "$(scripts/setup-llvm.sh 22 --print-env)"
+          CLANG_WRAPPER="$RUNNER_TEMP/ycpl-clang"
+          {
+            echo '#!/usr/bin/env bash'
+            printf 'exec %q -no-pie -fuse-ld=lld "$@"\n' "$LLVM_BINDIR/clang"
+          } > "$CLANG_WRAPPER"
+          chmod +x "$CLANG_WRAPPER"
           {
             echo "LLVM_CONFIG=$LLVM_CONFIG"
             echo "LLVM_BINDIR=$LLVM_BINDIR"
             echo "LLVM_DIR=$LLVM_DIR"
             echo "LLC=$LLVM_BINDIR/llc"
-            echo "CLANG=$LLVM_BINDIR/clang"
-            echo "LINKFLAGS=--no-pie"
+            echo "CLANG=$CLANG_WRAPPER"
+            echo "LINKFLAGS=-no-pie -fuse-ld=lld"
           } >> "$GITHUB_ENV"
           echo "$LLVM_BINDIR" >> "$GITHUB_PATH"
 
@@ -102,28 +109,44 @@ jobs:
       - name: Build with Bazel
         run: |
           bazel build \
+            --action_env=PATH \
             --action_env=LLVM_CONFIG \
             --action_env=LLVM_BINDIR \
             --action_env=LLC \
             --action_env=CLANG \
             --action_env=LINKFLAGS \
-            //...
+            --linkopt=-fuse-ld=lld \
+            --host_linkopt=-fuse-ld=lld \
+            //... || {
+              if [ -f /tmp/ycc-ycpl-build.log ]; then
+                echo "::group::/tmp/ycc-ycpl-build.log"
+                cat /tmp/ycc-ycpl-build.log
+                echo "::endgroup::"
+              fi
+              exit 1
+            }
 
       - name: Check YCPL compiler gates
         run: |
           bazel build \
+            --action_env=PATH \
             --action_env=LLVM_CONFIG \
             --action_env=LLVM_BINDIR \
             --action_env=LLC \
             --action_env=CLANG \
             --action_env=LINKFLAGS \
+            --linkopt=-fuse-ld=lld \
+            --host_linkopt=-fuse-ld=lld \
             //:ycc //:ycc-ycpl
           bazel test \
+            --action_env=PATH \
             --action_env=LLVM_CONFIG \
             --action_env=LLVM_BINDIR \
             --action_env=LLC \
             --action_env=CLANG \
             --action_env=LINKFLAGS \
+            --linkopt=-fuse-ld=lld \
+            --host_linkopt=-fuse-ld=lld \
             --test_timeout=1800 \
             //:examples_test //:lsp_protocol_test //:ycc_ycpl_test //:self_host_stage_test
 
@@ -228,11 +251,14 @@ jobs:
       - name: Test with Bazel
         run: |
           bazel test \
+            --action_env=PATH \
             --action_env=LLVM_CONFIG \
             --action_env=LLVM_BINDIR \
             --action_env=LLC \
             --action_env=CLANG \
             --action_env=LINKFLAGS \
+            --linkopt=-fuse-ld=lld \
+            --host_linkopt=-fuse-ld=lld \
             --test_timeout=1800 \
             //...
 
@@ -240,10 +266,14 @@ jobs:
         run: examples/run_tests.sh
 
       - name: Install VSCode extension dependencies
-        run: npm ci --prefix editors/vscode
+        run: |
+          npm ci --prefix editors/vscode/extension
+          npm ci --prefix editors/vscode/language-server
 
       - name: Check VSCode extension
-        run: npm run check --prefix editors/vscode
+        run: |
+          npm run check --prefix editors/vscode/extension
+          npm run check --prefix editors/vscode/language-server
 
       - name: Run LSP protocol tests
         run: tools/lsp/run_tests.sh
@@ -264,6 +294,6 @@ jobs:
             echo "| YCPL merge readiness | \`YCPL_NO_BOOTSTRAP=1 bazel-bin/ycc-ycpl build examples/57..62 -o /tmp/ycpl-ci-*\` |"
             echo "| Bazel test | \`bazel test --test_timeout=1800 //...\` |"
             echo "| Compiler examples | \`examples/run_tests.sh\` |"
-            echo "| VSCode extension | \`npm ci --prefix editors/vscode && npm run check --prefix editors/vscode\` |"
+            echo "| VSCode extension | \`npm ci --prefix editors/vscode/extension && npm ci --prefix editors/vscode/language-server && npm run check --prefix editors/vscode/extension && npm run check --prefix editors/vscode/language-server\` |"
             echo "| LSP protocol | \`tools/lsp/run_tests.sh\` |"
           } >> "$GITHUB_STEP_SUMMARY"
