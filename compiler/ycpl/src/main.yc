@@ -223,6 +223,11 @@ fn run_build(mode string, argc i32, argv *string) i32 {
         }
     }
 
+    if driver.bootstrap_fallback_disabled() {
+        fmt.printf("%s:%d:%d: unsupported by YCPL self-host compiler without bootstrap fallback\n", path, 1, 1)
+        return 2
+    }
+
     result := driver.run_bootstrap(mode, argc, argv)
     if !result.ok {
         fmt.printf("%s\n", result.message)

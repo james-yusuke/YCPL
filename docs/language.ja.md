@@ -29,10 +29,14 @@ fn main() { ... }       -> 実行コードを置ける
 識別子は英字または `_` で始まり、英字、数字、`_` を続けられます。
 
 ```text
-module package import pub extern intrinsic fn struct enum interface const mut
-if else match for in return break continue as is go defer select switch
-true false none or type importas byte
+module package import pub extern intrinsic fn struct const mut
+if else for in return break continue as
+true false none byte
 ```
+
+`enum`、`interface`、`match`、`switch`、`select`、`go`、`defer`、`is`、`or`、
+`type`、`importas` などの予約語は、まだ対応済みの構文ではありません。
+詳細は [実装状況](status.ja.md#予約済みだが未実装) にまとめています。
 
 ## モジュールと import
 

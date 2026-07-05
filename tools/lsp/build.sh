@@ -4,8 +4,18 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
 PROJECT_DIR="${YCPL_LSP_PROJECT_DIR:-$ROOT_DIR/tools/lsp}"
 YCC="${YCC:-$ROOT_DIR/build/ycc}"
-LINKFLAGS="${LINKFLAGS:--no-pie}"
 OUT_DIR="${YCPL_LSP_OUT_DIR:-$PROJECT_DIR/build}"
+
+if [ -z "${LINKFLAGS+x}" ]; then
+  case "$(uname -s)" in
+    Darwin)
+      LINKFLAGS=""
+      ;;
+    *)
+      LINKFLAGS="--no-pie"
+      ;;
+  esac
+fi
 
 llvm_bindir() {
   if [ -n "${LLVM_BINDIR:-}" ]; then

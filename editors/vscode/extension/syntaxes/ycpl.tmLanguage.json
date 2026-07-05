@@ -1,0 +1,158 @@
+{
+  "scopeName": "source.ycpl",
+  "name": "YCPL",
+  "patterns": [
+    {
+      "include": "#comments"
+    },
+    {
+      "include": "#strings"
+    },
+    {
+      "include": "#declarations"
+    },
+    {
+      "include": "#keywords"
+    },
+    {
+      "include": "#types"
+    },
+    {
+      "include": "#numbers"
+    },
+    {
+      "include": "#operators"
+    }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.line.double-slash.ycpl",
+          "match": "//.*$"
+        },
+        {
+          "name": "comment.block.ycpl",
+          "begin": "/\\*",
+          "end": "\\*/"
+        }
+      ]
+    },
+    "strings": {
+      "patterns": [
+        {
+          "name": "string.quoted.double.ycpl",
+          "begin": "\"",
+          "end": "\"",
+          "patterns": [
+            {
+              "name": "constant.character.escape.ycpl",
+              "match": "\\\\(n|r|t|\\\\|\"|'|u[0-9A-Fa-f]{4}|x[0-9A-Fa-f]{2}|.)"
+            }
+          ]
+        },
+        {
+          "name": "string.quoted.raw.ycpl",
+          "begin": "`",
+          "end": "`"
+        },
+        {
+          "name": "constant.character.ycpl",
+          "match": "'([^'\\\\]|\\\\.)'"
+        }
+      ]
+    },
+    "declarations": {
+      "patterns": [
+        {
+          "name": "meta.function.declaration.ycpl",
+          "match": "\\b(?:(pub|extern|intrinsic)\\s+)?(fn)\\s+([A-Za-z_][A-Za-z0-9_]*)",
+          "captures": {
+            "1": {
+              "name": "storage.modifier.ycpl"
+            },
+            "2": {
+              "name": "keyword.declaration.function.ycpl"
+            },
+            "3": {
+              "name": "entity.name.function.ycpl"
+            }
+          }
+        },
+        {
+          "name": "meta.type.declaration.ycpl",
+          "match": "\\b(?:(pub)\\s+)?(struct)\\s+([A-Za-z_][A-Za-z0-9_]*)",
+          "captures": {
+            "1": {
+              "name": "storage.modifier.ycpl"
+            },
+            "2": {
+              "name": "keyword.declaration.type.ycpl"
+            },
+            "3": {
+              "name": "entity.name.type.ycpl"
+            }
+          }
+        },
+        {
+          "name": "meta.import.ycpl",
+          "match": "\\b(import)\\s+(\"[^\"]+\")\\s*(?:(as)\\s+([A-Za-z_][A-Za-z0-9_]*))?",
+          "captures": {
+            "1": {
+              "name": "keyword.control.import.ycpl"
+            },
+            "2": {
+              "name": "string.quoted.double.import-path.ycpl"
+            },
+            "3": {
+              "name": "keyword.operator.alias.ycpl"
+            },
+            "4": {
+              "name": "entity.name.namespace.ycpl"
+            }
+          }
+        }
+      ]
+    },
+    "keywords": {
+      "patterns": [
+        {
+          "name": "keyword.control.ycpl",
+          "match": "\\b(module|package|import|if|else|for|in|return|break|continue|as)\\b"
+        },
+        {
+          "name": "keyword.declaration.ycpl",
+          "match": "\\b(pub|extern|intrinsic|fn|struct|const|mut)\\b"
+        },
+        {
+          "name": "constant.language.ycpl",
+          "match": "\\b(true|false|none)\\b"
+        }
+      ]
+    },
+    "types": {
+      "patterns": [
+        {
+          "name": "storage.type.primitive.ycpl",
+          "match": "\\b(i32|i64|bool|char|byte|string|float|double|void|size_t|Type|T|any)\\b"
+        }
+      ]
+    },
+    "numbers": {
+      "patterns": [
+        {
+          "name": "constant.numeric.ycpl",
+          "match": "\\b(0x[0-9A-Fa-f]+|0b[01]+|[0-9]+(?:\\.[0-9]+)?)\\b"
+        }
+      ]
+    },
+    "operators": {
+      "patterns": [
+        {
+          "name": "keyword.operator.ycpl",
+          "match": "(:=|\\+=|-=|\\*=|/=|%=|==|!=|<=|>=|&&|\\|\\||[=+\\-*/%<>!&|.])"
+        }
+      ]
+    }
+  }
+}

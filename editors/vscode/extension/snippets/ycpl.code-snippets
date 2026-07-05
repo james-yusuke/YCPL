@@ -1,0 +1,35 @@
+{
+  "Main function": {
+    "prefix": "main",
+    "body": [
+      "fn main() i32 {",
+      "    $1",
+      "    return 0",
+      "}"
+    ],
+    "description": "Create a YCPL main function"
+  },
+  "Function": {
+    "prefix": "fn",
+    "body": [
+      "fn ${1:name}(${2}) ${3:void} {",
+      "    $0",
+      "}"
+    ],
+    "description": "Create a YCPL function"
+  },
+  "Struct": {
+    "prefix": "struct",
+    "body": [
+      "struct ${1:Name} {",
+      "    ${2:field} ${3:i32}",
+      "}"
+    ],
+    "description": "Create a YCPL struct"
+  },
+  "Import with alias": {
+    "prefix": "import",
+    "body": "import \"${1:std/fmt}\" as ${2:fmt}",
+    "description": "Import a YCPL module with an alias"
+  }
+}
