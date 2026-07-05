@@ -173,6 +173,7 @@ stage-2 self-host gate
 ├─ 生成された stage2/stage3 binary は未対応 file build-ir input を project compiler IR として成功扱いしない
 ├─ YCPL_NO_BOOTSTRAP=1 の通常 ycc-ycpl build/build-ir path は bootstrap fallback を禁止し、未対応 input を明示診断で失敗させる
 ├─ project_body.ll は固定 expression probe を使わず、statement-owned expression と remaining tail expression を実 scan.expr_* sequence から lower する
+├─ statement-owned expression は local/assignment/call/return の semantic role と parser/resolver 由来の type kind を組み合わせ、resolved role/type flow として IR に lower する
 ├─ project_body.ll の実 AST lowering cap は body node 32、expression 64、statement expression 32、statement owner 32 まで広げ、IR gate で値を固定している
 ├─ statement-owned expression lowering は total expression cap も守り、CI は lowered node/expression count が cap を越えたら失敗する
 ├─ project_body.ll は実 lowering 済み node/expression count と未 lowering node/expression count を名前付き IR marker として出し、summary/smoke の取り残しを CI で検出できる

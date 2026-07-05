@@ -227,3 +227,75 @@ pub fn lower_statement_expr_typed_flow(builder *byte, i32_type *byte, i32_state_
     next_unknown := llvm.build_add(builder, loaded_unknown, typed_value, "function_body_unknown_statement_expr_value")
     llvm.build_store(builder, next_unknown, unknown_state_slot)
 }
+
+fn is_reference_type(type_kind i32) bool {
+    return type_kind == astexpr.string_type_kind() || type_kind == astexpr.pointer_type_kind() || type_kind == astexpr.array_type_kind() || type_kind == astexpr.slice_type_kind() || type_kind == astexpr.struct_type_kind() || type_kind == astexpr.function_type_kind()
+}
+
+fn role_type_bucket_value(builder *byte, i32_type *byte, type_kind i32, typed_value *byte, label_seed i32) *byte {
+    type_value := llvm.const_int(i32_type, type_kind + label_seed, 1)
+    return llvm.build_add(builder, typed_value, type_value, "function_body_resolved_role_type_bucket_value")
+}
+
+fn add_to_slot(builder *byte, i32_type *byte, slot *byte, value *byte, load_name string, add_name string) {
+    loaded := llvm.build_load2(builder, i32_type, slot, load_name)
+    next := llvm.build_add(builder, loaded, value, add_name)
+    llvm.build_store(builder, next, slot)
+}
+
+pub fn lower_resolved_statement_role_type_flow(builder *byte, i32_type *byte, local_i32_slot *byte, local_ref_slot *byte, assignment_i32_slot *byte, assignment_ref_slot *byte, call_i32_slot *byte, call_ref_slot *byte, return_i32_slot *byte, return_ref_slot *byte, unknown_slot *byte, role i32, type_kind i32, typed_value *byte) {
+    if role == astbody.local_symbol_role() {
+        local_value := role_type_bucket_value(builder, i32_type, type_kind, typed_value, 11)
+        if type_kind == astexpr.i32_type_kind() || type_kind == astexpr.i64_type_kind() || type_kind == astexpr.bool_type_kind() {
+            add_to_slot(builder, i32_type, local_i32_slot, local_value, "loaded_function_body_resolved_local_numeric_type_flow", "function_body_resolved_local_numeric_type_flow")
+            return
+        }
+        if is_reference_type(type_kind) {
+            add_to_slot(builder, i32_type, local_ref_slot, local_value, "loaded_function_body_resolved_local_reference_type_flow", "function_body_resolved_local_reference_type_flow")
+            return
+        }
+        add_to_slot(builder, i32_type, unknown_slot, local_value, "loaded_function_body_resolved_local_unknown_type_flow", "function_body_resolved_local_unknown_type_flow")
+        return
+    }
+    if role == astbody.assignment_target_role() {
+        assignment_value := role_type_bucket_value(builder, i32_type, type_kind, typed_value, 23)
+        if type_kind == astexpr.i32_type_kind() || type_kind == astexpr.i64_type_kind() || type_kind == astexpr.bool_type_kind() {
+            add_to_slot(builder, i32_type, assignment_i32_slot, assignment_value, "loaded_function_body_resolved_assignment_numeric_type_flow", "function_body_resolved_assignment_numeric_type_flow")
+            return
+        }
+        if is_reference_type(type_kind) {
+            add_to_slot(builder, i32_type, assignment_ref_slot, assignment_value, "loaded_function_body_resolved_assignment_reference_type_flow", "function_body_resolved_assignment_reference_type_flow")
+            return
+        }
+        add_to_slot(builder, i32_type, unknown_slot, assignment_value, "loaded_function_body_resolved_assignment_unknown_type_flow", "function_body_resolved_assignment_unknown_type_flow")
+        return
+    }
+    if role == astbody.call_target_role() {
+        call_value := role_type_bucket_value(builder, i32_type, type_kind, typed_value, 37)
+        if type_kind == astexpr.i32_type_kind() || type_kind == astexpr.i64_type_kind() || type_kind == astexpr.bool_type_kind() {
+            add_to_slot(builder, i32_type, call_i32_slot, call_value, "loaded_function_body_resolved_call_numeric_type_flow", "function_body_resolved_call_numeric_type_flow")
+            return
+        }
+        if is_reference_type(type_kind) {
+            add_to_slot(builder, i32_type, call_ref_slot, call_value, "loaded_function_body_resolved_call_reference_type_flow", "function_body_resolved_call_reference_type_flow")
+            return
+        }
+        add_to_slot(builder, i32_type, unknown_slot, call_value, "loaded_function_body_resolved_call_unknown_type_flow", "function_body_resolved_call_unknown_type_flow")
+        return
+    }
+    if role == astbody.return_symbol_role() || role == astbody.return_literal_role() {
+        return_value := role_type_bucket_value(builder, i32_type, type_kind, typed_value, 41)
+        if type_kind == astexpr.i32_type_kind() || type_kind == astexpr.i64_type_kind() || type_kind == astexpr.bool_type_kind() {
+            add_to_slot(builder, i32_type, return_i32_slot, return_value, "loaded_function_body_resolved_return_numeric_type_flow", "function_body_resolved_return_numeric_type_flow")
+            return
+        }
+        if is_reference_type(type_kind) {
+            add_to_slot(builder, i32_type, return_ref_slot, return_value, "loaded_function_body_resolved_return_reference_type_flow", "function_body_resolved_return_reference_type_flow")
+            return
+        }
+        add_to_slot(builder, i32_type, unknown_slot, return_value, "loaded_function_body_resolved_return_unknown_type_flow", "function_body_resolved_return_unknown_type_flow")
+        return
+    }
+    unknown_value := role_type_bucket_value(builder, i32_type, type_kind, typed_value, 53)
+    add_to_slot(builder, i32_type, unknown_slot, unknown_value, "loaded_function_body_resolved_statement_unknown_role_type_flow", "function_body_resolved_statement_unknown_role_type_flow")
+}
