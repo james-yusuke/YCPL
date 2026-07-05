@@ -181,6 +181,40 @@ fn main() i32 {
 YCPL
 "$YCC_YCPL" check "$eightarg_dir/helper8.yc" >/tmp/ycc-ycpl-check-helper8.out
 grep -q 'value=13' /tmp/ycc-ycpl-check-helper8.out
+cat >"$eightarg_dir/manyhelpers.yc" <<'YCPL'
+fn h0() i32 { return 0 }
+fn h1() i32 { return 1 }
+fn h2() i32 { return 2 }
+fn h3() i32 { return 3 }
+fn h4() i32 { return 4 }
+fn h5() i32 { return 5 }
+fn h6() i32 { return 6 }
+fn h7() i32 { return 7 }
+fn h8() i32 { return 13 }
+
+fn main() i32 {
+    return h8()
+}
+YCPL
+"$YCC_YCPL" check "$eightarg_dir/manyhelpers.yc" >/tmp/ycc-ycpl-check-manyhelpers.out
+grep -q 'value=13' /tmp/ycc-ycpl-check-manyhelpers.out
+cat >"$eightarg_dir/manylocals.yc" <<'YCPL'
+fn main() i32 {
+    a0 := 0
+    a1 := 1
+    a2 := 2
+    a3 := 3
+    a4 := 4
+    a5 := 5
+    a6 := 6
+    a7 := 7
+    items := [4, 2, 7]
+    items[1] = items[0] + items[2]
+    return items[1] + 2
+}
+YCPL
+"$YCC_YCPL" check "$eightarg_dir/manylocals.yc" >/tmp/ycc-ycpl-check-manylocals.out
+grep -q 'value=13' /tmp/ycc-ycpl-check-manylocals.out
 "$YCC_YCPL" check examples/62_self_codegen_forward_call.yc >/tmp/ycc-ycpl-check-forward.out
 grep -q 'value=13' /tmp/ycc-ycpl-check-forward.out
 "$YCC_YCPL" check examples/63_self_codegen_bool_condition.yc >/tmp/ycc-ycpl-check-bool.out

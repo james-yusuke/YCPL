@@ -54,6 +54,40 @@ fn main() i32 {
 YCPL
 "$YCC_YCPL" check "$eightarg_stage_dir/helper8.yc" >/tmp/ycpl-stage-helper8-check.out
 grep -q 'value=13' /tmp/ycpl-stage-helper8-check.out
+cat >"$eightarg_stage_dir/manyhelpers.yc" <<'YCPL'
+fn h0() i32 { return 0 }
+fn h1() i32 { return 1 }
+fn h2() i32 { return 2 }
+fn h3() i32 { return 3 }
+fn h4() i32 { return 4 }
+fn h5() i32 { return 5 }
+fn h6() i32 { return 6 }
+fn h7() i32 { return 7 }
+fn h8() i32 { return 13 }
+
+fn main() i32 {
+    return h8()
+}
+YCPL
+"$YCC_YCPL" check "$eightarg_stage_dir/manyhelpers.yc" >/tmp/ycpl-stage-manyhelpers-check.out
+grep -q 'value=13' /tmp/ycpl-stage-manyhelpers-check.out
+cat >"$eightarg_stage_dir/manylocals.yc" <<'YCPL'
+fn main() i32 {
+    a0 := 0
+    a1 := 1
+    a2 := 2
+    a3 := 3
+    a4 := 4
+    a5 := 5
+    a6 := 6
+    a7 := 7
+    items := [4, 2, 7]
+    items[1] = items[0] + items[2]
+    return items[1] + 2
+}
+YCPL
+"$YCC_YCPL" check "$eightarg_stage_dir/manylocals.yc" >/tmp/ycpl-stage-manylocals-check.out
+grep -q 'value=13' /tmp/ycpl-stage-manylocals-check.out
 traversal_dir="$(mktemp -d "${TMPDIR:-/tmp}/ycpl-stage-traversal.XXXXXX")"
 cp -R compiler/ycpl "$traversal_dir/ycpl"
 mkdir -p "$traversal_dir/ycpl/src/generated/deep"
@@ -1460,6 +1494,10 @@ fi
 grep -q 'value=13' /tmp/ycpl-stage2-eightarg-check.out
 "$STAGE2" check "$eightarg_stage_dir/helper8.yc" >/tmp/ycpl-stage2-helper8-check.out
 grep -q 'value=13' /tmp/ycpl-stage2-helper8-check.out
+"$STAGE2" check "$eightarg_stage_dir/manyhelpers.yc" >/tmp/ycpl-stage2-manyhelpers-check.out
+grep -q 'value=13' /tmp/ycpl-stage2-manyhelpers-check.out
+"$STAGE2" check "$eightarg_stage_dir/manylocals.yc" >/tmp/ycpl-stage2-manylocals-check.out
+grep -q 'value=13' /tmp/ycpl-stage2-manylocals-check.out
 require_project_file_count /tmp/ycpl-stage2-parse.out 23 "stage2 parse"
 require_project_file_count /tmp/ycpl-stage2-check.out 23 "stage2 check"
 grep -q 'fn_digest=' /tmp/ycpl-stage2-parse.out
