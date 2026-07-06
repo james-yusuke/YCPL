@@ -1,4 +1,4 @@
-import type { Diagnostic, TextEdit } from "vscode-languageserver/node.js";
+import type { Diagnostic, TextEdit } from "vscode-languageserver/node";
 import type { YcplDocument } from "../analysis/model.js";
 
 /**
@@ -11,7 +11,7 @@ export interface CompilerBridge {
   diagnostics(document: YcplDocument): Promise<Diagnostic[]>;
 
   /** Returns formatter edits for a full document or selection. */
-  format(document: YcplDocument, range?: import("vscode-languageserver/node.js").Range): Promise<TextEdit[] | undefined>;
+  format(document: YcplDocument, range?: import("vscode-languageserver/node").Range): Promise<TextEdit[] | undefined>;
 }
 
 /** Fallback bridge used until the compiler exposes a stable editor API. */
