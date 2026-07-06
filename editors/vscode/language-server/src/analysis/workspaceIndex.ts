@@ -3,7 +3,7 @@ import {
   type Position,
   type Range,
   SymbolInformation
-} from "vscode-languageserver/node.js";
+} from "vscode-languageserver/node";
 import {
   rangeContains,
   type SymbolReference,
