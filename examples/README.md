@@ -19,13 +19,14 @@ This directory contains example programs written in YCPL.
 | `13_manual_memory.yc` | `std/mem` alloc/copy/set/free/sizeof |
 | `15_implicit_alias.yc` | Import without `as`, using implicit last-segment alias |
 | `19_compound_assignment.yc` | Compound assignment for variables, array index, and struct field |
-| `20_const_mut_none.yc` | `const`, `mut`, and `none` null literal |
+| `20_const_mut_none.yc` | `const`, mutable locals, and `none` null literal |
 | `21_array_for_in.yc` | Array value iteration with `for value in xs` |
 | `22_complex_arrays.yc` | Nested arrays, struct arrays, grow, get/set, and manual free |
 | `23_array_stress.yc` | 1000 appends with grow and iteration sum |
 | `30_std_source_usage.yc` | YCPL source std modules, extern wrappers, intrinsic bridge, and IR checks |
 | `34_std_lsp_foundation.yc` | `std/fs`, `std/text`, `std/json`, and `std/map` LSP foundation APIs |
 | `35_std_io_echo.yc` | `std/io` fd read/write using stdin input |
+| `100_retired_keywords_as_identifiers.yc` | Retired keywords accepted as ordinary identifiers |
 | `36_std_json_ast.yc` | `std/json` tagged value parse/get/at/stringify/free |
 | `40_short_circuit_and_string_field.yc` | Short-circuit logic and struct string field indexing |
 

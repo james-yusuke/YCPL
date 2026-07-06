@@ -31,13 +31,12 @@ top-level statement     -> rejected by codegen
 Identifiers start with a letter or `_`, followed by letters, digits, or `_`.
 
 ```text
-module package import pub extern intrinsic fn struct const mut
+module package import pub extern intrinsic fn struct const
 if else for in return break continue as
 true false none byte
 ```
 
-Reserved tokens such as `enum`, `interface`, `match`, `switch`, `select`,
-`go`, `defer`, `is`, `or`, `type`, and `importas` are intentionally not part of
+Reserved tokens such as `enum`, `match`, `switch`, `or`, and `type` are intentionally not part of
 the supported grammar yet. They are documented in
 [Implementation status](status.en.md#reserved-but-not-implemented).
 

@@ -83,9 +83,7 @@ fn keyword_kind(word string) i32 {
     if str.eq(word, "fn") { return tok.kw_fn() }
     if str.eq(word, "struct") { return tok.kw_struct() }
     if str.eq(word, "enum") { return tok.kw_enum() }
-    if str.eq(word, "interface") { return tok.kw_interface() }
     if str.eq(word, "const") { return tok.kw_const() }
-    if str.eq(word, "mut") { return tok.kw_mut() }
     if str.eq(word, "if") { return tok.kw_if() }
     if str.eq(word, "else") { return tok.kw_else() }
     if str.eq(word, "match") { return tok.kw_match() }
@@ -95,10 +93,6 @@ fn keyword_kind(word string) i32 {
     if str.eq(word, "break") { return tok.kw_break() }
     if str.eq(word, "continue") { return tok.kw_continue() }
     if str.eq(word, "as") { return tok.kw_as() }
-    if str.eq(word, "is") { return tok.kw_is() }
-    if str.eq(word, "go") { return tok.kw_go() }
-    if str.eq(word, "defer") { return tok.kw_defer() }
-    if str.eq(word, "select") { return tok.kw_select() }
     if str.eq(word, "switch") { return tok.kw_switch() }
     if str.eq(word, "true") { return tok.bool_lit() }
     if str.eq(word, "false") { return tok.bool_lit() }
