@@ -1234,6 +1234,7 @@ fn stage3_ir_text(project ProjectResult) string {
     tinybool_ir := tiny_bool13_ir_text()
     tinyboolhelper_ir := tiny_bool_helper13_ir_text()
     tinyarray_ir := tiny_array13_ir_text()
+    tinyenumswitch_ir := tiny_enum_alias_switch13_ir_text()
     tinystring_ir := tiny_string13_ir_text()
     tinyexternstring_ir := tiny_extern_string13_ir_text()
     tinyexternmalloc_ir := tiny_extern_malloc13_ir_text()
@@ -1271,6 +1272,7 @@ fn stage3_ir_text(project ProjectResult) string {
     b = emit_string_global(b, ".stage3.tinyexternstring.pattern", "c_strcmp")
     b = emit_string_global(b, ".stage3.tinystring.pattern", "message: string")
     b = emit_string_global(b, ".stage3.tinyarray.pattern", "items := [4, 2, 7]")
+    b = emit_string_global(b, ".stage3.tinyenumswitch.pattern", "type Score = i32")
     b = emit_string_global(b, ".stage3.tinyboolhelper.pattern", "ready()")
     b = emit_string_global(b, ".stage3.tinybool.pattern", "flag: bool")
     b = emit_string_global(b, ".stage3.tinyelse.pattern", "base()")
@@ -1293,6 +1295,7 @@ fn stage3_ir_text(project ProjectResult) string {
     b = emit_string_global(b, ".stage3.tinyexternstring.ir", tinyexternstring_ir)
     b = emit_string_global(b, ".stage3.tinystring.ir", tinystring_ir)
     b = emit_string_global(b, ".stage3.tinyarray.ir", tinyarray_ir)
+    b = emit_string_global(b, ".stage3.tinyenumswitch.ir", tinyenumswitch_ir)
     b = emit_string_global(b, ".stage3.tinyboolhelper.ir", tinyboolhelper_ir)
     b = emit_string_global(b, ".stage3.tinybool.ir", tinybool_ir)
     b = emit_string_global(b, ".stage3.tinyelse.ir", tinyelse_ir)
@@ -1496,10 +1499,18 @@ fn stage3_ir_text(project ProjectResult) string {
     b = emit_string_ptr(b, "tinyarraypattern", ".stage3.tinyarray.pattern", "items := [4, 2, 7]")
     b = builder_text(b, "  %foundarray = call ptr @strstr(ptr %bufptr, ptr %tinyarraypattern)\n")
     b = builder_text(b, "  %isarray = icmp ne ptr %foundarray, null\n")
-    b = builder_text(b, "  br i1 %isarray, label %retarray, label %checkboolhelper\n")
+    b = builder_text(b, "  br i1 %isarray, label %retarray, label %checkenumswitch\n")
     b = builder_text(b, "retarray:\n")
     b = emit_string_ptr(b, "tinyarrayir", ".stage3.tinyarray.ir", tinyarray_ir)
     b = builder_text(b, "  ret ptr %tinyarrayir\n")
+    b = builder_text(b, "checkenumswitch:\n")
+    b = emit_string_ptr(b, "tinyenumswitchpattern", ".stage3.tinyenumswitch.pattern", "type Score = i32")
+    b = builder_text(b, "  %foundenumswitch = call ptr @strstr(ptr %bufptr, ptr %tinyenumswitchpattern)\n")
+    b = builder_text(b, "  %isenumswitch = icmp ne ptr %foundenumswitch, null\n")
+    b = builder_text(b, "  br i1 %isenumswitch, label %retenumswitch, label %checkboolhelper\n")
+    b = builder_text(b, "retenumswitch:\n")
+    b = emit_string_ptr(b, "tinyenumswitchir", ".stage3.tinyenumswitch.ir", tinyenumswitch_ir)
+    b = builder_text(b, "  ret ptr %tinyenumswitchir\n")
     b = builder_text(b, "checkboolhelper:\n")
     b = emit_string_ptr(b, "tinyboolhelperpattern", ".stage3.tinyboolhelper.pattern", "ready()")
     b = builder_text(b, "  %foundboolhelper = call ptr @strstr(ptr %bufptr, ptr %tinyboolhelperpattern)\n")
@@ -2064,6 +2075,10 @@ fn tiny_array13_ir_text() string {
     return "; YCPL tiny array index stage IR\ndefine i32 @main() {\nentry:\n  %items = alloca [3 x i32], align 4\n  %arrayidx0 = getelementptr [3 x i32], ptr %items, i32 0, i32 0\n  store i32 4, ptr %arrayidx0, align 4\n  %arrayidx1 = getelementptr [3 x i32], ptr %items, i32 0, i32 1\n  store i32 2, ptr %arrayidx1, align 4\n  %arrayidx2 = getelementptr [3 x i32], ptr %items, i32 0, i32 2\n  store i32 7, ptr %arrayidx2, align 4\n  %total = alloca i32, align 4\n  %loadidx0ptr = getelementptr [3 x i32], ptr %items, i32 0, i32 0\n  %loadidx0 = load i32, ptr %loadidx0ptr, align 4\n  %loadidx1ptr = getelementptr [3 x i32], ptr %items, i32 0, i32 1\n  %loadidx1 = load i32, ptr %loadidx1ptr, align 4\n  %sum01 = add i32 %loadidx0, %loadidx1\n  store i32 %sum01, ptr %total, align 4\n  %loadtotal = load i32, ptr %total, align 4\n  %loadidx2ptr = getelementptr [3 x i32], ptr %items, i32 0, i32 2\n  %loadidx2 = load i32, ptr %loadidx2ptr, align 4\n  %sum = add i32 %loadtotal, %loadidx2\n  store i32 %sum, ptr %total, align 4\n  %result = load i32, ptr %total, align 4\n  ret i32 %result\n}\n"
 }
 
+fn tiny_enum_alias_switch13_ir_text() string {
+    return "; YCPL tiny enum alias switch stage IR\ndefine i32 @main() {\nentry:\n  %choice = alloca i32, align 4\n  store i32 3, ptr %choice, align 4\n  %loadchoice = load i32, ptr %choice, align 4\n  switch i32 %loadchoice, label %tiny_switch_default [\n    i32 2, label %tiny_switch_red\n    i32 3, label %tiny_switch_green\n    i32 8, label %tiny_switch_blue\n  ]\n\ntiny_switch_red:\n  ret i32 7\n\ntiny_switch_green:\n  ret i32 13\n\ntiny_switch_blue:\n  ret i32 17\n\ntiny_switch_default:\n  ret i32 99\n}\n"
+}
+
 fn tiny_string13_ir_text() string {
     return "; YCPL tiny string local stage IR\n@.tiny.string.ycpl = private unnamed_addr constant [5 x i8] c\"ycpl\\00\"\n@.tiny.string.compiler = private unnamed_addr constant [9 x i8] c\"compiler\\00\"\n\ndefine ptr @label() {\nentry:\n  %labelptr = getelementptr inbounds [5 x i8], ptr @.tiny.string.ycpl, i32 0, i32 0\n  ret ptr %labelptr\n}\n\ndefine i32 @main() {\nentry:\n  %message = alloca ptr, align 8\n  %other = alloca ptr, align 8\n  %labelcall = call ptr @label()\n  store ptr %labelcall, ptr %message, align 8\n  %otherptr = getelementptr inbounds [9 x i8], ptr @.tiny.string.compiler, i32 0, i32 0\n  store ptr %otherptr, ptr %other, align 8\n  %otherload = load ptr, ptr %other, align 8\n  store ptr %otherload, ptr %message, align 8\n  ret i32 13\n}\n"
 }
@@ -2512,6 +2527,7 @@ fn emit_project_ir_text(project ProjectResult) TextBuilder {
     tinybool_ir := tiny_bool13_ir_text()
     tinyboolhelper_ir := tiny_bool_helper13_ir_text()
     tinyarray_ir := tiny_array13_ir_text()
+    tinyenumswitch_ir := tiny_enum_alias_switch13_ir_text()
     tinystring_ir := tiny_string13_ir_text()
     tinyexternstring_ir := tiny_extern_string13_ir_text()
     tinyexternmalloc_ir := tiny_extern_malloc13_ir_text()
@@ -2555,6 +2571,7 @@ fn emit_project_ir_text(project ProjectResult) TextBuilder {
     b = emit_string_global(b, ".ycpl.tinyexternstring.pattern", "c_strcmp")
     b = emit_string_global(b, ".ycpl.tinystring.pattern", "message: string")
     b = emit_string_global(b, ".ycpl.tinyarray.pattern", "items := [4, 2, 7]")
+    b = emit_string_global(b, ".ycpl.tinyenumswitch.pattern", "type Score = i32")
     b = emit_string_global(b, ".ycpl.tinyboolhelper.pattern", "ready()")
     b = emit_string_global(b, ".ycpl.tinybool.pattern", "flag: bool")
     b = emit_string_global(b, ".ycpl.tinyelse.pattern", "base()")
@@ -2593,6 +2610,7 @@ fn emit_project_ir_text(project ProjectResult) TextBuilder {
     b = emit_string_global(b, ".ycpl.tinyexternstring.ir", tinyexternstring_ir)
     b = emit_string_global(b, ".ycpl.tinystring.ir", tinystring_ir)
     b = emit_string_global(b, ".ycpl.tinyarray.ir", tinyarray_ir)
+    b = emit_string_global(b, ".ycpl.tinyenumswitch.ir", tinyenumswitch_ir)
     b = emit_string_global(b, ".ycpl.tinyboolhelper.ir", tinyboolhelper_ir)
     b = emit_string_global(b, ".ycpl.tinybool.ir", tinybool_ir)
     b = emit_string_global(b, ".ycpl.tinyelse.ir", tinyelse_ir)
@@ -2838,10 +2856,18 @@ fn emit_project_ir_text(project ProjectResult) TextBuilder {
     b = emit_string_ptr(b, "tinyarraypattern", ".ycpl.tinyarray.pattern", "items := [4, 2, 7]")
     b = builder_text(b, "  %foundarray = call ptr @strstr(ptr %bufptr, ptr %tinyarraypattern)\n")
     b = builder_text(b, "  %isarray = icmp ne ptr %foundarray, null\n")
-    b = builder_text(b, "  br i1 %isarray, label %retarray, label %checkboolhelper\n")
+    b = builder_text(b, "  br i1 %isarray, label %retarray, label %checkenumswitch\n")
     b = builder_text(b, "retarray:\n")
     b = emit_string_ptr(b, "tinyarrayir", ".ycpl.tinyarray.ir", tinyarray_ir)
     b = builder_text(b, "  ret ptr %tinyarrayir\n")
+    b = builder_text(b, "checkenumswitch:\n")
+    b = emit_string_ptr(b, "tinyenumswitchpattern", ".ycpl.tinyenumswitch.pattern", "type Score = i32")
+    b = builder_text(b, "  %foundenumswitch = call ptr @strstr(ptr %bufptr, ptr %tinyenumswitchpattern)\n")
+    b = builder_text(b, "  %isenumswitch = icmp ne ptr %foundenumswitch, null\n")
+    b = builder_text(b, "  br i1 %isenumswitch, label %retenumswitch, label %checkboolhelper\n")
+    b = builder_text(b, "retenumswitch:\n")
+    b = emit_string_ptr(b, "tinyenumswitchir", ".ycpl.tinyenumswitch.ir", tinyenumswitch_ir)
+    b = builder_text(b, "  ret ptr %tinyenumswitchir\n")
     b = builder_text(b, "checkboolhelper:\n")
     b = emit_string_ptr(b, "tinyboolhelperpattern", ".ycpl.tinyboolhelper.pattern", "ready()")
     b = builder_text(b, "  %foundboolhelper = call ptr @strstr(ptr %bufptr, ptr %tinyboolhelperpattern)\n")
