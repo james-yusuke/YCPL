@@ -22,7 +22,6 @@ pub fn kw_enum() i32 { return 17 }
 pub fn kw_const() i32 { return 19 }
 pub fn kw_if() i32 { return 21 }
 pub fn kw_else() i32 { return 22 }
-pub fn kw_match() i32 { return 23 }
 pub fn kw_for() i32 { return 24 }
 pub fn kw_in() i32 { return 25 }
 pub fn kw_return() i32 { return 26 }

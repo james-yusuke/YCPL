@@ -36,7 +36,7 @@ if else for in return break continue as
 true false none byte
 ```
 
-Reserved tokens such as `enum`, `match`, `switch`, `or`, and `type` are intentionally not part of
+Reserved tokens such as `enum`, `switch`, and `type` are intentionally not part of
 the supported grammar yet. They are documented in
 [Implementation status](status.en.md#reserved-but-not-implemented).
 

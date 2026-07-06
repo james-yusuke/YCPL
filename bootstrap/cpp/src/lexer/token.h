@@ -33,7 +33,6 @@ namespace lex
         KW_CONST,
         KW_IF,
         KW_ELSE,
-        KW_MATCH,
         KW_FOR,
         KW_IN,
         KW_RETURN,
@@ -44,7 +43,6 @@ namespace lex
         KW_TRUE,
         KW_FALSE,
         KW_NONE,
-        KW_OR,
         KW_TYPE,
 
         // punctuation
@@ -142,7 +140,6 @@ namespace lex
             {TokenType::KW_CONST, "const"},
             {TokenType::KW_IF, "if"},
             {TokenType::KW_ELSE, "else"},
-            {TokenType::KW_MATCH, "match"},
             {TokenType::KW_FOR, "for"},
             {TokenType::KW_IN, "in"},
             {TokenType::KW_RETURN, "return"},
@@ -153,7 +150,6 @@ namespace lex
             {TokenType::KW_TRUE, "true"},
             {TokenType::KW_FALSE, "false"},
             {TokenType::KW_NONE, "none"},
-            {TokenType::KW_OR, "or"},
             {TokenType::KW_TYPE, "type"},
             {TokenType::LPAREN, "("},
             {TokenType::RPAREN, ")"},
