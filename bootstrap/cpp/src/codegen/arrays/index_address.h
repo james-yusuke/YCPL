@@ -38,12 +38,12 @@ Value *CodeGen::codegen_index_addr(const ast::IndexExpr *ie)
         if (ll)
         {
             TypeShape pt = parse_type_shape(*ll);
-            if (pt.base == "string" && pt.array_rank == 0 && pt.pointer_depth == 0)
+            if (pt.is_plain_string())
             {
                 return string_element_addr(colVal, idxVal, "string.index.addr");
             }
 
-            if (pt.base == "string_params" && pt.array_rank == 0 && pt.pointer_depth == 0)
+            if (pt.is_string_params())
             {
                 Value *v = lookup_local(id->name);
                 return string_element_addr(v, idxVal, "string.params.index.addr");
@@ -54,7 +54,7 @@ Value *CodeGen::codegen_index_addr(const ast::IndexExpr *ie)
     {
         std::string collectionType = infer_expr_type_name(ie->collection.get());
         TypeShape pt = parse_type_shape(collectionType);
-        if ((pt.base == "string" || pt.base == "string_params") && pt.array_rank == 0 && pt.pointer_depth == 0)
+        if (pt.is_scalar_string_like())
         {
             if (!colVal->getType()->isPointerTy())
             {
@@ -151,7 +151,7 @@ Value *CodeGen::codegen_index_addr(const ast::IndexExpr *ie)
                 return typedPtr;
             }
 
-            if (pt.base == "string" && pt.array_rank != 0)
+            if (pt.is_array_of("string"))
             {
                 PointerType *i8PtrPtrTy = detail::getPtrTy(context);
                 Value *typedPtr = builder.CreateBitCast(elemPtrI8, i8PtrPtrTy, "elem_ptr_to_i8ptrptr_dyn_str");
