@@ -190,7 +190,7 @@ stage-2 self-host gate
 ## Reserved But Not Implemented
 
 ```text
-enum match switch or type
+enum switch type
 ```
 
 ```text

@@ -34,7 +34,7 @@ if else for in return break continue as
 true false none byte
 ```
 
-`enum`、`match`、`switch`、`or`、`type` などの予約語は、まだ対応済みの構文ではありません。
+`enum`、`switch`、`type` などの予約語は、まだ対応済みの構文ではありません。
 詳細は [実装状況](status.ja.md#予約済みだが未実装) にまとめています。
 
 ## モジュールと import

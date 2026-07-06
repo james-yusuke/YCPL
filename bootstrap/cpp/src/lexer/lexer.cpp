@@ -19,7 +19,6 @@ namespace lex
         {"const", TokenType::KW_CONST},
         {"if", TokenType::KW_IF},
         {"else", TokenType::KW_ELSE},
-        {"match", TokenType::KW_MATCH},
         {"for", TokenType::KW_FOR},
         {"in", TokenType::KW_IN},
         {"return", TokenType::KW_RETURN},
@@ -30,7 +29,6 @@ namespace lex
         {"true", TokenType::KW_TRUE},
         {"false", TokenType::KW_FALSE},
         {"none", TokenType::KW_NONE},
-        {"or", TokenType::KW_OR},
         {"type", TokenType::KW_TYPE},
         {"byte", TokenType::KW_BYTE},
     };
