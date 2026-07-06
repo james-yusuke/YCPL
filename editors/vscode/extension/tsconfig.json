@@ -11,6 +11,10 @@
     "strict": true,
     "sourceMap": true,
     "esModuleInterop": true,
+    "types": [
+      "node",
+      "vscode"
+    ],
     "forceConsistentCasingInFileNames": true,
     "skipLibCheck": true
   },

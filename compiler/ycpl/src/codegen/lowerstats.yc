@@ -8,19 +8,19 @@ pub struct RealLoweringCoverage {
 }
 
 pub fn statement_expr_owner_limit() i32 {
-    return 32
-}
-
-pub fn real_body_node_limit() i32 {
-    return 32
-}
-
-pub fn real_expr_limit() i32 {
     return 64
 }
 
+pub fn real_body_node_limit() i32 {
+    return 64
+}
+
+pub fn real_expr_limit() i32 {
+    return 128
+}
+
 pub fn real_statement_expr_limit() i32 {
-    return 32
+    return 64
 }
 
 fn clamp_nonnegative(value i32) i32 {
