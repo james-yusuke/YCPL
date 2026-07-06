@@ -111,6 +111,39 @@ namespace ast
         void print(std::ostream &os, int indent = 0) const override;
     };
 
+    struct EnumVariant
+    {
+        std::string name;
+        std::optional<long long> value;
+
+        EnumVariant(std::string n, std::optional<long long> v = std::nullopt)
+            : name(std::move(n)), value(v) {}
+    };
+
+    struct EnumDecl : Decl
+    {
+        std::string name;
+        std::vector<EnumVariant> variants;
+        bool is_pub = false;
+
+        EnumDecl(std::string n, std::vector<EnumVariant> v, bool pub = false)
+            : name(std::move(n)), variants(std::move(v)), is_pub(pub) {}
+
+        void print(std::ostream &os, int indent = 0) const override;
+    };
+
+    struct TypeAliasDecl : Decl
+    {
+        std::string name;
+        std::unique_ptr<Type> target;
+        bool is_pub = false;
+
+        TypeAliasDecl(std::string n, std::unique_ptr<Type> t, bool pub = false)
+            : name(std::move(n)), target(std::move(t)), is_pub(pub) {}
+
+        void print(std::ostream &os, int indent = 0) const override;
+    };
+
     struct Ident : Expr
     {
         std::string name;
@@ -294,6 +327,27 @@ namespace ast
         std::unique_ptr<BlockStmt> else_blk;
         IfStmt(std::unique_ptr<Expr> c, std::unique_ptr<BlockStmt> t, std::unique_ptr<BlockStmt> e)
             : cond(std::move(c)), then_blk(std::move(t)), else_blk(std::move(e)) {}
+        void print(std::ostream &os, int indent = 0) const override;
+    };
+
+    struct SwitchCase
+    {
+        std::unique_ptr<Expr> value;
+        std::unique_ptr<BlockStmt> body;
+
+        SwitchCase(std::unique_ptr<Expr> v, std::unique_ptr<BlockStmt> b)
+            : value(std::move(v)), body(std::move(b)) {}
+    };
+
+    struct SwitchStmt : Stmt
+    {
+        std::unique_ptr<Expr> value;
+        std::vector<SwitchCase> cases;
+        std::unique_ptr<BlockStmt> default_body;
+
+        SwitchStmt(std::unique_ptr<Expr> v, std::vector<SwitchCase> c, std::unique_ptr<BlockStmt> d)
+            : value(std::move(v)), cases(std::move(c)), default_body(std::move(d)) {}
+
         void print(std::ostream &os, int indent = 0) const override;
     };
 

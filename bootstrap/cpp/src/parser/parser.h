@@ -38,8 +38,11 @@ namespace path
         std::unique_ptr<ast::Decl> parse_import_decl();
         std::unique_ptr<ast::Decl> parse_function_decl(bool is_pub, bool is_extern = false, bool is_intrinsic = false);
         std::unique_ptr<ast::Decl> parse_struct_decl(bool is_pub);
+        std::unique_ptr<ast::Decl> parse_enum_decl(bool is_pub);
+        std::unique_ptr<ast::Decl> parse_type_alias_decl(bool is_pub);
 
         std::unique_ptr<ast::Stmt> parse_stmt();
+        std::unique_ptr<ast::Stmt> parse_switch_stmt();
         std::unique_ptr<ast::BlockStmt> parse_block();
 
         std::unique_ptr<ast::Stmt> parse_var_or_expr_stmt();
@@ -49,6 +52,9 @@ namespace path
         std::unique_ptr<ast::Expr> parse_assignment();
         std::unique_ptr<ast::Expr> parse_logical_or();
         std::unique_ptr<ast::Expr> parse_logical_and();
+        std::unique_ptr<ast::Expr> parse_bitwise_or();
+        std::unique_ptr<ast::Expr> parse_bitwise_xor();
+        std::unique_ptr<ast::Expr> parse_bitwise_and();
         std::unique_ptr<ast::Expr> parse_equality();
         std::unique_ptr<ast::Expr> parse_comparison();
         std::unique_ptr<ast::Expr> parse_additive();
@@ -60,7 +66,6 @@ namespace path
         std::unique_ptr<ast::Expr> parse_postfix(std::unique_ptr<ast::Expr> left);
         std::unique_ptr<ast::Expr> parse_call_arg_for(const ast::Expr *callee, size_t arg_index);
         std::unique_ptr<ast::Expr> parse_shift();
-        std::unique_ptr<ast::Expr> parse_bitwise_and();
         std::unique_ptr<ast::Type> parse_type();
 
         bool is_at_end() const;

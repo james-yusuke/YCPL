@@ -95,11 +95,19 @@ pub fn name(kind i32) string {
     if kind == kw_intrinsic() { return "intrinsic" }
     if kind == kw_fn() { return "fn" }
     if kind == kw_struct() { return "struct" }
+    if kind == kw_enum() { return "enum" }
     if kind == kw_const() { return "const" }
     if kind == kw_if() { return "if" }
     if kind == kw_else() { return "else" }
     if kind == kw_for() { return "for" }
+    if kind == kw_in() { return "in" }
     if kind == kw_return() { return "return" }
+    if kind == kw_break() { return "break" }
+    if kind == kw_continue() { return "continue" }
+    if kind == kw_as() { return "as" }
+    if kind == kw_switch() { return "switch" }
+    if kind == kw_type() { return "type" }
+    if kind == kw_byte() { return "byte" }
     if kind == lparen() { return "(" }
     if kind == rparen() { return ")" }
     if kind == lbrace() { return "{" }

@@ -27,6 +27,10 @@ std/
 ├─ text   find, offsets
 ├─ json   parse, get, stringify
 ├─ map    caller-owned arrays
+├─ bytes  owned/wrapped binary buffers
+├─ hex    bytes <-> hexadecimal text
+├─ base64 bytes <-> base64 text
+├─ hash   FNV-1a32, CRC32
 └─ llvm   LLVM C API bridge
 ```
 
@@ -43,6 +47,10 @@ std/
 | `std/text` | `stl/std/text.yc` |
 | `std/json` | `stl/std/json.yc` |
 | `std/map` | `stl/std/map.yc` |
+| `std/bytes` | `stl/std/bytes.yc` |
+| `std/hex` | `stl/std/hex.yc` |
+| `std/base64` | `stl/std/base64.yc` |
+| `std/hash` | `stl/std/hash.yc` |
 | `std/llvm` | `stl/std/llvm.yc` |
 
 ## Common Flows
@@ -59,6 +67,12 @@ json.parse(text)
     -> JsonValue root
     -> json.get / json.at views
     -> json.free(root)
+
+bytes.from_string(text)
+    -> Bytes { data, len, cap, owned }
+    -> bytes.to_string / bytes.byte_to_string
+    -> hex.encode / base64.encode / hash.crc32
+    -> bytes.free
 ```
 
 ```YCPL
@@ -90,6 +104,11 @@ bundled `std` modules and is rejected in user modules.
 `std/os` exposes the narrow process hooks currently needed by compiler tooling:
 `getenv` for explicit tool paths such as `YCPL_BOOTSTRAP_YCC`, and `system` for
 the transitional `ycc-ycpl build` stage driver.
+
+`std/bytes`, `std/hex`, `std/base64`, and `std/hash` are foundation modules for
+file formats such as zip and for educational cryptography experiments. The
+FNV-1a32 and CRC32 functions in `std/hash` are for checks and identifiers, not
+cryptographic security.
 
 ## LLVM C API
 

@@ -1,0 +1,28 @@
+enum Color {
+    Red = 2,
+    Green,
+    Blue = 8,
+}
+
+type Score = i32
+
+fn classify(color Score) Score {
+    switch color {
+        case Color.Red {
+            return 10
+        }
+        case Green {
+            return 20
+        }
+        default {
+            return 30
+        }
+    }
+    return 0
+}
+
+fn main() {
+    println(classify(Color.Red))
+    println(classify(Green))
+    println(classify(Color.Blue))
+}

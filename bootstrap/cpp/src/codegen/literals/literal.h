@@ -121,6 +121,10 @@ Value *CodeGen::codegen_ident(const ast::Ident *id)
     if (!id)
         return nullptr;
 
+    long long enumValue = 0;
+    if (lookup_enum_value(id->name, enumValue))
+        return ConstantInt::get(get_int_type(), enumValue, true);
+
     Value *v = lookup_local(id->name);
     if (!v)
     {

@@ -119,10 +119,10 @@ Value *CodeGen::codegen_assign(const ast::AssignStmt *as)
             return nullptr;
 
         TypeShape pt = parse_type_shape(collectionType);
-        if ((pt.base == "string" || pt.base == "string_params") && pt.array_rank == 0)
+        if (pt.is_scalar_string_like())
             return Type::getInt8Ty(context);
 
-        if (pt.array_rank > 0 || pt.pointer_depth > 0)
+        if (pt.has_indirection())
         {
             Type *elemTy = resolve_llvm_type_name(pt.base);
             if (elemTy)

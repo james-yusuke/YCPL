@@ -84,6 +84,57 @@ Value *CodeGen::array_header_field_ptr(Value *arrayHeaderPtr, detail::RuntimeArr
     return detail::createRuntimeArrayFieldGEP(builder, arrayHeaderTy, arrayHeaderPtr, field, label);
 }
 
+Value *CodeGen::coerce_index_to_i64(Value *indexValue, const std::string &label)
+{
+    if (!indexValue)
+        return nullptr;
+    if (indexValue->getType()->isIntegerTy(64))
+        return indexValue;
+    if (indexValue->getType()->isIntegerTy())
+        return builder.CreateSExtOrTrunc(indexValue, detail::getI64Ty(context), label);
+
+    error("index must be an integer");
+    return nullptr;
+}
+
+Value *CodeGen::string_element_addr(Value *stringValue, Value *indexValue, const std::string &label)
+{
+    if (!stringValue || !stringValue->getType()->isPointerTy())
+    {
+        error("string index requires pointer string value");
+        return nullptr;
+    }
+
+    indexValue = coerce_index_to_i64(indexValue, label + ".idx.i64");
+    if (!indexValue)
+        return nullptr;
+
+    return builder.CreateInBoundsGEP(Type::getInt8Ty(context), stringValue, {indexValue}, label);
+}
+
+Value *CodeGen::string_element_value(Value *stringValue, Value *indexValue, const std::string &label)
+{
+    Value *charPtr = string_element_addr(stringValue, indexValue, label + ".ptr");
+    if (!charPtr)
+        return nullptr;
+
+    Value *ch = builder.CreateLoad(Type::getInt8Ty(context), charPtr, label + ".load");
+    return builder.CreateZExt(ch, builder.getInt32Ty(), label + ".i32");
+}
+
+std::pair<bool, bool> CodeGen::infer_array_literal_element_shape(const ast::Expr *collectionExpr)
+{
+    const auto *literal = dynamic_cast<const ast::ArrayLiteral *>(collectionExpr);
+    if (!literal || literal->elements.empty())
+        return {false, false};
+
+    const ast::Expr *firstElem = literal->elements.front().get();
+    return {
+        dynamic_cast<const ast::ArrayLiteral *>(firstElem) != nullptr,
+        dynamic_cast<const ast::IndexExpr *>(firstElem) != nullptr,
+    };
+}
+
 Value *CodeGen::checked_array_element_data_ptr(const ast::Expr *arrayExpr, const ast::Expr *indexExpr, Value **elementSizeOut)
 {
     if (!arrayExpr || !indexExpr)

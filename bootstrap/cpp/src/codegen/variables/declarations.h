@@ -1,6 +1,7 @@
 #pragma once
 #include "../codegen.h"
 #include "../common.h"
+#include "../types/type_shape.h"
 #include "type_names.h"
 #include <llvm/IR/Constants.h>
 #include <llvm/IR/DerivedTypes.h>
@@ -11,35 +12,27 @@ namespace codegen
 
 std::string CodeGen::resolve_type_name(ast::Type *tp)
 {
-    int array_rank = 0;
-    int pointer_depth = 0;
+    TypeShape shape;
 
     while (tp)
     {
 
         if (auto *nt = dynamic_cast<ast::NamedType *>(tp))
         {
-            std::string result = nt->name;
-
-            for (int i = 0; i < array_rank; i++)
-                result += "[]";
-
-            for (int i = 0; i < pointer_depth; i++)
-                result += "*";
-
-            return result;
+            shape.base = nt->name;
+            return shape.full_name();
         }
 
         if (auto *at = dynamic_cast<ast::ArrayType *>(tp))
         {
-            array_rank++;
+            shape.array_rank++;
             tp = at->elem.get();
             continue;
         }
 
         if (auto *pt = dynamic_cast<ast::PointerType *>(tp))
         {
-            pointer_depth++;
+            shape.pointer_depth++;
             tp = pt->base.get();
             continue;
         }

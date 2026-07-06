@@ -107,6 +107,19 @@ fn is_type_token(kind i32) bool {
     return kind == tok.ident() || kind == tok.star() || kind == tok.lbrack() || kind == tok.rbrack() || kind == tok.kw_byte()
 }
 
+fn is_removed_keyword(lexeme string) bool {
+    if str.eq(lexeme, "go") { return true }
+    if str.eq(lexeme, "defer") { return true }
+    if str.eq(lexeme, "select") { return true }
+    if str.eq(lexeme, "interface") { return true }
+    if str.eq(lexeme, "is") { return true }
+    if str.eq(lexeme, "importas") { return true }
+    if str.eq(lexeme, "mut") { return true }
+    if str.eq(lexeme, "match") { return true }
+    if str.eq(lexeme, "or") { return true }
+    return false
+}
+
 pub fn scan(path string, source string) SymbolScan {
     lx := lexer.new(path, source)
     scan := empty_ok()
@@ -118,6 +131,8 @@ pub fn scan(path string, source string) SymbolScan {
     pending_module_name := false
     pending_function_name := false
     pending_struct_name := false
+    pending_enum_name := false
+    pending_type_alias_name := false
     pending_public_symbol := false
     pending_extern_symbol := false
     pending_intrinsic_symbol := false
@@ -142,6 +157,10 @@ pub fn scan(path string, source string) SymbolScan {
         }
         if lx.kind == tok.eof() {
             break
+        }
+
+        if lx.kind == tok.ident() && is_removed_keyword(lx.lexeme) {
+            return fail(lx.tok_line, lx.tok_col, "removed keyword is not supported")
         }
 
         if lx.kind == tok.newline() {
@@ -310,6 +329,30 @@ pub fn scan(path string, source string) SymbolScan {
             pending_public_symbol = false
         }
 
+        if pending_enum_name && lx.kind == tok.ident() {
+            scan.symbol_digest = scan.symbol_digest * 31 + 103
+            scan.symbol_digest = hash_name(scan.symbol_digest, lx.lexeme)
+            if pending_public_symbol {
+                scan.public_symbols += 1
+            } else {
+                scan.local_symbols += 1
+            }
+            pending_enum_name = false
+            pending_public_symbol = false
+        }
+
+        if pending_type_alias_name && lx.kind == tok.ident() {
+            scan.symbol_digest = scan.symbol_digest * 31 + 104
+            scan.symbol_digest = hash_name(scan.symbol_digest, lx.lexeme)
+            if pending_public_symbol {
+                scan.public_symbols += 1
+            } else {
+                scan.local_symbols += 1
+            }
+            pending_type_alias_name = false
+            pending_public_symbol = false
+        }
+
         if lx.kind == tok.kw_pub() {
             pending_pub = true
         }
@@ -342,6 +385,16 @@ pub fn scan(path string, source string) SymbolScan {
         }
         if lx.kind == tok.kw_struct() {
             pending_struct_name = true
+            pending_public_symbol = pending_pub
+            pending_pub = false
+        }
+        if lx.kind == tok.kw_enum() {
+            pending_enum_name = true
+            pending_public_symbol = pending_pub
+            pending_pub = false
+        }
+        if lx.kind == tok.kw_type() {
+            pending_type_alias_name = true
             pending_public_symbol = pending_pub
             pending_pub = false
         }

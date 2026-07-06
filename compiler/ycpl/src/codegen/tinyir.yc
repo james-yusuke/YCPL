@@ -2716,6 +2716,123 @@ fn parse_for_statement(p TinyIrParser) TinyIrParser {
     return advance_sig(p)
 }
 
+fn parse_switch_case_value(p TinyIrParser) TinyIrParser {
+    sign := 1
+    if p.lx.kind == tok.minus() {
+        sign = -1
+        p = advance_sig(p)
+    }
+    if p.lx.kind != tok.int_lit() {
+        return unsupported_parser(p, "self codegen switch cases currently require i32 integer literals")
+    }
+    p.value = llvm.const_int(p.i32_type, parse_i32(p.lx.lexeme) * sign, 1)
+    p.value_type = tiny_i32_type_kind()
+    return advance_sig(p)
+}
+
+fn parse_switch_case_body(p TinyIrParser, done_block *byte, label string) TinyIrParser {
+    if p.lx.kind != tok.lbrace() {
+        return fail_parser(p, label)
+    }
+    p = advance_sig(p)
+    body_terminated := false
+    for (; p.ok && p.lx.kind != tok.rbrace() && p.lx.kind != tok.eof(); ) {
+        p = parse_statement(p)
+        if !p.ok { return p }
+        if p.returned {
+            body_terminated = true
+            p.returned = false
+            p = skip_to_block_end(p)
+            if !p.ok { return p }
+            break
+        }
+        if p.loop_break || p.loop_continue {
+            body_terminated = true
+            p = skip_to_block_end(p)
+            if !p.ok { return p }
+            break
+        }
+        if p.lx.kind == tok.semicolon() {
+            p = advance_sig(p)
+        }
+    }
+    if !p.ok { return p }
+    if p.lx.kind != tok.rbrace() {
+        return fail_parser(p, "expected '}' after switch case body")
+    }
+    if !body_terminated {
+        llvm.build_br(p.builder, done_block)
+    }
+    return advance_sig(p)
+}
+
+fn parse_switch_statement(p TinyIrParser) TinyIrParser {
+    p = advance_sig(p)
+    p = parse_expr_or_comparison(p)
+    if !p.ok { return p }
+    p = ensure_i32_value(p, "self codegen switch expression currently requires i32")
+    if !p.ok { return p }
+    selector := p.value
+    if p.lx.kind != tok.lbrace() {
+        return fail_parser(p, "expected '{' after switch expression")
+    }
+
+    default_block := llvm.append_basic_block_in_context(p.ctx, p.current_fn, "tiny_switch_default")
+    done_block := llvm.append_basic_block_in_context(p.ctx, p.current_fn, "tiny_switch_done")
+    switch_inst := llvm.build_switch(p.builder, selector, default_block, 4)
+    outer_break_block := p.current_break_block
+    outer_continue_block := p.current_continue_block
+    p.current_break_block = done_block
+    default_seen := false
+
+    p = advance_sig(p)
+    for (; p.ok && p.lx.kind != tok.rbrace() && p.lx.kind != tok.eof(); ) {
+        if p.lx.kind != tok.ident() {
+            return fail_parser(p, "expected switch case or default")
+        }
+        if str.eq(p.lx.lexeme, "case") {
+            p = advance_sig(p)
+            p = parse_switch_case_value(p)
+            if !p.ok { return p }
+            case_value := p.value
+            case_block := llvm.append_basic_block_in_context(p.ctx, p.current_fn, "tiny_switch_case")
+            llvm.add_case(switch_inst, case_value, case_block)
+            llvm.position_builder_at_end(p.builder, case_block)
+            p = parse_switch_case_body(p, done_block, "expected '{' after switch case")
+            if !p.ok { return p }
+            p.loop_break = false
+            p.loop_continue = false
+        } else if str.eq(p.lx.lexeme, "default") {
+            if default_seen {
+                return fail_parser(p, "duplicate switch default")
+            }
+            default_seen = true
+            p = advance_sig(p)
+            llvm.position_builder_at_end(p.builder, default_block)
+            p = parse_switch_case_body(p, done_block, "expected '{' after switch default")
+            if !p.ok { return p }
+            p.loop_break = false
+            p.loop_continue = false
+        } else {
+            return fail_parser(p, "expected switch case or default")
+        }
+    }
+    if !p.ok { return p }
+    if p.lx.kind != tok.rbrace() {
+        return fail_parser(p, "expected '}' after switch")
+    }
+    if !default_seen {
+        llvm.position_builder_at_end(p.builder, default_block)
+        llvm.build_br(p.builder, done_block)
+    }
+    llvm.position_builder_at_end(p.builder, done_block)
+    p.current_break_block = outer_break_block
+    p.current_continue_block = outer_continue_block
+    p.loop_break = false
+    p.loop_continue = false
+    return advance_sig(p)
+}
+
 fn parse_statement(p TinyIrParser) TinyIrParser {
     if p.lx.kind == tok.kw_break() {
         if p.current_break_block == none {
@@ -2761,6 +2878,10 @@ fn parse_statement(p TinyIrParser) TinyIrParser {
         return parse_for_statement(p)
     }
 
+    if p.lx.kind == tok.kw_switch() {
+        return parse_switch_statement(p)
+    }
+
     if p.lx.kind == tok.ident() {
         probe := p
         probe = advance_sig(probe)
@@ -2773,7 +2894,7 @@ fn parse_statement(p TinyIrParser) TinyIrParser {
         return parse_var_or_assign(p)
     }
 
-    return unsupported_parser(p, "self codegen currently supports local statements, calls, assignments, if, for, and return")
+    return unsupported_parser(p, "self codegen currently supports local statements, calls, assignments, if, for, switch, and return")
 }
 
 fn parse_function(p TinyIrParser) TinyIrParser {

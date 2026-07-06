@@ -13,6 +13,7 @@ pub fn else_node_kind() i32 { return 7 }
 pub fn break_node_kind() i32 { return 8 }
 pub fn continue_node_kind() i32 { return 9 }
 pub fn for_in_node_kind() i32 { return 10 }
+pub fn switch_node_kind() i32 { return 11 }
 
 pub fn no_payload_kind() i32 { return 0 }
 pub fn identifier_payload_kind() i32 { return 1 }

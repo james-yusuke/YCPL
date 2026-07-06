@@ -949,6 +949,9 @@ fn ensure_control_nodes_listed(scan FunctionBodyScan) FunctionBodyScan {
         }
         scan.sequence_digest = scan.sequence_digest * 31 + astbody.for_node_kind()
     }
+    if listed_nodes_have_kind(scan, astbody.switch_node_kind()) {
+        return scan
+    }
     return scan
 }
 
@@ -1344,10 +1347,13 @@ fn scan_control_function_body_from_sources_with_project_types(sources SourceList
             fallback = scan
             has_fallback = true
         }
-        if scan.ifs > 0 || scan.fors > 0 {
+        if scan.ifs > 0 || scan.fors > 0 || listed_nodes_have_kind(scan, astbody.switch_node_kind()) {
             fallback = scan
         }
         if scan.ifs > 0 && scan.fors > 0 {
+            return ensure_control_nodes_listed(scan)
+        }
+        if listed_nodes_have_kind(scan, astbody.switch_node_kind()) {
             return ensure_control_nodes_listed(scan)
         }
     }

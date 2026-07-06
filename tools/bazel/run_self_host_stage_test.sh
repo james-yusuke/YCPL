@@ -33,7 +33,28 @@ require_project_file_count() {
 
 "$YCC_YCPL" parse compiler/ycpl >/tmp/ycpl-stage-parse.out
 "$YCC_YCPL" check compiler/ycpl >/tmp/ycpl-stage-check.out
+"$YCC_YCPL" parse examples/101_enum_switch_type_alias.yc >/tmp/ycpl-stage-enum-switch-type-parse.out
+grep -q 'parse ok:' /tmp/ycpl-stage-enum-switch-type-parse.out
+grep -q 'decls=4' /tmp/ycpl-stage-enum-switch-type-parse.out
+grep -q 'funcs=2' /tmp/ycpl-stage-enum-switch-type-parse.out
+grep -q 'nodes=' /tmp/ycpl-stage-enum-switch-type-parse.out
 eightarg_stage_dir="$(mktemp -d "${TMPDIR:-/tmp}/ycpl-stage-eightarg-check.XXXXXX")"
+cat >"$eightarg_stage_dir/removed_mut.yc" <<'YCPL'
+fn main() i32 {
+    mut value := 1
+    return value
+}
+YCPL
+set +e
+"$YCC_YCPL" parse "$eightarg_stage_dir/removed_mut.yc" >/tmp/ycpl-stage-removed-mut.out 2>&1
+removed_mut_rc=$?
+set -e
+if [ "$removed_mut_rc" -eq 0 ]; then
+  printf 'Expected removed mut keyword to fail parsing\n' >&2
+  cat /tmp/ycpl-stage-removed-mut.out >&2
+  exit 1
+fi
+grep -q 'removed keyword is not supported' /tmp/ycpl-stage-removed-mut.out
 cat >"$eightarg_stage_dir/eightarg.yc" <<'YCPL'
 extern fn sum8(a i32, b i32, c i32, d i32, e i32, f i32, g i32, h i32) i32 as "sum8"
 
@@ -112,6 +133,33 @@ fn traversal_flow_surface(items []i32) i32 {
     }
     return total
 }
+
+fn traversal_switch_surface(value i32) i32 {
+    switch value {
+        case 0 {
+            return 1
+        }
+        default {
+            return 2
+        }
+    }
+    return 3
+}
+YCPL
+cat >"$traversal_dir/ycpl/src/aaa_switch.yc" <<'YCPL'
+module compiler.ycpl.generated.switchsurface
+
+fn traversal_switch_surface(value i32) i32 {
+    switch value {
+        case 0 {
+            return 1
+        }
+        default {
+            return 2
+        }
+    }
+    return 3
+}
 YCPL
 "$YCC_YCPL" parse "$traversal_dir/ycpl" >/tmp/ycpl-stage-traversal-parse.out
 require_project_file_count /tmp/ycpl-stage-traversal-parse.out 24 "recursive traversal in $traversal_dir/ycpl"
@@ -121,6 +169,8 @@ grep -q 'node_lower_else_body' "$traversal_ir_dir/project_body.ll"
 grep -q 'node_lower_break_slot' "$traversal_ir_dir/project_body.ll"
 grep -q 'node_lower_continue_slot' "$traversal_ir_dir/project_body.ll"
 grep -q 'node_lower_for_in_check' "$traversal_ir_dir/project_body.ll"
+grep -q 'node_lower_switch_case' "$traversal_ir_dir/project_body.ll"
+grep -q 'switch i32' "$traversal_ir_dir/project_body.ll"
 require_project_file_count /tmp/ycpl-stage-parse.out 23 "stage parse"
 require_project_file_count /tmp/ycpl-stage-check.out 23 "stage check"
 grep -q 'fn_digest=' /tmp/ycpl-stage-parse.out
@@ -526,6 +576,9 @@ grep -q 'transition_digest' "$strict_ir_dir/local_return.ll"
 grep -q 'call i32 @ycpl_node_call_probe' "$strict_ir_dir/local_return.ll"
 grep -q 'call i32 @ycpl_node_transition_probe' "$strict_ir_dir/local_return.ll"
 grep -q 'call i32 @ycpl_node_control_flow_probe' "$strict_ir_dir/local_return.ll"
+grep -q 'define i32 @ycpl_node_switch_probe' "$strict_ir_dir/local_return.ll"
+grep -q 'switch i32' "$strict_ir_dir/local_return.ll"
+grep -q 'call i32 @ycpl_node_switch_probe' "$strict_ir_dir/local_return.ll"
 grep -q 'alloca i32' "$strict_ir_dir/local_return.ll"
 grep -q 'store i32' "$strict_ir_dir/local_return.ll"
 grep -q 'load i32' "$strict_ir_dir/local_return.ll"
