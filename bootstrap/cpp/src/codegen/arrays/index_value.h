@@ -8,8 +8,8 @@
 #include <llvm/IR/DerivedTypes.h>
 #include <llvm/IR/Intrinsics.h>
 
-using namespace llvm;
-using namespace codegen;
+namespace codegen
+{
 
 Value *CodeGen::codegen_index(const ast::IndexExpr *ie)
 {
@@ -78,7 +78,7 @@ Value *CodeGen::codegen_index(const ast::IndexExpr *ie)
 
         if (pt.pointer_depth > 0 && pt.array_rank == 0)
         {
-            Type *elemTy = getLLVMType(pt.base);
+            Type *elemTy = resolve_llvm_type_name(pt.base);
             if (!elemTy)
             {
                 error("index: cannot resolve pointer element type for " + id->name);
@@ -364,4 +364,6 @@ Value *CodeGen::codegen_index(const ast::IndexExpr *ie)
     phi->addIncoming(caseValDef, defaultBB);
 
     return phi;
+}
+
 }

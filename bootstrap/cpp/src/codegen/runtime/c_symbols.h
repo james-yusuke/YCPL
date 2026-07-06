@@ -7,8 +7,8 @@
 #include <initializer_list>
 #include <vector>
 
-using namespace llvm;
-using namespace codegen;
+namespace codegen
+{
 
 namespace
 {
@@ -163,4 +163,6 @@ Function *CodeGen::get_or_declare_c_function(const std::string &name)
     }
 
     return nullptr;
+}
+
 }

@@ -8,8 +8,8 @@
 #include <llvm/IR/GlobalVariable.h>
 #include <llvm/IR/Instructions.h>
 
-using namespace llvm;
-using namespace codegen;
+namespace codegen
+{
 
 Value *CodeGen::array_header_ptr_from_value(Value *value, const std::string &label)
 {
@@ -143,4 +143,6 @@ Value *CodeGen::checked_array_element_data_ptr_from_values(Value *collectionValu
 
     Value *offset = builder.CreateMul(indexValue, elementSize, label + ".elem.offset");
     return builder.CreateInBoundsGEP(i8Ty, dataPtr, {offset}, label + ".elem.i8");
+}
+
 }

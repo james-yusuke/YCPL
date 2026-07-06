@@ -5,8 +5,8 @@
 #include <llvm/IR/DerivedTypes.h>
 #include <llvm/IR/Intrinsics.h>
 
-using namespace llvm;
-using namespace codegen;
+namespace codegen
+{
 
 Value *CodeGen::codegen_append_call(const ast::CallExpr *ce)
 {
@@ -337,4 +337,6 @@ Value *CodeGen::codegen_append_call(const ast::CallExpr *ce)
     builder.SetInsertPoint(bbCont);
 
     return array_header_ptr;
+}
+
 }

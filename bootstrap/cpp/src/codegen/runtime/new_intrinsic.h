@@ -7,8 +7,8 @@
 #include <llvm/ADT/SmallVector.h>
 #include <llvm/ADT/Twine.h>
 
-using namespace llvm;
-using namespace codegen;
+namespace codegen
+{
 
 Value *CodeGen::codegen_new_call(const ast::CallExpr *ce)
 {
@@ -76,4 +76,6 @@ Value *CodeGen::codegen_new_call(const ast::CallExpr *ce)
     builder.CreateStore(ConstantInt::get(i64, (uint64_t)elemSizeBytes), elemSizeGep);
 
     return rawMem;
+}
+
 }

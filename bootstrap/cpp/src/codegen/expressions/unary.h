@@ -5,8 +5,8 @@
 #include <llvm/IR/DerivedTypes.h>
 #include <llvm/IR/Intrinsics.h>
 
-using namespace llvm;
-using namespace codegen;
+namespace codegen
+{
 
 Value *CodeGen::codegen_unary(const ast::UnaryExpr *ue)
 {
@@ -292,4 +292,6 @@ Value *CodeGen::codegen_unary(const ast::UnaryExpr *ue)
 
     error("unsupported unary op: " + ue->op);
     return nullptr;
+}
+
 }

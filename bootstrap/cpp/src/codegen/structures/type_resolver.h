@@ -6,8 +6,8 @@
 #include <llvm/IR/Intrinsics.h>
 #include <utility>
 
-using namespace llvm;
-using namespace codegen;
+namespace codegen
+{
 
 llvm::StructType *CodeGen::get_struct_type_from_value(Value *v, const std::string &varname)
 {
@@ -279,4 +279,6 @@ std::pair<llvm::StructType *, llvm::Value *> CodeGen::resolve_struct_and_ptr(llv
     }
 
     return {nullptr, nullptr};
+}
+
 }

@@ -7,8 +7,8 @@
 #include <llvm/ADT/SmallVector.h>
 #include <llvm/ADT/Twine.h>
 
-using namespace llvm;
-using namespace codegen;
+namespace codegen
+{
 
 Value *CodeGen::codegen_println_call(const ast::CallExpr *ce)
 {
@@ -78,4 +78,6 @@ Value *CodeGen::codegen_println_call(const ast::CallExpr *ce)
         callArgs.push_back(v);
 
     return builder.CreateCall(printfFn, callArgs, "call_printf");
+}
+
 }

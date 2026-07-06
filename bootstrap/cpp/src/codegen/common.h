@@ -1,12 +1,59 @@
 #pragma once
 
+#include <llvm/ADT/ArrayRef.h>
+#include <llvm/ADT/SmallVector.h>
+#include <llvm/ADT/Twine.h>
+#include <llvm/IR/Constants.h>
+#include <llvm/IR/DataLayout.h>
+#include <llvm/IR/GlobalValue.h>
+#include <llvm/IR/GlobalVariable.h>
 #include <llvm/IR/IRBuilder.h>
 #include <llvm/IR/DerivedTypes.h>
 #include <llvm/IR/Module.h>
 #include <llvm/IR/Function.h>
+#include <llvm/IR/Instructions.h>
 
 namespace codegen
 {
+    using llvm::AllocaInst;
+    using llvm::Argument;
+    using llvm::ArrayType;
+    using llvm::ArrayRef;
+    using llvm::BasicBlock;
+    using llvm::BitCastInst;
+    using llvm::CallInst;
+    using llvm::Constant;
+    using llvm::ConstantAggregateZero;
+    using llvm::ConstantArray;
+    using llvm::ConstantExpr;
+    using llvm::ConstantFP;
+    using llvm::ConstantInt;
+    using llvm::ConstantPointerNull;
+    using llvm::DataLayout;
+    using llvm::Function;
+    using llvm::FunctionCallee;
+    using llvm::FunctionType;
+    using llvm::GetElementPtrInst;
+    using llvm::GlobalValue;
+    using llvm::GlobalVariable;
+    using llvm::Instruction;
+    using llvm::IntegerType;
+    using llvm::IRBuilder;
+    using llvm::LLVMContext;
+    using llvm::LoadInst;
+    using llvm::MaybeAlign;
+    using llvm::Module;
+    using llvm::PHINode;
+    using llvm::PointerType;
+    using llvm::SmallVector;
+    using llvm::StructType;
+    using llvm::Twine;
+    using llvm::Type;
+    using llvm::Value;
+    using llvm::cast;
+    using llvm::dyn_cast;
+    using llvm::errs;
+
     namespace detail
     {
         inline llvm::Type *getI8PtrTy(llvm::LLVMContext &context)

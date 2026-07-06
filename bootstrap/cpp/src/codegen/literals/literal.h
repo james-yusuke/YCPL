@@ -5,8 +5,8 @@
 #include <llvm/IR/DerivedTypes.h>
 #include <llvm/IR/Intrinsics.h>
 
-using namespace llvm;
-using namespace codegen;
+namespace codegen
+{
 
 Value *CodeGen::codegen_literal(const ast::Literal *lit)
 {
@@ -252,4 +252,6 @@ Value *CodeGen::codegen_byte_array(const ast::ByteArrayLiteral *bal)
     Constant *gep = ConstantExpr::getInBoundsGetElementPtr(arrTy, gv, ArrayRef<Constant *>(idxs));
 
     return gep;
+}
+
 }
