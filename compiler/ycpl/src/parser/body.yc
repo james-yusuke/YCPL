@@ -199,6 +199,10 @@ fn parse_at(path string, source string, target_index i32, target_count i32) Body
                 seq = astbody.add_with_role(seq, astbody.if_node_kind(), lx.tok_line, lx.tok_col, lx.lexeme, astbody.control_payload_kind(), astbody.control_flow_role())
                 expression_owner_open = true
             }
+            if lx.kind == tok.kw_switch() {
+                seq = astbody.add_with_role(seq, astbody.if_node_kind(), lx.tok_line, lx.tok_col, lx.lexeme, astbody.control_payload_kind(), astbody.control_flow_role())
+                expression_owner_open = true
+            }
             if lx.kind == tok.kw_else() {
                 seq = astbody.add_with_role(seq, astbody.else_node_kind(), lx.tok_line, lx.tok_col, lx.lexeme, astbody.control_payload_kind(), astbody.control_flow_role())
                 expression_owner_open = false

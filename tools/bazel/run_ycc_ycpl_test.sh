@@ -301,9 +301,18 @@ for file in examples/*.yc; do
     *_failure.yc)
       continue
       ;;
+    examples/100_retired_keywords_as_identifiers.yc)
+      continue
+      ;;
   esac
   "$YCC_YCPL" parse "$file" >/dev/null
 done
+
+if "$YCC_YCPL" parse examples/100_retired_keywords_as_identifiers.yc >/tmp/ycc-ycpl-retired-keywords.out 2>&1; then
+  printf 'Expected ycc-ycpl parser to reject removed keyword identifiers\n' >&2
+  exit 1
+fi
+grep -q 'removed keyword is not supported' /tmp/ycc-ycpl-retired-keywords.out
 
 expect_failure() {
   local file="$1"

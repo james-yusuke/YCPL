@@ -33,7 +33,28 @@ require_project_file_count() {
 
 "$YCC_YCPL" parse compiler/ycpl >/tmp/ycpl-stage-parse.out
 "$YCC_YCPL" check compiler/ycpl >/tmp/ycpl-stage-check.out
+"$YCC_YCPL" parse examples/101_enum_switch_type_alias.yc >/tmp/ycpl-stage-enum-switch-type-parse.out
+grep -q 'parse ok:' /tmp/ycpl-stage-enum-switch-type-parse.out
+grep -q 'decls=4' /tmp/ycpl-stage-enum-switch-type-parse.out
+grep -q 'funcs=2' /tmp/ycpl-stage-enum-switch-type-parse.out
+grep -q 'nodes=' /tmp/ycpl-stage-enum-switch-type-parse.out
 eightarg_stage_dir="$(mktemp -d "${TMPDIR:-/tmp}/ycpl-stage-eightarg-check.XXXXXX")"
+cat >"$eightarg_stage_dir/removed_mut.yc" <<'YCPL'
+fn main() i32 {
+    mut value := 1
+    return value
+}
+YCPL
+set +e
+"$YCC_YCPL" parse "$eightarg_stage_dir/removed_mut.yc" >/tmp/ycpl-stage-removed-mut.out 2>&1
+removed_mut_rc=$?
+set -e
+if [ "$removed_mut_rc" -eq 0 ]; then
+  printf 'Expected removed mut keyword to fail parsing\n' >&2
+  cat /tmp/ycpl-stage-removed-mut.out >&2
+  exit 1
+fi
+grep -q 'removed keyword is not supported' /tmp/ycpl-stage-removed-mut.out
 cat >"$eightarg_stage_dir/eightarg.yc" <<'YCPL'
 extern fn sum8(a i32, b i32, c i32, d i32, e i32, f i32, g i32, h i32) i32 as "sum8"
 
