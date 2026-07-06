@@ -48,7 +48,7 @@ import {
   type SemanticTokensParams,
   type SignatureHelpParams,
   type WorkspaceSymbolParams
-} from "vscode-languageserver/node.js";
+} from "vscode-languageserver/node";
 import type { TextDocument } from "vscode-languageserver-textdocument";
 import {
   categoryToSemanticKind,
@@ -355,7 +355,8 @@ export class YcplProviders {
   codeActions(params: CodeActionParams): CodeAction[] {
     const actions: CodeAction[] = [];
     for (const diagnostic of params.context.diagnostics) {
-      if (diagnostic.message.includes("not used")) {
+      const message = typeof diagnostic.message === "string" ? diagnostic.message : diagnostic.message.value;
+      if (message.includes("not used")) {
         actions.push(CodeAction.create("Remove unused import", {
           changes: {
             [params.textDocument.uri]: [TextEdit.del(lineRangeContaining(diagnostic.range))]

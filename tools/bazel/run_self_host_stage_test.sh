@@ -759,22 +759,22 @@ grep -q 'function_body_lowered_total_with_real_ast' "$strict_ir_dir/project_body
 grep -q 'function_body_real_node_lowering_limit' "$strict_ir_dir/project_body.ll"
 grep -q 'function_body_real_expr_lowering_limit' "$strict_ir_dir/project_body.ll"
 grep -q 'function_body_real_statement_expr_lowering_limit' "$strict_ir_dir/project_body.ll"
-grep -q 'store i32 32, ptr %function_body_real_node_lowering_limit' "$strict_ir_dir/project_body.ll"
-grep -q 'store i32 64, ptr %function_body_real_expr_lowering_limit' "$strict_ir_dir/project_body.ll"
-grep -q 'store i32 32, ptr %function_body_real_statement_expr_lowering_limit' "$strict_ir_dir/project_body.ll"
-grep -q 'store i32 32, ptr %function_body_real_lowered_node_count' "$strict_ir_dir/project_body.ll"
-grep -q 'store i32 64, ptr %function_body_real_lowered_expr_count' "$strict_ir_dir/project_body.ll"
-if grep -Eq 'store i32 (3[3-9]|[4-9][0-9]|[1-9][0-9][0-9]+), ptr %function_body_real_lowered_node_count' "$strict_ir_dir/project_body.ll"; then
+grep -q 'store i32 64, ptr %function_body_real_node_lowering_limit' "$strict_ir_dir/project_body.ll"
+grep -q 'store i32 128, ptr %function_body_real_expr_lowering_limit' "$strict_ir_dir/project_body.ll"
+grep -q 'store i32 64, ptr %function_body_real_statement_expr_lowering_limit' "$strict_ir_dir/project_body.ll"
+grep -q 'store i32 64, ptr %function_body_real_lowered_node_count' "$strict_ir_dir/project_body.ll"
+grep -q 'store i32 128, ptr %function_body_real_lowered_expr_count' "$strict_ir_dir/project_body.ll"
+if grep -Eq 'store i32 (6[5-9]|[7-9][0-9]|[1-9][0-9][0-9]+), ptr %function_body_real_lowered_node_count' "$strict_ir_dir/project_body.ll"; then
   printf 'function_body_real_lowered_node_count exceeded the configured real node lowering cap\n' >&2
   exit 1
 fi
-if grep -Eq 'store i32 (6[5-9]|[7-9][0-9]|[1-9][0-9][0-9]+), ptr %function_body_real_lowered_expr_count' "$strict_ir_dir/project_body.ll"; then
+if grep -Eq 'store i32 (12[9]|1[3-9][0-9]|[2-9][0-9][0-9]|[1-9][0-9][0-9][0-9]+), ptr %function_body_real_lowered_expr_count' "$strict_ir_dir/project_body.ll"; then
   printf 'function_body_real_lowered_expr_count exceeded the configured real expression lowering cap\n' >&2
   exit 1
 fi
 grep -Eq 'store i32 ([1-9][0-9]*), ptr %function_body_real_unlowered_node_count' "$strict_ir_dir/project_body.ll"
 grep -Eq 'store i32 ([1-9][0-9]*), ptr %function_body_real_unlowered_expr_count' "$strict_ir_dir/project_body.ll"
-grep -q 'store i32 32, ptr %function_statement_expr_owner_limit' "$strict_ir_dir/project_body.ll"
+grep -q 'store i32 64, ptr %function_statement_expr_owner_limit' "$strict_ir_dir/project_body.ll"
 grep -Eq 'store i32 ([6-9][0-9][0-9]|[1-9][0-9][0-9][0-9]), ptr %function_expr_lowered_nodes' "$strict_ir_dir/project_body.ll"
 grep -q 'function_expression_slot_score' "$strict_ir_dir/project_body.ll"
 grep -q 'function_expr_identifier_nodes' "$strict_ir_dir/project_body.ll"
