@@ -273,6 +273,8 @@ grep -q 'value=13' /tmp/ycc-ycpl-check-struct3-member.out
 grep -q 'value=13' /tmp/ycc-ycpl-check-struct3-param-call.out
 "$YCC_YCPL" check examples/98_self_codegen_struct3_return.yc >/tmp/ycc-ycpl-check-struct3-return.out
 grep -q 'value=13' /tmp/ycc-ycpl-check-struct3-return.out
+"$YCC_YCPL" check examples/99_self_codegen_main_args.yc >/tmp/ycc-ycpl-check-main-args.out
+grep -q 'value=13' /tmp/ycc-ycpl-check-main-args.out
 if "$YCC_YCPL" check examples/55_self_codegen_unknown_failure.yc >/tmp/ycc-ycpl-check-failure.out 2>&1; then
   printf 'Expected ycc-ycpl check to reject unknown local symbol\n' >&2
   exit 1
@@ -1223,6 +1225,14 @@ grep -q 'alloca ptr' "$self_string_dir/merged.ll"
 grep -q 'store ptr' "$self_string_dir/merged.ll"
 grep -q '@strlit' "$self_string_dir/merged.ll"
 grep -q 'ret i32 13' "$self_string_dir/merged.ll"
+
+self_main_args_dir="$(mktemp -d "${TMPDIR:-/tmp}/ycpl-self-main-args.XXXXXX")"
+"$YCC_YCPL" build-ir-self examples/99_self_codegen_main_args.yc -o "$self_main_args_dir" >/dev/null
+grep -q 'define i32 @main(i32' "$self_main_args_dir/merged.ll"
+grep -q 'alloca i32' "$self_main_args_dir/merged.ll"
+grep -q 'alloca ptr' "$self_main_args_dir/merged.ll"
+grep -q 'store ptr' "$self_main_args_dir/merged.ll"
+grep -q 'ret i32 13' "$self_main_args_dir/merged.ll"
 
 self_extern_string_dir="$(mktemp -d "${TMPDIR:-/tmp}/ycpl-self-extern-string.XXXXXX")"
 "$YCC_YCPL" build-ir-self examples/66_self_codegen_extern_string_call.yc -o "$self_extern_string_dir" >/dev/null
