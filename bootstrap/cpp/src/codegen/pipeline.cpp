@@ -8,6 +8,7 @@ namespace codegen
     {
         failed = false;
 
+        prepare_named_decls(prog);
         prepare_struct_types(prog);
 
         std::vector<const ast::FuncDecl *> funcPtrs;

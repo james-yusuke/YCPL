@@ -22,7 +22,7 @@ Value *CodeGen::codegen_for_in_loop(const ast::ForInStmt *forInStmt)
         if (typeHint)
         {
             TypeShape parsed = parse_type_shape(*typeHint);
-            if (parsed.array_rank > 0)
+            if (parsed.is_array())
             {
                 Type *arrayPtrTy = detail::getPtrTy(context);
                 Type *i64Ty = get_i64_type();
@@ -43,11 +43,7 @@ Value *CodeGen::codegen_for_in_loop(const ast::ForInStmt *forInStmt)
                 Value *idxAlloca = create_entry_alloca(F, i64Ty, ".forin.array.idx");
                 builder.CreateStore(ConstantInt::get(i64Ty, 0), idxAlloca);
 
-                std::string elemTypeName = parsed.base;
-                for (int i = 1; i < parsed.array_rank; ++i)
-                    elemTypeName += "[]";
-                for (int i = 0; i < parsed.pointer_depth; ++i)
-                    elemTypeName += "*";
+                std::string elemTypeName = parsed.array_element_type_name();
 
                 Type *elemTy = nullptr;
                 if (parsed.array_rank > 1)

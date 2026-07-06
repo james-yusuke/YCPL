@@ -275,6 +275,30 @@ grep -q 'value=13' /tmp/ycc-ycpl-check-struct3-param-call.out
 grep -q 'value=13' /tmp/ycc-ycpl-check-struct3-return.out
 "$YCC_YCPL" check examples/99_self_codegen_main_args.yc >/tmp/ycc-ycpl-check-main-args.out
 grep -q 'value=13' /tmp/ycc-ycpl-check-main-args.out
+switch_dir="$(mktemp -d "${TMPDIR:-/tmp}/ycpl-switch-check.XXXXXX")"
+cat >"$switch_dir/switch.yc" <<'YCPL'
+fn main() i32 {
+    value := 2
+    switch value {
+        case 1 {
+            return 7
+        }
+        case 2 {
+            return 13
+        }
+        default {
+            return 99
+        }
+    }
+    return 0
+}
+YCPL
+"$YCC_YCPL" check "$switch_dir/switch.yc" >/tmp/ycc-ycpl-check-switch.out
+grep -q 'value=13' /tmp/ycc-ycpl-check-switch.out
+switch_ir_dir="$(mktemp -d "${TMPDIR:-/tmp}/ycpl-switch-ir.XXXXXX")"
+YCPL_NO_BOOTSTRAP=1 "$YCC_YCPL" build-ir "$switch_dir/switch.yc" -o "$switch_ir_dir" >/tmp/ycc-ycpl-ir-switch.out
+grep -q 'switch i32' "$switch_ir_dir/merged.ll"
+grep -q 'ret i32 13' "$switch_ir_dir/merged.ll"
 if "$YCC_YCPL" check examples/55_self_codegen_unknown_failure.yc >/tmp/ycc-ycpl-check-failure.out 2>&1; then
   printf 'Expected ycc-ycpl check to reject unknown local symbol\n' >&2
   exit 1
@@ -301,9 +325,18 @@ for file in examples/*.yc; do
     *_failure.yc)
       continue
       ;;
+    examples/100_retired_keywords_as_identifiers.yc)
+      continue
+      ;;
   esac
   "$YCC_YCPL" parse "$file" >/dev/null
 done
+
+if "$YCC_YCPL" parse examples/100_retired_keywords_as_identifiers.yc >/tmp/ycc-ycpl-retired-keywords.out 2>&1; then
+  printf 'Expected ycc-ycpl parser to reject removed keyword identifiers\n' >&2
+  exit 1
+fi
+grep -q 'removed keyword is not supported' /tmp/ycc-ycpl-retired-keywords.out
 
 expect_failure() {
   local file="$1"

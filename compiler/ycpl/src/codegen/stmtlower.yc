@@ -146,6 +146,24 @@ fn lower_if_body_node(ctx *byte, function_ref *byte, builder *byte, i32_type *by
     llvm.position_builder_at_end(builder, done_block)
 }
 
+fn lower_switch_body_node(ctx *byte, function_ref *byte, builder *byte, i32_type *byte, score_slot *byte, kind i32, meta i32, pos i32, payload i32, role i32) {
+    case_block := llvm.append_basic_block_in_context(ctx, function_ref, "node_lower_switch_case")
+    default_block := llvm.append_basic_block_in_context(ctx, function_ref, "node_lower_switch_default")
+    done_block := llvm.append_basic_block_in_context(ctx, function_ref, "node_lower_switch_done")
+    selector := llvm.const_int(i32_type, kind, 1)
+    switch_inst := llvm.build_switch(builder, selector, default_block, 1)
+    llvm.add_case(switch_inst, llvm.const_int(i32_type, astbody.switch_node_kind(), 1), case_block)
+
+    llvm.position_builder_at_end(builder, case_block)
+    lower_linear_body_node(builder, i32_type, score_slot, kind, meta, pos, payload, role)
+    llvm.build_br(builder, done_block)
+
+    llvm.position_builder_at_end(builder, default_block)
+    llvm.build_br(builder, done_block)
+
+    llvm.position_builder_at_end(builder, done_block)
+}
+
 fn lower_for_body_node(ctx *byte, function_ref *byte, builder *byte, i32_type *byte, score_slot *byte, kind i32, meta i32, pos i32, payload i32, role i32) {
     check_block := llvm.append_basic_block_in_context(ctx, function_ref, "node_lower_for_check")
     body_block := llvm.append_basic_block_in_context(ctx, function_ref, "node_lower_for_body")
@@ -306,6 +324,10 @@ pub fn lower_body_node(ctx *byte, function_ref *byte, builder *byte, i32_type *b
     }
     if kind == astbody.if_node_kind() {
         lower_if_body_node(ctx, function_ref, builder, i32_type, score_slot, kind, meta, pos, payload, role)
+        return
+    }
+    if kind == astbody.switch_node_kind() {
+        lower_switch_body_node(ctx, function_ref, builder, i32_type, score_slot, kind, meta, pos, payload, role)
         return
     }
     if kind == astbody.for_node_kind() {

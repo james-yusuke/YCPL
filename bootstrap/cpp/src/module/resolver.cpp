@@ -150,6 +150,20 @@ namespace module
                 for (auto &s : ifs->else_blk->stmts)
                     rewrite_stmt(s, info, local_functions, modules, errors);
         }
+        else if (auto sw = dynamic_cast<ast::SwitchStmt *>(stmt.get()))
+        {
+            rewrite_expr(sw->value, info, local_functions, modules, errors);
+            for (auto &caseNode : sw->cases)
+            {
+                rewrite_expr(caseNode.value, info, local_functions, modules, errors);
+                if (caseNode.body)
+                    for (auto &s : caseNode.body->stmts)
+                        rewrite_stmt(s, info, local_functions, modules, errors);
+            }
+            if (sw->default_body)
+                for (auto &s : sw->default_body->stmts)
+                    rewrite_stmt(s, info, local_functions, modules, errors);
+        }
         else if (auto fs = dynamic_cast<ast::ForInStmt *>(stmt.get()))
         {
             rewrite_expr(fs->iterable, info, local_functions, modules, errors);
@@ -668,6 +682,7 @@ namespace module
     {
         auto merged = std::make_unique<ast::Program>();
 
+        std::vector<std::unique_ptr<ast::Decl>> named_decls;
         std::vector<std::unique_ptr<ast::Decl>> struct_decls;
         std::vector<std::unique_ptr<ast::Decl>> func_decls;
 
@@ -693,7 +708,11 @@ namespace module
                     continue;
                 }
 
-                if (dynamic_cast<ast::StructDecl *>(decl.get()))
+                if (dynamic_cast<ast::EnumDecl *>(decl.get()) || dynamic_cast<ast::TypeAliasDecl *>(decl.get()))
+                {
+                    named_decls.push_back(std::move(decl));
+                }
+                else if (dynamic_cast<ast::StructDecl *>(decl.get()))
                 {
                     struct_decls.push_back(std::move(decl));
                 }
@@ -704,6 +723,8 @@ namespace module
             }
         }
 
+        for (auto &nd : named_decls)
+            merged->decls.push_back(std::move(nd));
         for (auto &sd : struct_decls)
             merged->decls.push_back(std::move(sd));
         for (auto &fd : func_decls)

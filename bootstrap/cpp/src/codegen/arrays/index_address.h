@@ -21,14 +21,14 @@ Value *CodeGen::codegen_index_addr(const ast::IndexExpr *ie)
     Value *colVal = this->codegen_expr(ie->collection.get());
     if (!colVal)
     {
-        errs() << "codegen_index_addr: colVal == nullptr\n";
+        error("index address: failed to lower collection expression");
         return nullptr;
     }
 
     Value *idxVal = this->codegen_expr(ie->index.get());
     if (!idxVal)
     {
-        errs() << "codegen_index_addr: idxVal == nullptr\n";
+        error("index address: failed to lower index expression");
         return nullptr;
     }
 
@@ -38,33 +38,15 @@ Value *CodeGen::codegen_index_addr(const ast::IndexExpr *ie)
         if (ll)
         {
             TypeShape pt = parse_type_shape(*ll);
-            if (pt.base == "string" && pt.array_rank == 0 && pt.pointer_depth == 0)
+            if (pt.is_plain_string())
             {
-                Type *i8Ty = Type::getInt8Ty(context);
-
-                Value *charPtr = builder.CreateInBoundsGEP(i8Ty, colVal, {idxVal}, "char_ptr");
-                return charPtr;
+                return string_element_addr(colVal, idxVal, "string.index.addr");
             }
 
-            if (pt.base == "string_params" && pt.array_rank == 0 && pt.pointer_depth == 0)
+            if (pt.is_string_params())
             {
-                Type *i8Ty = Type::getInt8Ty(context);
                 Value *v = lookup_local(id->name);
-
-                Type *i64Ty = detail::getI64Ty(context);
-                if (!idxVal->getType()->isIntegerTy(64))
-                {
-                    if (idxVal->getType()->isIntegerTy())
-                        idxVal = builder.CreateSExtOrTrunc(idxVal, i64Ty, "idx_i64");
-                    else
-                    {
-                        errs() << "codegen_index_addr: index is not integer for string_params\n";
-                        return nullptr;
-                    }
-                }
-
-                Value *charPtr = builder.CreateInBoundsGEP(i8Ty, v, {idxVal}, "charptr_params");
-                return charPtr;
+                return string_element_addr(v, idxVal, "string.params.index.addr");
             }
         }
     }
@@ -72,7 +54,7 @@ Value *CodeGen::codegen_index_addr(const ast::IndexExpr *ie)
     {
         std::string collectionType = infer_expr_type_name(ie->collection.get());
         TypeShape pt = parse_type_shape(collectionType);
-        if ((pt.base == "string" || pt.base == "string_params") && pt.array_rank == 0 && pt.pointer_depth == 0)
+        if (pt.is_scalar_string_like())
         {
             if (!colVal->getType()->isPointerTy())
             {
@@ -80,18 +62,7 @@ Value *CodeGen::codegen_index_addr(const ast::IndexExpr *ie)
                 return nullptr;
             }
 
-            Type *i8Ty = Type::getInt8Ty(context);
-            if (!idxVal->getType()->isIntegerTy(64))
-            {
-                if (idxVal->getType()->isIntegerTy())
-                    idxVal = builder.CreateSExtOrTrunc(idxVal, detail::getI64Ty(context), "idx_i64_string_expr");
-                else
-                {
-                    error("string index is not integer");
-                    return nullptr;
-                }
-            }
-            return builder.CreateInBoundsGEP(i8Ty, colVal, {idxVal}, "char_ptr_expr_addr");
+            return string_element_addr(colVal, idxVal, "string.expr.index.addr");
         }
     }
 
@@ -100,21 +71,9 @@ Value *CodeGen::codegen_index_addr(const ast::IndexExpr *ie)
     if (!elemPtrI8)
         return nullptr;
 
-    bool staticElemIsArrayStruct = false;
-    bool staticElemIsArrayPtr = false;
-
-    const ast::Expr *collExpr = ie->collection.get();
-    if (const ast::ArrayLiteral *al = dynamic_cast<const ast::ArrayLiteral *>(collExpr))
-    {
-        if (!al->elements.empty())
-        {
-            const ast::Expr *firstElem = al->elements[0].get();
-            if (dynamic_cast<const ast::ArrayLiteral *>(firstElem))
-                staticElemIsArrayStruct = true;
-            else if (dynamic_cast<const ast::IndexExpr *>(firstElem))
-                staticElemIsArrayPtr = true;
-        }
-    }
+    auto staticElementShape = infer_array_literal_element_shape(ie->collection.get());
+    bool staticElemIsArrayStruct = staticElementShape.first;
+    bool staticElemIsArrayPtr = staticElementShape.second;
 
     if (staticElemIsArrayStruct)
     {
@@ -192,7 +151,7 @@ Value *CodeGen::codegen_index_addr(const ast::IndexExpr *ie)
                 return typedPtr;
             }
 
-            if (pt.base == "string" && pt.array_rank != 0)
+            if (pt.is_array_of("string"))
             {
                 PointerType *i8PtrPtrTy = detail::getPtrTy(context);
                 Value *typedPtr = builder.CreateBitCast(elemPtrI8, i8PtrPtrTy, "elem_ptr_to_i8ptrptr_dyn_str");

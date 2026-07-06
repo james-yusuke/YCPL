@@ -12,6 +12,7 @@
 #include <memory>
 #include <string>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 namespace codegen
@@ -56,6 +57,9 @@ namespace codegen
         // Struct registry prepared before function body generation.
         std::unordered_map<std::string, llvm::StructType *> struct_types;
         std::unordered_map<std::string, const ast::StructDecl *> struct_decls;
+        std::unordered_map<std::string, std::string> type_aliases;
+        std::unordered_map<std::string, long long> enum_values;
+        std::unordered_map<std::string, long long> scoped_enum_values;
 
         llvm::StructType *lookup_struct_type(const std::string &name);
 
@@ -63,6 +67,10 @@ namespace codegen
         std::pair<llvm::StructType *, llvm::Value *> deduce_struct_type_and_ptr(llvm::Value *v, const std::string &hintVarName);
 
         void prepare_struct_types(const ast::Program &prog);
+        void prepare_named_decls(const ast::Program &prog);
+        std::string resolve_type_alias_name(const std::string &typeName, int depth = 0);
+        bool lookup_enum_value(const std::string &name, long long &value) const;
+        bool lookup_scoped_enum_value(const std::string &typeName, const std::string &variant, long long &value) const;
         llvm::Type *resolve_type_by_name(const std::string &typeName);
         llvm::Type *resolve_type_from_ast_local(const ast::Type *at);
         llvm::StructType *get_or_create_named_struct(const std::string &name);
@@ -94,6 +102,10 @@ namespace codegen
         llvm::Value *array_header_field_ptr(llvm::Value *arrayHeaderPtr, detail::RuntimeArrayField field, const std::string &label);
         llvm::Value *checked_array_element_data_ptr_from_values(llvm::Value *collectionValue, llvm::Value *indexValue, llvm::Value **elementSizeOut, const std::string &label);
         llvm::Value *checked_array_element_data_ptr(const ast::Expr *arrayExpr, const ast::Expr *indexExpr, llvm::Value **elementSizeOut);
+        llvm::Value *coerce_index_to_i64(llvm::Value *indexValue, const std::string &label);
+        llvm::Value *string_element_addr(llvm::Value *stringValue, llvm::Value *indexValue, const std::string &label);
+        llvm::Value *string_element_value(llvm::Value *stringValue, llvm::Value *indexValue, const std::string &label);
+        std::pair<bool, bool> infer_array_literal_element_shape(const ast::Expr *collectionExpr);
 
         llvm::Value *create_entry_alloca(llvm::Function *func, llvm::Type *type, const std::string &name);
 
@@ -106,6 +118,10 @@ namespace codegen
         llvm::Value *codegen_binary(const ast::BinaryExpr *be);
         llvm::Value *codegen_call(const ast::CallExpr *ce);
         llvm::Value *codegen_std_intrinsic_call(const std::string &name, const ast::CallExpr *ce);
+        llvm::Value *codegen_array_intrinsic_call(const std::string &name, const ast::CallExpr *ce);
+        llvm::Value *codegen_memory_intrinsic_call(const std::string &name, const ast::CallExpr *ce);
+        llvm::Value *codegen_string_intrinsic_call(const std::string &name, const ast::CallExpr *ce);
+        llvm::Value *codegen_math_intrinsic_call(const std::string &name, const ast::CallExpr *ce);
         llvm::Value *codegen_array(const ast::ArrayLiteral *alit);
         llvm::Value *codegen_index(const ast::IndexExpr *ie);
         llvm::Value *codegen_postfix(const ast::PostfixExpr *pe);
@@ -113,9 +129,11 @@ namespace codegen
 
         // Statement and control-flow lowering.
         llvm::Value *codegen_ifstmt(const ast::IfStmt *ifs);
+        llvm::Value *codegen_switchstmt(const ast::SwitchStmt *ss);
         llvm::Value *codegen_for_loop(const ast::ForStmt *forStmt);
         llvm::Value *codegen_for_in_loop(const ast::ForInStmt *forInStmt);
         llvm::Value *codegen_append_call(const ast::CallExpr *ce);
+        llvm::Value *codegen_print_call(const ast::CallExpr *ce);
         llvm::Value *codegen_println_call(const ast::CallExpr *ce);
         llvm::Value *codegen_printf_call(const ast::CallExpr *ce);
         llvm::Value *codegen_sprintf_call(const ast::CallExpr *ce);
