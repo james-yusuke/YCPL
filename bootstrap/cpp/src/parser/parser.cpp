@@ -219,6 +219,16 @@ namespace path
             return parse_struct_decl(is_pub);
         }
 
+        if (check(TokenType::KW_ENUM))
+        {
+            return parse_enum_decl(is_pub);
+        }
+
+        if (check(TokenType::KW_TYPE))
+        {
+            return parse_type_alias_decl(is_pub);
+        }
+
         bool is_extern = false;
         bool is_intrinsic = false;
         if (check(TokenType::KW_EXTERN) || check(TokenType::KW_INTRINSIC))
@@ -344,6 +354,57 @@ namespace path
         return blk;
     }
 
+    std::unique_ptr<Stmt> Parser::parse_switch_stmt()
+    {
+        expect(TokenType::KW_SWITCH, "expected 'switch'");
+        auto value = parse_expression_without_struct_literals();
+        expect(TokenType::LBRACE, "expected '{' to start switch");
+
+        std::vector<SwitchCase> cases;
+        std::unique_ptr<BlockStmt> defaultBody = nullptr;
+
+        skip_newlines();
+        while (!check(TokenType::RBRACE) && !is_at_end())
+        {
+            if (!check(TokenType::IDENT))
+            {
+                emit_error(cur, "expected 'case' or 'default' in switch");
+                advance();
+                skip_newlines();
+                continue;
+            }
+
+            Token label = cur;
+            advance();
+
+            if (label.lexeme == "case")
+            {
+                auto caseValue = parse_expression_without_struct_literals();
+                auto caseBody = parse_block();
+                cases.emplace_back(std::move(caseValue), std::move(caseBody));
+            }
+            else if (label.lexeme == "default")
+            {
+                if (defaultBody)
+                {
+                    emit_error(label, "duplicate default in switch");
+                }
+                defaultBody = parse_block();
+            }
+            else
+            {
+                emit_error(label, "expected 'case' or 'default' in switch");
+                if (check(TokenType::LBRACE))
+                    parse_block();
+            }
+
+            skip_newlines();
+        }
+
+        expect(TokenType::RBRACE, "expected '}' to close switch");
+        return std::make_unique<SwitchStmt>(std::move(value), std::move(cases), std::move(defaultBody));
+    }
+
     std::unique_ptr<Stmt> Parser::parse_stmt()
     {
         skip_newlines();
@@ -404,6 +465,11 @@ namespace path
                 }
             }
             return std::make_unique<IfStmt>(std::move(cond), std::move(then_blk), std::move(else_blk));
+        }
+
+        if (check(TokenType::KW_SWITCH))
+        {
+            return parse_switch_stmt();
         }
 
         if (check(TokenType::KW_FOR))
@@ -1177,7 +1243,71 @@ namespace path
         return sdecl;
     }
 
-        std::unique_ptr<ast::Type> Parser::parse_type()
+    std::unique_ptr<Decl> Parser::parse_enum_decl(bool is_pub)
+    {
+        expect(TokenType::KW_ENUM, "expected 'enum'");
+        Token nameTk = expect(TokenType::IDENT, "expected enum name");
+        expect(TokenType::LBRACE, "expected '{' after enum name");
+
+        std::vector<EnumVariant> variants;
+        long long nextValue = 0;
+
+        skip_newlines();
+        while (!check(TokenType::RBRACE) && !is_at_end())
+        {
+            Token variantTk = expect(TokenType::IDENT, "expected enum variant name");
+            std::optional<long long> explicitValue = std::nullopt;
+
+            if (check(TokenType::ASSIGN) && cur.lexeme == "=")
+            {
+                advance();
+                bool neg = false;
+                if (check(TokenType::MINUS))
+                {
+                    neg = true;
+                    advance();
+                }
+                Token valueTk = expect(TokenType::INT, "expected integer enum value");
+                try
+                {
+                    long long parsed = std::stoll(valueTk.lexeme, nullptr, 0);
+                    explicitValue = neg ? -parsed : parsed;
+                    nextValue = *explicitValue;
+                }
+                catch (...)
+                {
+                    emit_error(valueTk, "invalid integer enum value");
+                    explicitValue = nextValue;
+                }
+            }
+
+            variants.emplace_back(variantTk.lexeme, explicitValue);
+            nextValue++;
+
+            skip_newlines();
+            if (match(TokenType::COMMA))
+                skip_newlines();
+            else
+                match(TokenType::NEWLINE);
+            skip_newlines();
+        }
+
+        expect(TokenType::RBRACE, "expected '}' to close enum");
+        return std::make_unique<EnumDecl>(nameTk.lexeme, std::move(variants), is_pub);
+    }
+
+    std::unique_ptr<Decl> Parser::parse_type_alias_decl(bool is_pub)
+    {
+        expect(TokenType::KW_TYPE, "expected 'type'");
+        Token nameTk = expect(TokenType::IDENT, "expected type alias name");
+        if (check(TokenType::ASSIGN) && cur.lexeme == "=")
+            advance();
+        auto target = parse_type();
+        match(TokenType::NEWLINE);
+        return std::make_unique<TypeAliasDecl>(nameTk.lexeme, std::move(target), is_pub);
+    }
+
+    std::unique_ptr<ast::Type> Parser::parse_type()
     {
 
         std::string ptr_prefix;

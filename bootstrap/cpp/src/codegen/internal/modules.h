@@ -5,6 +5,7 @@
 // while the core driver/support code can live in smaller .cpp files.
 #include "../runtime/value_casts.h"
 #include "../types/type_shape.h"
+#include "../types/named_decls.h"
 #include "../arrays/access.h"
 #include "../arrays/index_address.h"
 #include "../arrays/append_intrinsic.h"
@@ -32,6 +33,7 @@
 #include "../functions/declarations.h"
 #include "../functions/type_resolver.h"
 #include "../branches/if_stmt.h"
+#include "../branches/switch_stmt.h"
 #include "../literals/literal.h"
 #include "../postfix/postfix.h"
 #include "../structures/declarations.h"

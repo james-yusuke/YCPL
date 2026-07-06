@@ -486,6 +486,7 @@ compile_run_with_input_and_verify "$SCRIPT_DIR/35_std_io_echo.yc" "lsp-io" "lsp-
 compile_run_and_verify "$SCRIPT_DIR/36_std_json_ast.yc" $'1\n42\n1\nYCPL\n2\nyes\n10\n{"x":3,"y":4}'
 compile_run_and_verify "$SCRIPT_DIR/40_short_circuit_and_string_field.yc" $'safe\n67'
 compile_run_and_verify "$SCRIPT_DIR/100_retired_keywords_as_identifiers.yc" "42"
+compile_run_and_verify "$SCRIPT_DIR/101_enum_switch_type_alias.yc" $'10\n20\n30' "switch i32"
 
 echo ""
 echo "--- Project Tests ---"

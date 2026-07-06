@@ -38,8 +38,11 @@ namespace path
         std::unique_ptr<ast::Decl> parse_import_decl();
         std::unique_ptr<ast::Decl> parse_function_decl(bool is_pub, bool is_extern = false, bool is_intrinsic = false);
         std::unique_ptr<ast::Decl> parse_struct_decl(bool is_pub);
+        std::unique_ptr<ast::Decl> parse_enum_decl(bool is_pub);
+        std::unique_ptr<ast::Decl> parse_type_alias_decl(bool is_pub);
 
         std::unique_ptr<ast::Stmt> parse_stmt();
+        std::unique_ptr<ast::Stmt> parse_switch_stmt();
         std::unique_ptr<ast::BlockStmt> parse_block();
 
         std::unique_ptr<ast::Stmt> parse_var_or_expr_stmt();

@@ -118,6 +118,8 @@ namespace codegen
             return codegen_assign(as);
         if (auto ifs = dynamic_cast<const ast::IfStmt *>(s))
             return codegen_ifstmt(ifs);
+        if (auto ss = dynamic_cast<const ast::SwitchStmt *>(s))
+            return codegen_switchstmt(ss);
 
         if (dynamic_cast<const ast::BreakStmt *>(s))
         {

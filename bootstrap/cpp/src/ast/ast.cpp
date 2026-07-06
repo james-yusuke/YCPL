@@ -103,6 +103,44 @@ namespace ast
         }
     }
 
+    void EnumDecl::print(std::ostream &os, int indent) const
+    {
+        print_indent(os, indent);
+        os << "EnumDecl(" << name << ")\n";
+        if (is_pub)
+        {
+            print_indent(os, indent + 2);
+            os << "pub\n";
+        }
+        print_indent(os, indent + 2);
+        os << "variants:\n";
+        for (const auto &variant : variants)
+        {
+            print_indent(os, indent + 4);
+            os << variant.name;
+            if (variant.value)
+                os << " = " << *variant.value;
+            os << "\n";
+        }
+    }
+
+    void TypeAliasDecl::print(std::ostream &os, int indent) const
+    {
+        print_indent(os, indent);
+        os << "TypeAliasDecl(" << name << ")\n";
+        if (is_pub)
+        {
+            print_indent(os, indent + 2);
+            os << "pub\n";
+        }
+        if (target)
+        {
+            print_indent(os, indent + 2);
+            os << "target:\n";
+            target->print(os, indent + 4);
+        }
+    }
+
     void Ident::print(std::ostream &os, int indent) const
     {
         print_indent(os, indent);
@@ -311,6 +349,38 @@ namespace ast
             then_blk->print(os, indent + 2);
         if (else_blk)
             else_blk->print(os, indent + 2);
+    }
+
+    void SwitchStmt::print(std::ostream &os, int indent) const
+    {
+        print_indent(os, indent);
+        os << "SwitchStmt\n";
+        if (value)
+        {
+            print_indent(os, indent + 2);
+            os << "value:\n";
+            value->print(os, indent + 4);
+        }
+        if (!cases.empty())
+        {
+            print_indent(os, indent + 2);
+            os << "cases:\n";
+            for (const auto &caseNode : cases)
+            {
+                print_indent(os, indent + 4);
+                os << "case:\n";
+                if (caseNode.value)
+                    caseNode.value->print(os, indent + 6);
+                if (caseNode.body)
+                    caseNode.body->print(os, indent + 6);
+            }
+        }
+        if (default_body)
+        {
+            print_indent(os, indent + 2);
+            os << "default:\n";
+            default_body->print(os, indent + 4);
+        }
     }
 
     void ForInStmt::print(std::ostream &os, int indent) const

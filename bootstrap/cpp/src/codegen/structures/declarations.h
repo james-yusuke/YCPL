@@ -170,6 +170,10 @@ llvm::Type *CodeGen::resolve_type_by_name(const std::string &typeName)
     if (typeName.empty())
         return nullptr;
 
+    std::string resolvedTypeName = resolve_type_alias_name(typeName);
+    if (resolvedTypeName != typeName)
+        return resolve_type_by_name(resolvedTypeName);
+
     if (typeName == "string")
         return codegen::detail::getPtrTy(context);
 
@@ -689,6 +693,13 @@ llvm::Value *CodeGen::codegen_member(const ast::MemberExpr *me)
 {
     if (!me)
         return nullptr;
+
+    if (auto enumName = dynamic_cast<const ast::Ident *>(me->object.get()))
+    {
+        long long enumValue = 0;
+        if (lookup_scoped_enum_value(enumName->name, me->member, enumValue))
+            return ConstantInt::get(get_int_type(), enumValue, true);
+    }
 
     llvm::Value *addr = codegen_member_addr(me);
     if (!addr)
