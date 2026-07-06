@@ -2,7 +2,7 @@ import {
   type Position,
   type Range,
   SymbolKind
-} from "vscode-languageserver/node.js";
+} from "vscode-languageserver/node";
 
 export const keywords = [
   "module",

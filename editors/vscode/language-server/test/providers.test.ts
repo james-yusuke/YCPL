@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { Position, Range } from "vscode-languageserver/node.js";
+import { Position, Range } from "vscode-languageserver/node";
 import { YcplParser } from "../src/analysis/parser.js";
 import { StandardLibraryIndex } from "../src/analysis/stdlib.js";
 import { WorkspaceIndex } from "../src/analysis/workspaceIndex.js";
