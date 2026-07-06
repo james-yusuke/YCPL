@@ -11,7 +11,8 @@
 
 llvm::Type *codegen::CodeGen::resolve_llvm_type_name(const std::string &typeName)
 {
-    TypeShape pt = parse_type_shape(typeName);
+    std::string resolvedTypeName = resolve_type_alias_name(typeName);
+    TypeShape pt = parse_type_shape(resolvedTypeName);
 
     Type *ty = nullptr;
 

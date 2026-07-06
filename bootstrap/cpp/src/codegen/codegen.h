@@ -57,6 +57,9 @@ namespace codegen
         // Struct registry prepared before function body generation.
         std::unordered_map<std::string, llvm::StructType *> struct_types;
         std::unordered_map<std::string, const ast::StructDecl *> struct_decls;
+        std::unordered_map<std::string, std::string> type_aliases;
+        std::unordered_map<std::string, long long> enum_values;
+        std::unordered_map<std::string, long long> scoped_enum_values;
 
         llvm::StructType *lookup_struct_type(const std::string &name);
 
@@ -64,6 +67,10 @@ namespace codegen
         std::pair<llvm::StructType *, llvm::Value *> deduce_struct_type_and_ptr(llvm::Value *v, const std::string &hintVarName);
 
         void prepare_struct_types(const ast::Program &prog);
+        void prepare_named_decls(const ast::Program &prog);
+        std::string resolve_type_alias_name(const std::string &typeName, int depth = 0);
+        bool lookup_enum_value(const std::string &name, long long &value) const;
+        bool lookup_scoped_enum_value(const std::string &typeName, const std::string &variant, long long &value) const;
         llvm::Type *resolve_type_by_name(const std::string &typeName);
         llvm::Type *resolve_type_from_ast_local(const ast::Type *at);
         llvm::StructType *get_or_create_named_struct(const std::string &name);
@@ -122,6 +129,7 @@ namespace codegen
 
         // Statement and control-flow lowering.
         llvm::Value *codegen_ifstmt(const ast::IfStmt *ifs);
+        llvm::Value *codegen_switchstmt(const ast::SwitchStmt *ss);
         llvm::Value *codegen_for_loop(const ast::ForStmt *forStmt);
         llvm::Value *codegen_for_in_loop(const ast::ForInStmt *forInStmt);
         llvm::Value *codegen_append_call(const ast::CallExpr *ce);
