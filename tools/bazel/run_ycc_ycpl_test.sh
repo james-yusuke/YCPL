@@ -1164,6 +1164,12 @@ grep -q 'call i32 @seed' "$self_chain_dir/merged.ll"
 grep -q 'call i32 @bump(i32' "$self_chain_dir/merged.ll"
 grep -Eq 'ret i32 %loadtmp[0-9]*' "$self_chain_dir/merged.ll"
 
+self_manyhelpers_dir="$(mktemp -d "${TMPDIR:-/tmp}/ycpl-self-manyhelpers.XXXXXX")"
+"$YCC_YCPL" build-ir-self "$eightarg_dir/manyhelpers.yc" -o "$self_manyhelpers_dir" >/dev/null
+grep -q 'define i32 @h8' "$self_manyhelpers_dir/merged.ll"
+grep -q 'call i32 @h8' "$self_manyhelpers_dir/merged.ll"
+grep -Eq 'ret i32 %calltmp[0-9]*' "$self_manyhelpers_dir/merged.ll"
+
 self_twoarg_dir="$(mktemp -d "${TMPDIR:-/tmp}/ycpl-self-twoarg.XXXXXX")"
 "$YCC_YCPL" build-ir-self examples/61_self_codegen_two_arg_call.yc -o "$self_twoarg_dir" >/dev/null
 grep -q 'define i32 @add_pair(i32' "$self_twoarg_dir/merged.ll"
@@ -1297,6 +1303,14 @@ grep -q 'getelementptr \[3 x i32\]' "$self_array_assign_dir/merged.ll"
 grep -q 'store i32 %addtmp' "$self_array_assign_dir/merged.ll"
 grep -q 'load i32, ptr %arrayidx' "$self_array_assign_dir/merged.ll"
 grep -Eq 'ret i32 %addtmp[0-9]*' "$self_array_assign_dir/merged.ll"
+
+self_manylocals_dir="$(mktemp -d "${TMPDIR:-/tmp}/ycpl-self-manylocals.XXXXXX")"
+"$YCC_YCPL" build-ir-self "$eightarg_dir/manylocals.yc" -o "$self_manylocals_dir" >/dev/null
+grep -q 'alloca \[3 x i32\]' "$self_manylocals_dir/merged.ll"
+grep -q 'getelementptr \[3 x i32\]' "$self_manylocals_dir/merged.ll"
+grep -q 'store i32 %addtmp' "$self_manylocals_dir/merged.ll"
+grep -q 'load i32, ptr %arrayidx' "$self_manylocals_dir/merged.ll"
+grep -Eq 'ret i32 %addtmp[0-9]*' "$self_manylocals_dir/merged.ll"
 
 self_array_dynamic_dir="$(mktemp -d "${TMPDIR:-/tmp}/ycpl-self-array-dynamic.XXXXXX")"
 "$YCC_YCPL" build-ir-self examples/83_self_codegen_array_dynamic_index.yc -o "$self_array_dynamic_dir" >/dev/null

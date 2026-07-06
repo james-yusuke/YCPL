@@ -66,6 +66,14 @@ struct TinyIrParser {
     helper5_name string
     helper6_name string
     helper7_name string
+    helper8_name string
+    helper9_name string
+    helper10_name string
+    helper11_name string
+    helper12_name string
+    helper13_name string
+    helper14_name string
+    helper15_name string
     helper0_fn *byte
     helper1_fn *byte
     helper2_fn *byte
@@ -74,6 +82,14 @@ struct TinyIrParser {
     helper5_fn *byte
     helper6_fn *byte
     helper7_fn *byte
+    helper8_fn *byte
+    helper9_fn *byte
+    helper10_fn *byte
+    helper11_fn *byte
+    helper12_fn *byte
+    helper13_fn *byte
+    helper14_fn *byte
+    helper15_fn *byte
     helper0_type *byte
     helper1_type *byte
     helper2_type *byte
@@ -82,6 +98,14 @@ struct TinyIrParser {
     helper5_type *byte
     helper6_type *byte
     helper7_type *byte
+    helper8_type *byte
+    helper9_type *byte
+    helper10_type *byte
+    helper11_type *byte
+    helper12_type *byte
+    helper13_type *byte
+    helper14_type *byte
+    helper15_type *byte
     helper0_params i32
     helper1_params i32
     helper2_params i32
@@ -90,6 +114,14 @@ struct TinyIrParser {
     helper5_params i32
     helper6_params i32
     helper7_params i32
+    helper8_params i32
+    helper9_params i32
+    helper10_params i32
+    helper11_params i32
+    helper12_params i32
+    helper13_params i32
+    helper14_params i32
+    helper15_params i32
     helper_signature i32
     helper0_signature i32
     helper1_signature i32
@@ -99,6 +131,14 @@ struct TinyIrParser {
     helper5_signature i32
     helper6_signature i32
     helper7_signature i32
+    helper8_signature i32
+    helper9_signature i32
+    helper10_signature i32
+    helper11_signature i32
+    helper12_signature i32
+    helper13_signature i32
+    helper14_signature i32
+    helper15_signature i32
     helper0_return_type i32
     helper1_return_type i32
     helper2_return_type i32
@@ -107,6 +147,14 @@ struct TinyIrParser {
     helper5_return_type i32
     helper6_return_type i32
     helper7_return_type i32
+    helper8_return_type i32
+    helper9_return_type i32
+    helper10_return_type i32
+    helper11_return_type i32
+    helper12_return_type i32
+    helper13_return_type i32
+    helper14_return_type i32
+    helper15_return_type i32
     value *byte
     value_type i32
     vars i32
@@ -118,6 +166,14 @@ struct TinyIrParser {
     name5 string
     name6 string
     name7 string
+    name8 string
+    name9 string
+    name10 string
+    name11 string
+    name12 string
+    name13 string
+    name14 string
+    name15 string
     slot0 *byte
     slot1 *byte
     slot2 *byte
@@ -126,6 +182,14 @@ struct TinyIrParser {
     slot5 *byte
     slot6 *byte
     slot7 *byte
+    slot8 *byte
+    slot9 *byte
+    slot10 *byte
+    slot11 *byte
+    slot12 *byte
+    slot13 *byte
+    slot14 *byte
+    slot15 *byte
     type0 i32
     type1 i32
     type2 i32
@@ -134,6 +198,14 @@ struct TinyIrParser {
     type5 i32
     type6 i32
     type7 i32
+    type8 i32
+    type9 i32
+    type10 i32
+    type11 i32
+    type12 i32
+    type13 i32
+    type14 i32
+    type15 i32
     saw_main bool
     returned bool
     loop_break bool
@@ -527,6 +599,14 @@ fn reset_locals(p TinyIrParser) TinyIrParser {
     p.name5 = ""
     p.name6 = ""
     p.name7 = ""
+    p.name8 = ""
+    p.name9 = ""
+    p.name10 = ""
+    p.name11 = ""
+    p.name12 = ""
+    p.name13 = ""
+    p.name14 = ""
+    p.name15 = ""
     p.type0 = 0
     p.type1 = 0
     p.type2 = 0
@@ -535,6 +615,14 @@ fn reset_locals(p TinyIrParser) TinyIrParser {
     p.type5 = 0
     p.type6 = 0
     p.type7 = 0
+    p.type8 = 0
+    p.type9 = 0
+    p.type10 = 0
+    p.type11 = 0
+    p.type12 = 0
+    p.type13 = 0
+    p.type14 = 0
+    p.type15 = 0
     p.value_type = 0
     p.returned = false
     p.current_break_block = none
@@ -585,6 +673,46 @@ fn lookup_slot(p TinyIrParser, name string) TinyIrParser {
         p.value_type = p.type7
         return p
     }
+    if p.vars > 8 && str.eq(p.name8, name) {
+        p.value = p.slot8
+        p.value_type = p.type8
+        return p
+    }
+    if p.vars > 9 && str.eq(p.name9, name) {
+        p.value = p.slot9
+        p.value_type = p.type9
+        return p
+    }
+    if p.vars > 10 && str.eq(p.name10, name) {
+        p.value = p.slot10
+        p.value_type = p.type10
+        return p
+    }
+    if p.vars > 11 && str.eq(p.name11, name) {
+        p.value = p.slot11
+        p.value_type = p.type11
+        return p
+    }
+    if p.vars > 12 && str.eq(p.name12, name) {
+        p.value = p.slot12
+        p.value_type = p.type12
+        return p
+    }
+    if p.vars > 13 && str.eq(p.name13, name) {
+        p.value = p.slot13
+        p.value_type = p.type13
+        return p
+    }
+    if p.vars > 14 && str.eq(p.name14, name) {
+        p.value = p.slot14
+        p.value_type = p.type14
+        return p
+    }
+    if p.vars > 15 && str.eq(p.name15, name) {
+        p.value = p.slot15
+        p.value_type = p.type15
+        return p
+    }
     return fail_parser(p, "unknown local symbol")
 }
 
@@ -627,6 +755,46 @@ fn set_slot(p TinyIrParser, name string, slot *byte, type_kind i32) TinyIrParser
     if p.vars > 7 && str.eq(p.name7, name) {
         p.slot7 = slot
         p.type7 = type_kind
+        return p
+    }
+    if p.vars > 8 && str.eq(p.name8, name) {
+        p.slot8 = slot
+        p.type8 = type_kind
+        return p
+    }
+    if p.vars > 9 && str.eq(p.name9, name) {
+        p.slot9 = slot
+        p.type9 = type_kind
+        return p
+    }
+    if p.vars > 10 && str.eq(p.name10, name) {
+        p.slot10 = slot
+        p.type10 = type_kind
+        return p
+    }
+    if p.vars > 11 && str.eq(p.name11, name) {
+        p.slot11 = slot
+        p.type11 = type_kind
+        return p
+    }
+    if p.vars > 12 && str.eq(p.name12, name) {
+        p.slot12 = slot
+        p.type12 = type_kind
+        return p
+    }
+    if p.vars > 13 && str.eq(p.name13, name) {
+        p.slot13 = slot
+        p.type13 = type_kind
+        return p
+    }
+    if p.vars > 14 && str.eq(p.name14, name) {
+        p.slot14 = slot
+        p.type14 = type_kind
+        return p
+    }
+    if p.vars > 15 && str.eq(p.name15, name) {
+        p.slot15 = slot
+        p.type15 = type_kind
         return p
     }
 
@@ -686,7 +854,63 @@ fn set_slot(p TinyIrParser, name string, slot *byte, type_kind i32) TinyIrParser
         p.vars = 8
         return p
     }
-    return unsupported_parser(p, "self codegen currently supports up to 8 local variables")
+    if p.vars == 8 {
+        p.name8 = name
+        p.slot8 = slot
+        p.type8 = type_kind
+        p.vars = 9
+        return p
+    }
+    if p.vars == 9 {
+        p.name9 = name
+        p.slot9 = slot
+        p.type9 = type_kind
+        p.vars = 10
+        return p
+    }
+    if p.vars == 10 {
+        p.name10 = name
+        p.slot10 = slot
+        p.type10 = type_kind
+        p.vars = 11
+        return p
+    }
+    if p.vars == 11 {
+        p.name11 = name
+        p.slot11 = slot
+        p.type11 = type_kind
+        p.vars = 12
+        return p
+    }
+    if p.vars == 12 {
+        p.name12 = name
+        p.slot12 = slot
+        p.type12 = type_kind
+        p.vars = 13
+        return p
+    }
+    if p.vars == 13 {
+        p.name13 = name
+        p.slot13 = slot
+        p.type13 = type_kind
+        p.vars = 14
+        return p
+    }
+    if p.vars == 14 {
+        p.name14 = name
+        p.slot14 = slot
+        p.type14 = type_kind
+        p.vars = 15
+        return p
+    }
+    if p.vars == 15 {
+        p.name15 = name
+        p.slot15 = slot
+        p.type15 = type_kind
+        p.vars = 16
+        return p
+    }
+    return unsupported_parser(p, "self codegen currently supports up to 16 local variables")
 }
 
 fn is_declare_assign(kind i32, lexeme string) bool {
@@ -764,6 +988,78 @@ fn lookup_helper(p TinyIrParser, name string) TinyIrParser {
         p.helper_param_count = p.helper7_params
         p.helper_signature = p.helper7_signature
         p.helper_return_type = p.helper7_return_type
+        return p
+    }
+    if p.helper_count > 8 && str.eq(p.helper8_name, name) {
+        p.helper_name = p.helper8_name
+        p.helper_fn = p.helper8_fn
+        p.helper_fn_type = p.helper8_type
+        p.helper_param_count = p.helper8_params
+        p.helper_signature = p.helper8_signature
+        p.helper_return_type = p.helper8_return_type
+        return p
+    }
+    if p.helper_count > 9 && str.eq(p.helper9_name, name) {
+        p.helper_name = p.helper9_name
+        p.helper_fn = p.helper9_fn
+        p.helper_fn_type = p.helper9_type
+        p.helper_param_count = p.helper9_params
+        p.helper_signature = p.helper9_signature
+        p.helper_return_type = p.helper9_return_type
+        return p
+    }
+    if p.helper_count > 10 && str.eq(p.helper10_name, name) {
+        p.helper_name = p.helper10_name
+        p.helper_fn = p.helper10_fn
+        p.helper_fn_type = p.helper10_type
+        p.helper_param_count = p.helper10_params
+        p.helper_signature = p.helper10_signature
+        p.helper_return_type = p.helper10_return_type
+        return p
+    }
+    if p.helper_count > 11 && str.eq(p.helper11_name, name) {
+        p.helper_name = p.helper11_name
+        p.helper_fn = p.helper11_fn
+        p.helper_fn_type = p.helper11_type
+        p.helper_param_count = p.helper11_params
+        p.helper_signature = p.helper11_signature
+        p.helper_return_type = p.helper11_return_type
+        return p
+    }
+    if p.helper_count > 12 && str.eq(p.helper12_name, name) {
+        p.helper_name = p.helper12_name
+        p.helper_fn = p.helper12_fn
+        p.helper_fn_type = p.helper12_type
+        p.helper_param_count = p.helper12_params
+        p.helper_signature = p.helper12_signature
+        p.helper_return_type = p.helper12_return_type
+        return p
+    }
+    if p.helper_count > 13 && str.eq(p.helper13_name, name) {
+        p.helper_name = p.helper13_name
+        p.helper_fn = p.helper13_fn
+        p.helper_fn_type = p.helper13_type
+        p.helper_param_count = p.helper13_params
+        p.helper_signature = p.helper13_signature
+        p.helper_return_type = p.helper13_return_type
+        return p
+    }
+    if p.helper_count > 14 && str.eq(p.helper14_name, name) {
+        p.helper_name = p.helper14_name
+        p.helper_fn = p.helper14_fn
+        p.helper_fn_type = p.helper14_type
+        p.helper_param_count = p.helper14_params
+        p.helper_signature = p.helper14_signature
+        p.helper_return_type = p.helper14_return_type
+        return p
+    }
+    if p.helper_count > 15 && str.eq(p.helper15_name, name) {
+        p.helper_name = p.helper15_name
+        p.helper_fn = p.helper15_fn
+        p.helper_fn_type = p.helper15_type
+        p.helper_param_count = p.helper15_params
+        p.helper_signature = p.helper15_signature
+        p.helper_return_type = p.helper15_return_type
         return p
     }
     return unsupported_parser(p, "self codegen currently supports calls to known i32/bool helper functions")
@@ -850,7 +1146,87 @@ fn add_helper(p TinyIrParser, name string, fn_ref *byte, fn_type *byte, param_co
         p.helper_count = 8
         return p
     }
-    return unsupported_parser(p, "self codegen currently supports up to 8 helper functions")
+    if p.helper_count == 8 {
+        p.helper8_name = name
+        p.helper8_fn = fn_ref
+        p.helper8_type = fn_type
+        p.helper8_params = param_count
+        p.helper8_signature = param_signature
+        p.helper8_return_type = return_type
+        p.helper_count = 9
+        return p
+    }
+    if p.helper_count == 9 {
+        p.helper9_name = name
+        p.helper9_fn = fn_ref
+        p.helper9_type = fn_type
+        p.helper9_params = param_count
+        p.helper9_signature = param_signature
+        p.helper9_return_type = return_type
+        p.helper_count = 10
+        return p
+    }
+    if p.helper_count == 10 {
+        p.helper10_name = name
+        p.helper10_fn = fn_ref
+        p.helper10_type = fn_type
+        p.helper10_params = param_count
+        p.helper10_signature = param_signature
+        p.helper10_return_type = return_type
+        p.helper_count = 11
+        return p
+    }
+    if p.helper_count == 11 {
+        p.helper11_name = name
+        p.helper11_fn = fn_ref
+        p.helper11_type = fn_type
+        p.helper11_params = param_count
+        p.helper11_signature = param_signature
+        p.helper11_return_type = return_type
+        p.helper_count = 12
+        return p
+    }
+    if p.helper_count == 12 {
+        p.helper12_name = name
+        p.helper12_fn = fn_ref
+        p.helper12_type = fn_type
+        p.helper12_params = param_count
+        p.helper12_signature = param_signature
+        p.helper12_return_type = return_type
+        p.helper_count = 13
+        return p
+    }
+    if p.helper_count == 13 {
+        p.helper13_name = name
+        p.helper13_fn = fn_ref
+        p.helper13_type = fn_type
+        p.helper13_params = param_count
+        p.helper13_signature = param_signature
+        p.helper13_return_type = return_type
+        p.helper_count = 14
+        return p
+    }
+    if p.helper_count == 14 {
+        p.helper14_name = name
+        p.helper14_fn = fn_ref
+        p.helper14_type = fn_type
+        p.helper14_params = param_count
+        p.helper14_signature = param_signature
+        p.helper14_return_type = return_type
+        p.helper_count = 15
+        return p
+    }
+    if p.helper_count == 15 {
+        p.helper15_name = name
+        p.helper15_fn = fn_ref
+        p.helper15_type = fn_type
+        p.helper15_params = param_count
+        p.helper15_signature = param_signature
+        p.helper15_return_type = return_type
+        p.helper_count = 16
+        return p
+    }
+    return unsupported_parser(p, "self codegen currently supports up to 16 helper functions")
 }
 
 fn scan_skip_block(p TinyIrParser) TinyIrParser {
