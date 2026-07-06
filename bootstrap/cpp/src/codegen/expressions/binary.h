@@ -5,8 +5,8 @@
 #include <llvm/IR/DerivedTypes.h>
 #include <llvm/IR/Intrinsics.h>
 
-using namespace llvm;
-using namespace codegen;
+namespace codegen
+{
 
 Value *CodeGen::codegen_binary(const ast::BinaryExpr *be)
 {
@@ -124,8 +124,8 @@ Value *CodeGen::codegen_binary(const ast::BinaryExpr *be)
             else
                 targetType = R->getType();
 
-            L = castToSameIntType(L, targetType);
-            R = castToSameIntType(R, targetType);
+            L = cast_to_integer_type(L, targetType);
+            R = cast_to_integer_type(R, targetType);
 
             if (be->op == "+")
                 return builder.CreateAdd(L, R, "addtmp");
@@ -228,8 +228,8 @@ Value *CodeGen::codegen_binary(const ast::BinaryExpr *be)
                 targetType = R->getType();
             }
 
-            L = castToSameIntType(L, targetType);
-            R = castToSameIntType(R, targetType);
+            L = cast_to_integer_type(L, targetType);
+            R = cast_to_integer_type(R, targetType);
 
             if (be->op == "+")
                 return builder.CreateAdd(L, R, "addtmp");
@@ -299,8 +299,8 @@ Value *CodeGen::codegen_binary(const ast::BinaryExpr *be)
                 targetType = R->getType();
             }
 
-            L = castToSameIntType(L, targetType);
-            R = castToSameIntType(R, targetType);
+            L = cast_to_integer_type(L, targetType);
+            R = cast_to_integer_type(R, targetType);
 
             if (be->op == ">")
                 return builder.CreateZExt(builder.CreateICmpSGT(L, R, "cmptmp"), get_int_type());
@@ -319,4 +319,6 @@ Value *CodeGen::codegen_binary(const ast::BinaryExpr *be)
 
     error("unsupported binary op: " + be->op);
     return nullptr;
+}
+
 }

@@ -8,8 +8,8 @@
 #include <llvm/ADT/SmallVector.h>
 #include <llvm/ADT/Twine.h>
 
-using namespace llvm;
-using namespace codegen;
+namespace codegen
+{
 
 Value *CodeGen::codegen_len_call(const ast::CallExpr *ce)
 {
@@ -126,4 +126,6 @@ Value *CodeGen::codegen_len_call(const ast::CallExpr *ce)
     Value *lenVal = builder.CreateTrunc(len64, i32Ty, "len_i32");
 
     return lenVal;
+}
+
 }

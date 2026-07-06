@@ -9,16 +9,14 @@
 
 #include <iostream>
 
-using namespace llvm;
-
 namespace codegen
 {
     CodeGen::CodeGen(const std::string &module_name)
         : module(std::make_unique<Module>(module_name, context)), builder(context)
     {
-        InitializeNativeTarget();
-        InitializeNativeTargetAsmPrinter();
-        InitializeNativeTargetAsmParser();
+        llvm::InitializeNativeTarget();
+        llvm::InitializeNativeTargetAsmPrinter();
+        llvm::InitializeNativeTargetAsmParser();
     }
 
     CodeGen::~CodeGen() = default;
@@ -29,7 +27,7 @@ namespace codegen
         std::cerr << "[codegen error] " << msg << "\n";
     }
 
-    llvm::Value *CodeGen::castToSameIntType(llvm::Value *v, llvm::Type *targetType)
+    llvm::Value *CodeGen::cast_to_integer_type(llvm::Value *v, llvm::Type *targetType)
     {
         if (v->getType() == targetType)
             return v;
@@ -75,7 +73,7 @@ namespace codegen
     bool CodeGen::write_ir_to_file(const std::string &path)
     {
         std::error_code EC;
-        raw_fd_ostream dest(path, EC, sys::fs::OF_None);
+        llvm::raw_fd_ostream dest(path, EC, llvm::sys::fs::OF_None);
         if (EC)
         {
             std::cerr << "Could not open file: " << EC.message() << "\n";

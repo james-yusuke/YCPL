@@ -9,10 +9,8 @@
 #include <string>
 #include <stdexcept>
 
-llvm::Type *CodeGen::getLLVMType(const std::string &typeName)
+llvm::Type *codegen::CodeGen::resolve_llvm_type_name(const std::string &typeName)
 {
-    using namespace llvm;
-
     TypeShape pt = parse_type_shape(typeName);
 
     Type *ty = nullptr;

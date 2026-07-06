@@ -5,8 +5,8 @@
 #include <llvm/IR/DerivedTypes.h>
 #include <llvm/IR/Intrinsics.h>
 
-using namespace llvm;
-using namespace codegen;
+namespace codegen
+{
 
 Value *CodeGen::codegen_array(const ast::ArrayLiteral *alit)
 {
@@ -114,4 +114,6 @@ Value *CodeGen::codegen_array(const ast::ArrayLiteral *alit)
     }
 
     return arrayHeaderPtr;
+}
+
 }

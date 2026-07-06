@@ -5,8 +5,8 @@
 #include <llvm/IR/DerivedTypes.h>
 #include <llvm/IR/Intrinsics.h>
 
-using namespace llvm;
-using namespace codegen;
+namespace codegen
+{
 
 Value *CodeGen::codegen_index_addr(const ast::IndexExpr *ie)
 {
@@ -202,4 +202,6 @@ Value *CodeGen::codegen_index_addr(const ast::IndexExpr *ie)
     }
 
     return elemPtrI8;
+}
+
 }

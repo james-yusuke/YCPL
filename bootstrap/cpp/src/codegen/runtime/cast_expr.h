@@ -8,8 +8,8 @@
 #include <llvm/ADT/SmallVector.h>
 #include <llvm/ADT/Twine.h>
 
-using namespace llvm;
-using namespace codegen;
+namespace codegen
+{
 
 static std::string llvm_type_to_string(Type *t)
 {
@@ -181,4 +181,6 @@ Value *CodeGen::codegen_cast_call(const ast::CallExpr *ce)
 
     error("unsupported cast from '" + llvm_type_to_string(srcType) + "' to '" + llvm_type_to_string(dstType) + "'");
     return nullptr;
+}
+
 }
