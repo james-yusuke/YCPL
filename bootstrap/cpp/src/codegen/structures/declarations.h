@@ -9,8 +9,8 @@
 #include <vector>
 #include <algorithm>
 
-using namespace llvm;
-using namespace codegen;
+namespace codegen
+{
 
 Type *CodeGen::resolve_type_from_ast(const ast::Type *at)
 {
@@ -834,4 +834,6 @@ llvm::Value *CodeGen::codegen_member(const ast::MemberExpr *me)
     }
 
     return builder.CreateLoad(finalFieldTy, addr, me->member + ".val");
+}
+
 }

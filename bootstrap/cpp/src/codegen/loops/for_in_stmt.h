@@ -6,17 +6,17 @@
 #include <llvm/IR/DerivedTypes.h>
 #include <llvm/IR/Intrinsics.h>
 
-using namespace llvm;
-using namespace codegen;
+namespace codegen
+{
 
-Value *CodeGen::codegen_forinstmt(const ast::ForInStmt *fs)
+Value *CodeGen::codegen_for_in_loop(const ast::ForInStmt *forInStmt)
 {
     Function *F = builder.GetInsertBlock()->getParent();
-    Value *iterV = codegen_expr(fs->iterable.get());
+    Value *iterV = codegen_expr(forInStmt->iterable.get());
     if (!iterV)
         return nullptr;
 
-    if (auto id = dynamic_cast<const ast::Ident *>(fs->iterable.get()))
+    if (auto id = dynamic_cast<const ast::Ident *>(forInStmt->iterable.get()))
     {
         std::string *typeHint = lookup_local_type(id->name);
         if (typeHint)
@@ -53,11 +53,11 @@ Value *CodeGen::codegen_forinstmt(const ast::ForInStmt *fs)
                 if (parsed.array_rank > 1)
                     elemTy = arrayPtrTy;
                 else
-                    elemTy = getLLVMType(elemTypeName);
+                    elemTy = resolve_llvm_type_name(elemTypeName);
                 if (!elemTy)
                     elemTy = get_int_type();
 
-                Value *varAlloca = create_entry_alloca(F, elemTy, fs->var);
+                Value *varAlloca = create_entry_alloca(F, elemTy, forInStmt->var);
 
                 BasicBlock *condBB = BasicBlock::Create(context, "forin.array.cond", F);
                 BasicBlock *bodyBB = BasicBlock::Create(context, "forin.array.body", F);
@@ -77,7 +77,7 @@ Value *CodeGen::codegen_forinstmt(const ast::ForInStmt *fs)
 
                 builder.SetInsertPoint(bodyBB);
                 push_scope();
-                bind_local(fs->var, elemTypeName, varAlloca);
+                bind_local(forInStmt->var, elemTypeName, varAlloca);
 
                 Value *idxInBody = builder.CreateLoad(i64Ty, idxAlloca, ".forin.array.idx.load2");
                 Value *offset = builder.CreateMul(idxInBody, elemSize, "forin.array.offset");
@@ -86,8 +86,8 @@ Value *CodeGen::codegen_forinstmt(const ast::ForInStmt *fs)
                 Value *elemVal = builder.CreateLoad(elemTy, slot, "forin.array.elem");
                 builder.CreateStore(elemVal, varAlloca);
 
-                if (fs->body)
-                    codegen_block(fs->body.get());
+                if (forInStmt->body)
+                    codegen_block(forInStmt->body.get());
 
                 pop_scope();
 
@@ -138,7 +138,7 @@ Value *CodeGen::codegen_forinstmt(const ast::ForInStmt *fs)
         Value *cond = builder.CreateICmpNE(ch, zero8, "forin.cond");
         builder.CreateCondBr(cond, bodyBB, afterBB);
 
-        Value *varAlloca = create_entry_alloca(F, get_int_type(), fs->var);
+        Value *varAlloca = create_entry_alloca(F, get_int_type(), forInStmt->var);
 
         break_targets.push_back(afterBB);
         continue_targets.push_back(incrBB);
@@ -146,7 +146,7 @@ Value *CodeGen::codegen_forinstmt(const ast::ForInStmt *fs)
         builder.SetInsertPoint(bodyBB);
         push_scope();
 
-        bind_local(fs->var, "i32", varAlloca);
+        bind_local(forInStmt->var, "i32", varAlloca);
 
         Value *idxInBody = builder.CreateLoad(get_int_type(), idxAlloca, ".forin.idx.load2");
         Value *ptrInBody = builder.CreateGEP(i8Ty, strPtr, idxInBody, "forin.gep2");
@@ -155,8 +155,8 @@ Value *CodeGen::codegen_forinstmt(const ast::ForInStmt *fs)
         Value *chExt = builder.CreateSExt(ch2, get_int_type(), "forin.ch.ext");
         builder.CreateStore(chExt, varAlloca);
 
-        if (fs->body)
-            codegen_block(fs->body.get());
+        if (forInStmt->body)
+            codegen_block(forInStmt->body.get());
 
         pop_scope();
 
@@ -208,7 +208,7 @@ Value *CodeGen::codegen_forinstmt(const ast::ForInStmt *fs)
         Value *cmp = builder.CreateICmpSLT(idxLoad, endVal, "forin.cmp");
         builder.CreateCondBr(cmp, bodyBB, afterBB);
 
-        Value *varAlloca = create_entry_alloca(F, get_int_type(), fs->var);
+        Value *varAlloca = create_entry_alloca(F, get_int_type(), forInStmt->var);
 
         break_targets.push_back(afterBB);
         continue_targets.push_back(incrBB);
@@ -216,13 +216,13 @@ Value *CodeGen::codegen_forinstmt(const ast::ForInStmt *fs)
         builder.SetInsertPoint(bodyBB);
         push_scope();
 
-        bind_local(fs->var, "i32", varAlloca);
+        bind_local(forInStmt->var, "i32", varAlloca);
 
         Value *idxInBody = builder.CreateLoad(get_int_type(), idxAlloca, ".forin.idx.load2");
         builder.CreateStore(idxInBody, varAlloca);
 
-        if (fs->body)
-            codegen_block(fs->body.get());
+        if (forInStmt->body)
+            codegen_block(forInStmt->body.get());
 
         pop_scope();
 
@@ -246,4 +246,6 @@ Value *CodeGen::codegen_forinstmt(const ast::ForInStmt *fs)
 
     error("for-in only supports string (i8*), integer, or floating iterable for now");
     return nullptr;
+}
+
 }

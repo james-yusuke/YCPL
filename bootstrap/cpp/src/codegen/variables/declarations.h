@@ -6,8 +6,8 @@
 #include <llvm/IR/DerivedTypes.h>
 #include <llvm/IR/Intrinsics.h>
 
-using namespace llvm;
-using namespace codegen;
+namespace codegen
+{
 
 std::string CodeGen::resolve_type_name(ast::Type *tp)
 {
@@ -86,7 +86,7 @@ Value *CodeGen::codegen_vardecl(const ast::VarDecl *vd)
 
     if (!t.empty())
     {
-        if (Type *tx = getLLVMType(t))
+        if (Type *tx = resolve_llvm_type_name(t))
         {
             ty = tx;
         }
@@ -208,4 +208,6 @@ Value *CodeGen::codegen_vardecl(const ast::VarDecl *vd)
         bind_local_const(vd->name, t, alloca, vd->is_const);
         return alloca;
     }
+}
+
 }

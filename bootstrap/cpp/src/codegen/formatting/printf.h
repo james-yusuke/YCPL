@@ -7,8 +7,8 @@
 #include <llvm/ADT/SmallVector.h>
 #include <llvm/ADT/Twine.h>
 
-using namespace llvm;
-using namespace codegen;
+namespace codegen
+{
 
 Value *CodeGen::codegen_printf_call(const ast::CallExpr *ce)
 {
@@ -31,4 +31,6 @@ Value *CodeGen::codegen_printf_call(const ast::CallExpr *ce)
     }
     FunctionCallee printfFn = get_printf();
     return builder.CreateCall(printfFn, argsV, "call_printf");
+}
+
 }

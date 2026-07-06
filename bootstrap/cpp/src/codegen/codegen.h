@@ -16,7 +16,6 @@
 
 namespace codegen
 {
-
     class CodeGen
     {
     public:
@@ -82,7 +81,7 @@ namespace codegen
         llvm::Type *get_void_type();
         llvm::Type *get_i8ptr_type();
 
-        llvm::Value *castToSameIntType(llvm::Value *v, llvm::Type *targetType);
+        llvm::Value *cast_to_integer_type(llvm::Value *v, llvm::Type *targetType);
 
         llvm::Value *coerce_to_i64(llvm::Value *value, const std::string &label);
         llvm::Value *coerce_to_i32(llvm::Value *value, const std::string &label);
@@ -114,8 +113,8 @@ namespace codegen
 
         // Statement and control-flow lowering.
         llvm::Value *codegen_ifstmt(const ast::IfStmt *ifs);
-        llvm::Value *codegen_forstmt(const ast::ForStmt *fs2);
-        llvm::Value *codegen_forinstmt(const ast::ForInStmt *fs);
+        llvm::Value *codegen_for_loop(const ast::ForStmt *forStmt);
+        llvm::Value *codegen_for_in_loop(const ast::ForInStmt *forInStmt);
         llvm::Value *codegen_append_call(const ast::CallExpr *ce);
         llvm::Value *codegen_println_call(const ast::CallExpr *ce);
         llvm::Value *codegen_printf_call(const ast::CallExpr *ce);
@@ -125,7 +124,7 @@ namespace codegen
         llvm::Value *codegen_new_call(const ast::CallExpr *ce);
         llvm::Value *codegen_assign(const ast::AssignStmt *as);
         llvm::Value *codegen_vardecl(const ast::VarDecl *vd);
-        llvm::Value *codegen_forcstmt(const ast::ForCStyleStmt *fcs);
+        llvm::Value *codegen_c_style_for_loop(const ast::ForCStyleStmt *forStmt);
 
         // Type and function lowering.
         llvm::Type *get_llvm_type_from_str(const std::string &typeStr, llvm::LLVMContext &ctx);
@@ -147,7 +146,7 @@ namespace codegen
         void bind_local(const std::string &name, const std::string type, llvm::Value *v);
         void bind_local_const(const std::string &name, const std::string type, llvm::Value *v, bool is_const);
         llvm::Value *lookup_local(const std::string &name);
-        llvm::Type *getLLVMType(const std::string &typeName);
+        llvm::Type *resolve_llvm_type_name(const std::string &typeName);
         std::string *lookup_local_type(const std::string &name);
         std::string infer_expr_type_name(const ast::Expr *expr);
         bool is_local_const(const std::string &name);

@@ -7,8 +7,8 @@
 #include <llvm/ADT/SmallVector.h>
 #include <llvm/ADT/Twine.h>
 
-using namespace llvm;
-using namespace codegen;
+namespace codegen
+{
 
 Value *CodeGen::codegen_sprintf_call(const ast::CallExpr *ce)
 {
@@ -74,4 +74,6 @@ Value *CodeGen::codegen_sprintf_call(const ast::CallExpr *ce)
     FunctionCallee sprintfFn = module->getOrInsertFunction("sprintf", sprintfTy);
 
     return builder.CreateCall(sprintfFn, ArrayRef<Value *>(argsV), "call_sprintf");
+}
+
 }

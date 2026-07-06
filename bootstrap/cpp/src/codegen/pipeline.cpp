@@ -2,8 +2,6 @@
 
 #include <llvm/IR/Verifier.h>
 
-using namespace llvm;
-
 namespace codegen
 {
     bool CodeGen::generate(const ast::Program &prog)
@@ -33,7 +31,7 @@ namespace codegen
                 error("top-level statements are not supported in codegen (please define fn main)");
         }
 
-        if (verifyModule(*module, &errs()))
+        if (verifyModule(*module, &llvm::errs()))
         {
             error("module verification failed");
             return false;

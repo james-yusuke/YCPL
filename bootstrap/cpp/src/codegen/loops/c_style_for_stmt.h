@@ -6,16 +6,16 @@
 #include <llvm/IR/Intrinsics.h>
 #include <llvm/IR/Verifier.h>
 
-using namespace llvm;
-using namespace codegen;
+namespace codegen
+{
 
-Value *CodeGen::codegen_forcstmt(const ast::ForCStyleStmt *fcs)
+Value *CodeGen::codegen_c_style_for_loop(const ast::ForCStyleStmt *forStmt)
 {
     Function *F = builder.GetInsertBlock()->getParent();
 
-    if (fcs->init)
+    if (forStmt->init)
     {
-        codegen_stmt(fcs->init.get());
+        codegen_stmt(forStmt->init.get());
     }
 
     BasicBlock *condBB = BasicBlock::Create(context, "for.cond", F);
@@ -26,9 +26,9 @@ Value *CodeGen::codegen_forcstmt(const ast::ForCStyleStmt *fcs)
     builder.CreateBr(condBB);
 
     builder.SetInsertPoint(condBB);
-    if (fcs->cond)
+    if (forStmt->cond)
     {
-        Value *condv = codegen_expr(fcs->cond.get());
+        Value *condv = codegen_expr(forStmt->cond.get());
         if (!condv)
             return nullptr;
 
@@ -49,9 +49,9 @@ Value *CodeGen::codegen_forcstmt(const ast::ForCStyleStmt *fcs)
     break_targets.push_back(afterBB);
     continue_targets.push_back(incBB);
 
-    if (fcs->body)
+    if (forStmt->body)
     {
-        codegen_block(fcs->body.get());
+        codegen_block(forStmt->body.get());
     }
 
     if (!builder.GetInsertBlock()->getTerminator())
@@ -68,13 +68,15 @@ Value *CodeGen::codegen_forcstmt(const ast::ForCStyleStmt *fcs)
     }
 
     builder.SetInsertPoint(incBB);
-    if (fcs->post)
+    if (forStmt->post)
     {
-        codegen_expr(fcs->post.get());
+        codegen_expr(forStmt->post.get());
     }
     builder.CreateBr(condBB);
 
     builder.SetInsertPoint(afterBB);
 
     return nullptr;
+}
+
 }

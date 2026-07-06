@@ -4,8 +4,8 @@
 
 #include <llvm/IR/DerivedTypes.h>
 
-using namespace llvm;
-using namespace codegen;
+namespace codegen
+{
 
 Value *CodeGen::coerce_to_i64(Value *value, const std::string &label)
 {
@@ -73,4 +73,6 @@ Value *CodeGen::coerce_to_i8ptr(Value *value, const std::string &label)
         return builder.CreateIntToPtr(coerce_to_i64(value, label + ".int"), cast<PointerType>(i8ptrTy), label);
 
     return value;
+}
+
 }
