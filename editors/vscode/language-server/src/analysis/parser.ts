@@ -1,4 +1,4 @@
-import { DiagnosticSeverity, SymbolKind } from "vscode-languageserver/node.js";
+import { DiagnosticSeverity, SymbolKind } from "vscode-languageserver/node";
 import {
   keywords,
   primitiveTypes,

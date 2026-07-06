@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { Position } from "vscode-languageserver/node.js";
+import { Position } from "vscode-languageserver/node";
 import { YcplParser } from "../src/analysis/parser.js";
 import { WorkspaceIndex } from "../src/analysis/workspaceIndex.js";
 
@@ -32,8 +32,11 @@ test("workspace index resolves local definitions and references", () => {
   const definition = index.declarationAt(document.uri, Position.create(0, 3));
   assert.equal(definition?.name, "main");
   const reference = index.referenceAt(document.uri, Position.create(2, 13));
-  assert.equal(index.symbolById(reference?.symbolId)?.name, "value");
-  assert.ok(reference?.symbolId);
+  if (!reference) {
+    assert.fail("Expected return value reference");
+  }
+  assert.equal(index.symbolById(reference.symbolId)?.name, "value");
+  assert.ok(reference.symbolId);
   assert.ok(index.findReferencesBySymbolId(reference.symbolId, true).length >= 2);
   assert.equal(index.symbolAt(document.uri, Position.create(0, 3))?.name, "main");
 });

@@ -1,7 +1,7 @@
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import { pathToFileURL } from "node:url";
-import { CompletionItemKind } from "vscode-languageserver/node.js";
+import { CompletionItemKind } from "vscode-languageserver/node";
 
 export interface StandardLibrarySymbol {
   label: string;

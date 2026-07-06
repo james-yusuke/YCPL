@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { Position, Range } from "vscode-languageserver/node.js";
+import { Position, Range } from "vscode-languageserver/node";
 import { YcplParser } from "../src/analysis/parser.js";
 import { StandardLibraryIndex } from "../src/analysis/stdlib.js";
 import { WorkspaceIndex } from "../src/analysis/workspaceIndex.js";
@@ -37,7 +37,9 @@ test("stdlib member completion adds missing import edits", async () => {
 
   const items = await providers.completion({ textDocument: { uri: document.uri }, position: Position.create(1, 8) });
   const println = items.find((item) => item.label === "println");
-  assert.ok(println);
+  if (!println) {
+    assert.fail("Expected println completion");
+  }
   assert.equal(println.additionalTextEdits?.[0].newText, "import \"std/fmt\" as fmt\n");
 });
 
