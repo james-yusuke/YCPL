@@ -1791,7 +1791,7 @@ fn emit_compact_function_body_lowering(ctx *byte, mod *byte, builder *byte, i32_
 }
 
 fn emit_function_body_lowering(ctx *byte, mod *byte, builder *byte, i32_type *byte, fn_type *byte, call_helper *byte, name string, scan FunctionBodyScan) *byte {
-    if str.len(name) >= 0 {
+    if scan.node_len > max_real_body_lowering_nodes() || scan.expr_len > max_real_expr_lowering_nodes() {
         return emit_compact_function_body_lowering(ctx, mod, builder, i32_type, fn_type, call_helper, name, scan)
     }
 
