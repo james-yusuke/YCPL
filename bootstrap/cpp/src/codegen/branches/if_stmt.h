@@ -5,8 +5,8 @@
 #include <llvm/IR/DerivedTypes.h>
 #include <llvm/IR/Intrinsics.h>
 
-using namespace llvm;
-using namespace codegen;
+namespace codegen
+{
 
 Value *CodeGen::codegen_ifstmt(const ast::IfStmt *ifs)
 {
@@ -62,4 +62,6 @@ Value *CodeGen::codegen_ifstmt(const ast::IfStmt *ifs)
     builder.SetInsertPoint(mergeBB);
 
     return nullptr;
+}
+
 }

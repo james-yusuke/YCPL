@@ -9,8 +9,8 @@
 #include <string>
 #include <vector>
 
-using namespace llvm;
-using namespace codegen;
+namespace codegen
+{
 
 llvm::Type *CodeGen::resolve_type_from_ast_local(const ast::Type *astType)
 {
@@ -350,4 +350,6 @@ Function *CodeGen::codegen_function_decl(const ast::FuncDecl *funcDecl)
 
     pop_scope();
     return functionValue;
+}
+
 }

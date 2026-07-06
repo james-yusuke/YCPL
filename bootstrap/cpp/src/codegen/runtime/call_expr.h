@@ -7,8 +7,8 @@
 #include <llvm/ADT/SmallVector.h>
 #include <llvm/ADT/Twine.h>
 
-using namespace llvm;
-using namespace codegen;
+namespace codegen
+{
 
 static bool is_YCPL_std_intrinsic(const std::string &name)
 {
@@ -182,7 +182,7 @@ Value *CodeGen::codegen_std_intrinsic_call(const std::string &name, const ast::C
 
                     Type *elemTy = parsed.array_rank > 1
                                        ? detail::getPtrTy(context)
-                                       : getLLVMType(elemTypeName);
+                                       : resolve_llvm_type_name(elemTypeName);
                     if (elemTy)
                     {
                         Value *typedPtr = builder.CreatePointerCast(elemPtrI8, detail::getPtrTy(context), "array.get.typed.ptr");
@@ -591,4 +591,6 @@ Value *CodeGen::codegen_call(const ast::CallExpr *ce)
     }
 
     return nullptr;
+}
+
 }

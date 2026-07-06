@@ -6,8 +6,8 @@
 #include <llvm/IR/Intrinsics.h>
 #include <functional>
 
-using namespace llvm;
-using namespace codegen;
+namespace codegen
+{
 
 Value *CodeGen::codegen_assign(const ast::AssignStmt *as)
 {
@@ -124,7 +124,7 @@ Value *CodeGen::codegen_assign(const ast::AssignStmt *as)
 
         if (pt.array_rank > 0 || pt.pointer_depth > 0)
         {
-            Type *elemTy = getLLVMType(pt.base);
+            Type *elemTy = resolve_llvm_type_name(pt.base);
             if (elemTy)
                 return elemTy;
         }
@@ -529,4 +529,6 @@ Value *CodeGen::codegen_assign(const ast::AssignStmt *as)
         error(msg + lss.str());
         return nullptr;
     }
+}
+
 }

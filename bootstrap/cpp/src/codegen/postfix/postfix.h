@@ -9,8 +9,8 @@
 #include <vector>
 #include <algorithm>
 
-using namespace llvm;
-using namespace codegen;
+namespace codegen
+{
 
 Value *CodeGen::codegen_postfix(const ast::PostfixExpr *pe)
 {
@@ -114,4 +114,5 @@ Value *CodeGen::codegen_postfix(const ast::PostfixExpr *pe)
     builder.CreateStore(newv, ptr);
 
     return old;
+}
 }

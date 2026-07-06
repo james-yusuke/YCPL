@@ -5,10 +5,10 @@
 #include <llvm/IR/DerivedTypes.h>
 #include <llvm/IR/Intrinsics.h>
 
-using namespace llvm;
-using namespace codegen;
+namespace codegen
+{
 
-Value *CodeGen::codegen_forstmt(const ast::ForStmt *fs2)
+Value *CodeGen::codegen_for_loop(const ast::ForStmt *forStmt)
 {
     Function *F = builder.GetInsertBlock()->getParent();
 
@@ -31,8 +31,8 @@ Value *CodeGen::codegen_forstmt(const ast::ForStmt *fs2)
     builder.SetInsertPoint(bodyBB);
 
     push_scope();
-    if (fs2->body)
-        codegen_block(fs2->body.get());
+    if (forStmt->body)
+        codegen_block(forStmt->body.get());
     pop_scope();
 
     if (!builder.GetInsertBlock()->getTerminator())
@@ -44,4 +44,6 @@ Value *CodeGen::codegen_forstmt(const ast::ForStmt *fs2)
     builder.SetInsertPoint(afterBB);
 
     return nullptr;
+}
+
 }

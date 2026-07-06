@@ -3,8 +3,6 @@
 #include <llvm/IR/Constants.h>
 #include <llvm/IR/DerivedTypes.h>
 
-using namespace llvm;
-
 namespace codegen
 {
     Value *CodeGen::codegen_expr(const ast::Expr *e)
@@ -150,12 +148,12 @@ namespace codegen
             return nullptr;
         }
 
-        if (auto fs = dynamic_cast<const ast::ForInStmt *>(s))
-            return codegen_forinstmt(fs);
-        if (auto fcs = dynamic_cast<const ast::ForCStyleStmt *>(s))
-            return codegen_forcstmt(fcs);
-        if (auto fs2 = dynamic_cast<const ast::ForStmt *>(s))
-            return codegen_forstmt(fs2);
+        if (auto forInStmt = dynamic_cast<const ast::ForInStmt *>(s))
+            return codegen_for_in_loop(forInStmt);
+        if (auto cStyleForStmt = dynamic_cast<const ast::ForCStyleStmt *>(s))
+            return codegen_c_style_for_loop(cStyleForStmt);
+        if (auto forStmt = dynamic_cast<const ast::ForStmt *>(s))
+            return codegen_for_loop(forStmt);
 
         error("unhandled stmt type in codegen");
         return nullptr;
