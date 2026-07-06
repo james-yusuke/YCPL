@@ -273,6 +273,8 @@ grep -q 'value=13' /tmp/ycc-ycpl-check-struct3-member.out
 grep -q 'value=13' /tmp/ycc-ycpl-check-struct3-param-call.out
 "$YCC_YCPL" check examples/98_self_codegen_struct3_return.yc >/tmp/ycc-ycpl-check-struct3-return.out
 grep -q 'value=13' /tmp/ycc-ycpl-check-struct3-return.out
+"$YCC_YCPL" check examples/99_self_codegen_main_args.yc >/tmp/ycc-ycpl-check-main-args.out
+grep -q 'value=13' /tmp/ycc-ycpl-check-main-args.out
 if "$YCC_YCPL" check examples/55_self_codegen_unknown_failure.yc >/tmp/ycc-ycpl-check-failure.out 2>&1; then
   printf 'Expected ycc-ycpl check to reject unknown local symbol\n' >&2
   exit 1
@@ -960,22 +962,22 @@ grep -q 'function_body_lowered_total_with_real_ast' "$work_dir/project_body.ll"
 grep -q 'function_body_real_node_lowering_limit' "$work_dir/project_body.ll"
 grep -q 'function_body_real_expr_lowering_limit' "$work_dir/project_body.ll"
 grep -q 'function_body_real_statement_expr_lowering_limit' "$work_dir/project_body.ll"
-grep -q 'store i32 64, ptr %function_body_real_node_lowering_limit' "$work_dir/project_body.ll"
-grep -q 'store i32 128, ptr %function_body_real_expr_lowering_limit' "$work_dir/project_body.ll"
-grep -q 'store i32 64, ptr %function_body_real_statement_expr_lowering_limit' "$work_dir/project_body.ll"
-grep -q 'store i32 64, ptr %function_body_real_lowered_node_count' "$work_dir/project_body.ll"
-grep -q 'store i32 128, ptr %function_body_real_lowered_expr_count' "$work_dir/project_body.ll"
-if grep -Eq 'store i32 (6[5-9]|[7-9][0-9]|[1-9][0-9][0-9]+), ptr %function_body_real_lowered_node_count' "$work_dir/project_body.ll"; then
+grep -q 'store i32 128, ptr %function_body_real_node_lowering_limit' "$work_dir/project_body.ll"
+grep -q 'store i32 256, ptr %function_body_real_expr_lowering_limit' "$work_dir/project_body.ll"
+grep -q 'store i32 128, ptr %function_body_real_statement_expr_lowering_limit' "$work_dir/project_body.ll"
+grep -q 'store i32 128, ptr %function_body_real_lowered_node_count' "$work_dir/project_body.ll"
+grep -q 'store i32 256, ptr %function_body_real_lowered_expr_count' "$work_dir/project_body.ll"
+if grep -Eq 'store i32 (12[9]|1[3-9][0-9]|[2-9][0-9][0-9]|[1-9][0-9][0-9][0-9]+), ptr %function_body_real_lowered_node_count' "$work_dir/project_body.ll"; then
   printf 'function_body_real_lowered_node_count exceeded the configured real node lowering cap\n' >&2
   exit 1
 fi
-if grep -Eq 'store i32 (12[9]|1[3-9][0-9]|[2-9][0-9][0-9]|[1-9][0-9][0-9][0-9]+), ptr %function_body_real_lowered_expr_count' "$work_dir/project_body.ll"; then
+if grep -Eq 'store i32 (25[7-9]|2[6-9][0-9]|[3-9][0-9][0-9]|[1-9][0-9][0-9][0-9]+), ptr %function_body_real_lowered_expr_count' "$work_dir/project_body.ll"; then
   printf 'function_body_real_lowered_expr_count exceeded the configured real expression lowering cap\n' >&2
   exit 1
 fi
 grep -Eq 'store i32 ([1-9][0-9]*), ptr %function_body_real_unlowered_node_count' "$work_dir/project_body.ll"
 grep -Eq 'store i32 ([1-9][0-9]*), ptr %function_body_real_unlowered_expr_count' "$work_dir/project_body.ll"
-grep -q 'store i32 64, ptr %function_statement_expr_owner_limit' "$work_dir/project_body.ll"
+grep -q 'store i32 128, ptr %function_statement_expr_owner_limit' "$work_dir/project_body.ll"
 grep -Eq 'store i32 ([6-9][0-9][0-9]|[1-9][0-9][0-9][0-9]), ptr %function_expr_lowered_nodes' "$work_dir/project_body.ll"
 grep -q 'function_expression_slot_score' "$work_dir/project_body.ll"
 grep -q 'function_expr_identifier_nodes' "$work_dir/project_body.ll"
@@ -1223,6 +1225,14 @@ grep -q 'alloca ptr' "$self_string_dir/merged.ll"
 grep -q 'store ptr' "$self_string_dir/merged.ll"
 grep -q '@strlit' "$self_string_dir/merged.ll"
 grep -q 'ret i32 13' "$self_string_dir/merged.ll"
+
+self_main_args_dir="$(mktemp -d "${TMPDIR:-/tmp}/ycpl-self-main-args.XXXXXX")"
+"$YCC_YCPL" build-ir-self examples/99_self_codegen_main_args.yc -o "$self_main_args_dir" >/dev/null
+grep -q 'define i32 @main(i32' "$self_main_args_dir/merged.ll"
+grep -q 'alloca i32' "$self_main_args_dir/merged.ll"
+grep -q 'alloca ptr' "$self_main_args_dir/merged.ll"
+grep -q 'store ptr' "$self_main_args_dir/merged.ll"
+grep -q 'ret i32 13' "$self_main_args_dir/merged.ll"
 
 self_extern_string_dir="$(mktemp -d "${TMPDIR:-/tmp}/ycpl-self-extern-string.XXXXXX")"
 "$YCC_YCPL" build-ir-self examples/66_self_codegen_extern_string_call.yc -o "$self_extern_string_dir" >/dev/null

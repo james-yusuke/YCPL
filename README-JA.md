@@ -142,7 +142,7 @@ cd examples/04_module_project && ../../bazel-bin/ycc build
    ├─ YCPL で実装
    ├─ YCPL source を lex/parse
    ├─ 小さな self-codegen subset を型検査
-   ├─ i32 main、local、assignment、0〜8 引数の helper/extern call、arithmetic、return は LLVM IR を直接生成
+   ├─ i32 main、C-style main(argc i32, argv *string)、local、assignment、0〜8 引数の helper/extern call、arithmetic、return は LLVM IR を直接生成
    ├─ function signature を先に宣言し、main から後続 helper を呼べる
    ├─ その subset は bootstrap ycc なしで native binary まで生成
    ├─ src/**/*.yc traversal で compiler/ycpl を parse/check
@@ -218,6 +218,7 @@ bazel-bin/ycc-ycpl build examples/58_self_codegen_else_helper.yc -o /tmp/ycpl-se
 bazel-bin/ycc-ycpl build examples/59_self_codegen_param_call.yc -o /tmp/ycpl-self-param
 bazel-bin/ycc-ycpl build examples/60_self_codegen_helper_chain.yc -o /tmp/ycpl-self-chain
 bazel-bin/ycc-ycpl build examples/61_self_codegen_two_arg_call.yc -o /tmp/ycpl-self-twoarg
+bazel-bin/ycc-ycpl build-ir-self examples/99_self_codegen_main_args.yc -o /tmp/ycpl-self-main-args
 bazel-bin/ycc-ycpl build examples/62_self_codegen_forward_call.yc -o /tmp/ycpl-self-forward
 bazel-bin/ycc-ycpl parse compiler/ycpl
 bazel-bin/ycc-ycpl check compiler/ycpl

@@ -37,7 +37,7 @@ statement          = var_decl
                    | continue_statement
                    | expression ;
 
-var_decl           = [ "mut" ] identifier [ ":" type ] ":=" expression ;
+var_decl           = identifier [ ":" type ] ":=" expression ;
 assignment         = expression assignment_operator expression ;
 assignment_operator
                    = "=" | "+=" | "-=" | "*=" | "/=" | "%=" ;

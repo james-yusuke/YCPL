@@ -263,10 +263,10 @@ namespace ast
     {
         print_indent(os, indent);
         os << "VarDecl(" << name << ")\n";
-        if (is_const || is_mut)
+        if (is_const)
         {
             print_indent(os, indent + 2);
-            os << (is_const ? "const" : "mut") << "\n";
+            os << "const\n";
         }
         if (type)
         {

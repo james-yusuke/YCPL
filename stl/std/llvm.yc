@@ -6,6 +6,7 @@ extern fn c_context_dispose(ctx *byte) as "LLVMContextDispose"
 extern fn c_module_create_with_name_in_context(name string, ctx *byte) *byte as "LLVMModuleCreateWithNameInContext"
 extern fn c_dispose_module(mod_ref *byte) as "LLVMDisposeModule"
 extern fn c_print_module_to_string(mod_ref *byte) string as "LLVMPrintModuleToString"
+extern fn c_print_module_to_file(mod_ref *byte, path string, error_message *string) i32 as "LLVMPrintModuleToFile"
 extern fn c_dispose_message(message string) as "LLVMDisposeMessage"
 
 extern fn c_create_builder_in_context(ctx *byte) *byte as "LLVMCreateBuilderInContext"
@@ -121,6 +122,15 @@ pub fn dispose_module(mod *byte) {
 
 pub fn print_module_to_string(mod *byte) string {
     return c_print_module_to_string(mod)
+}
+
+pub fn print_module_to_file(mod *byte, path string) bool {
+    message: string := none
+    rc := c_print_module_to_file(mod, path, &message)
+    if message != none {
+        c_dispose_message(message)
+    }
+    return rc == 0
 }
 
 pub fn dispose_message(message string) {
