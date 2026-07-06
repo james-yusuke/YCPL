@@ -43,6 +43,22 @@ test("stdlib member completion adds missing import edits", async () => {
   assert.equal(println.additionalTextEdits?.[0].newText, "import \"std/fmt\" as fmt\n");
 });
 
+test("stdlib function completion adds missing import edits", async () => {
+  const parser = new YcplParser();
+  const index = new WorkspaceIndex();
+  const document = parser.parse("file:///stdlib-functions.yc", 1, "fn main() i32 {\n    \n    return 0\n}");
+  index.update(document);
+  const providers = new YcplProviders(index, new StandardLibraryIndex(undefined), new NullCompilerBridge());
+
+  const items = await providers.completion({ textDocument: { uri: document.uri }, position: Position.create(1, 4) });
+  const fromString = items.find((item) => item.label === "bytes.from_string");
+  if (!fromString) {
+    assert.fail("Expected bytes.from_string completion");
+  }
+  assert.equal(fromString.additionalTextEdits?.[0].newText, "import \"std/bytes\" as bytes\n");
+  assert.equal(fromString.insertText, "bytes.from_string($0)");
+});
+
 test("hover, definition, rename, symbols, and semantic tokens work", () => {
   const { document, providers } = fixture();
   const hover = providers.hover({ textDocument: { uri: document.uri }, position: Position.create(1, 4) });

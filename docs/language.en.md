@@ -8,7 +8,7 @@ Formal grammar: [YCPL EBNF](grammar/ycpl.ebnf)
 .yc file
 ├─ optional module/package declaration
 ├─ imports
-├─ functions, structs, externs, intrinsics
+├─ functions, structs, enums, type aliases, externs, intrinsics
 └─ fn main() entry
 ```
 
@@ -31,14 +31,12 @@ top-level statement     -> rejected by codegen
 Identifiers start with a letter or `_`, followed by letters, digits, or `_`.
 
 ```text
-module package import pub extern intrinsic fn struct const
-if else for in return break continue as
+module package import pub extern intrinsic fn struct enum type const
+if else for in switch case default return break continue as
 true false none byte
 ```
 
-Reserved tokens such as `enum`, `switch`, and `type` are intentionally not part of
-the supported grammar yet. They are documented in
-[Implementation status](status.en.md#reserved-but-not-implemented).
+`case` and `default` are labels inside `switch` bodies.
 
 ## Modules And Imports
 
@@ -99,11 +97,23 @@ Types
 ├─ primitive: i32 i64 bool char byte string float double void size_t
 ├─ pointer:   *T
 ├─ slice:     []T
+├─ alias:     type Score = i32
+├─ enum:      enum Color { Red, Green }
 └─ nested:    [][]T
 ```
 
 Runtime slices use `{ data, len, cap, elem_size }` and are manually managed
 when created by `std/array`.
+
+```YCPL
+enum Color {
+    Red = 2,
+    Green,
+    Blue = 8,
+}
+
+type Score = i32
+```
 
 ## Variables And Literals
 
@@ -148,4 +158,20 @@ for i := 0; i < 10; i++ {
 for value in xs {
     println(value)
 }
+
+switch color {
+    case Color.Red {
+        println("red")
+    }
+    case Green {
+        println("green")
+    }
+    default {
+        println("other")
+    }
+}
 ```
+
+`switch` uses `switch expression { case expression { ... } default { ... } }`.
+The self-host checker/codegen path currently leads with i32 selectors and
+integer literal cases.

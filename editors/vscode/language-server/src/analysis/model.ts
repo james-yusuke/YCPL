@@ -13,12 +13,17 @@ export const keywords = [
   "intrinsic",
   "fn",
   "struct",
+  "enum",
+  "type",
   "const",
   "mut",
   "if",
   "else",
   "for",
   "in",
+  "switch",
+  "case",
+  "default",
   "return",
   "break",
   "continue",
@@ -48,6 +53,8 @@ export const semanticTokenTypes = [
   "namespace",
   "type",
   "struct",
+  "enum",
+  "enumMember",
   "parameter",
   "variable",
   "property",
@@ -83,6 +90,10 @@ export type ScopeKind =
   | "namespace"
   | "function"
   | "struct"
+  | "enum"
+  | "switch"
+  | "case"
+  | "default"
   | "block"
   | "if"
   | "else"
@@ -95,6 +106,9 @@ export type SymbolCategory =
   | "parameter"
   | "field"
   | "struct"
+  | "enum"
+  | "enumMember"
+  | "typeAlias"
   | "module"
   | "namespace"
   | "package";
@@ -188,7 +202,7 @@ export interface WordAtPosition {
 }
 
 export function isTypeCategory(category: SymbolCategory): boolean {
-  return category === "struct";
+  return category === "struct" || category === "enum" || category === "typeAlias";
 }
 
 export function categoryToSemanticKind(category: SymbolCategory): SemanticKind {
@@ -203,6 +217,12 @@ export function categoryToSemanticKind(category: SymbolCategory): SemanticKind {
       return "property";
     case "struct":
       return "struct";
+    case "enum":
+      return "enum";
+    case "enumMember":
+      return "enumMember";
+    case "typeAlias":
+      return "type";
     case "module":
     case "namespace":
     case "package":
