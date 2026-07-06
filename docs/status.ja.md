@@ -174,6 +174,10 @@ stage-2 self-host gate
 ├─ YCPL_NO_BOOTSTRAP=1 の通常 ycc-ycpl build/build-ir path は bootstrap fallback を禁止し、未対応 input を明示診断で失敗させる
 ├─ project_body.ll は固定 expression probe を使わず、statement-owned expression と remaining tail expression を実 scan.expr_* sequence から lower する
 ├─ statement-owned expression は local/assignment/call/return の semantic role と parser/resolver 由来の type kind を組み合わせ、resolved role/type flow として IR に lower する
+├─ project-wide function signature table の arity を call expression の resolved arity として保持し、call value/type lowering に合成する
+├─ checker は YCPL helper function 定義、extern signature、call argument type check を 8 引数まで扱い、stage1/stage2 self-host gate で 8 引数 call を検証する
+├─ checker の helper function 登録/lookup slot は 16 まで広げ、stage1/stage2 self-host gate で 9 番目の helper 呼び出しを検証する
+├─ checker の local variable と i32[3] array backing slot は 16 まで広げ、stage1/stage2 self-host gate で 9 番目 local の array load/store を検証する
 ├─ project_body.ll の実 AST lowering cap は body node 32、expression 64、statement expression 32、statement owner 32 まで広げ、IR gate で値を固定している
 ├─ statement-owned expression lowering は total expression cap も守り、CI は lowered node/expression count が cap を越えたら失敗する
 ├─ project_body.ll は実 lowering 済み node/expression count と未 lowering node/expression count を名前付き IR marker として出し、summary/smoke の取り残しを CI で検出できる

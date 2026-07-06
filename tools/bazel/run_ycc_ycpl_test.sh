@@ -160,6 +160,61 @@ grep -q 'value=13' /tmp/ycc-ycpl-check-param.out
 grep -q 'value=13' /tmp/ycc-ycpl-check-chain.out
 "$YCC_YCPL" check examples/61_self_codegen_two_arg_call.yc >/tmp/ycc-ycpl-check-twoarg.out
 grep -q 'value=13' /tmp/ycc-ycpl-check-twoarg.out
+eightarg_dir="$(mktemp -d "${TMPDIR:-/tmp}/ycpl-eightarg-check.XXXXXX")"
+cat >"$eightarg_dir/eightarg.yc" <<'YCPL'
+extern fn sum8(a i32, b i32, c i32, d i32, e i32, f i32, g i32, h i32) i32 as "sum8"
+
+fn main() i32 {
+    return sum8(1, 2, 3, 1, 2, 1, 2, 1)
+}
+YCPL
+"$YCC_YCPL" check "$eightarg_dir/eightarg.yc" >/tmp/ycc-ycpl-check-eightarg.out
+grep -q 'value=13' /tmp/ycc-ycpl-check-eightarg.out
+cat >"$eightarg_dir/helper8.yc" <<'YCPL'
+fn sum8(a i32, b i32, c i32, d i32, e i32, f i32, g i32, h i32) i32 {
+    return a + b + c + d + e + f + g + h
+}
+
+fn main() i32 {
+    return sum8(1, 2, 3, 1, 2, 1, 2, 1)
+}
+YCPL
+"$YCC_YCPL" check "$eightarg_dir/helper8.yc" >/tmp/ycc-ycpl-check-helper8.out
+grep -q 'value=13' /tmp/ycc-ycpl-check-helper8.out
+cat >"$eightarg_dir/manyhelpers.yc" <<'YCPL'
+fn h0() i32 { return 0 }
+fn h1() i32 { return 1 }
+fn h2() i32 { return 2 }
+fn h3() i32 { return 3 }
+fn h4() i32 { return 4 }
+fn h5() i32 { return 5 }
+fn h6() i32 { return 6 }
+fn h7() i32 { return 7 }
+fn h8() i32 { return 13 }
+
+fn main() i32 {
+    return h8()
+}
+YCPL
+"$YCC_YCPL" check "$eightarg_dir/manyhelpers.yc" >/tmp/ycc-ycpl-check-manyhelpers.out
+grep -q 'value=13' /tmp/ycc-ycpl-check-manyhelpers.out
+cat >"$eightarg_dir/manylocals.yc" <<'YCPL'
+fn main() i32 {
+    a0 := 0
+    a1 := 1
+    a2 := 2
+    a3 := 3
+    a4 := 4
+    a5 := 5
+    a6 := 6
+    a7 := 7
+    items := [4, 2, 7]
+    items[1] = items[0] + items[2]
+    return items[1] + 2
+}
+YCPL
+"$YCC_YCPL" check "$eightarg_dir/manylocals.yc" >/tmp/ycc-ycpl-check-manylocals.out
+grep -q 'value=13' /tmp/ycc-ycpl-check-manylocals.out
 "$YCC_YCPL" check examples/62_self_codegen_forward_call.yc >/tmp/ycc-ycpl-check-forward.out
 grep -q 'value=13' /tmp/ycc-ycpl-check-forward.out
 "$YCC_YCPL" check examples/63_self_codegen_bool_condition.yc >/tmp/ycc-ycpl-check-bool.out
@@ -470,6 +525,10 @@ grep -q 'function_body_resolved_return_reference_type_flow_slot' "$work_dir/proj
 grep -q 'function_body_resolved_statement_role_type_state' "$work_dir/project_body.ll"
 grep -q 'function_body_resolved_statement_type_flow_state' "$work_dir/project_body.ll"
 grep -q 'function_body_real_resolved_type_lowered_state' "$work_dir/project_body.ll"
+grep -q 'expr_lower_call_resolved_arity_value' "$work_dir/project_body.ll"
+grep -q 'function_expr_call_resolved_arity_value' "$work_dir/project_body.ll"
+grep -q 'function_expr_call_resolved_arity_state' "$work_dir/project_body.ll"
+grep -q 'function_expr_project_call_signature_type_state' "$work_dir/project_body.ll"
 grep -q 'expr_table_nodes' "$work_dir/merged.ll"
 grep -q 'expression_table_lowered' "$work_dir/merged.ll"
 grep -q 'expr_slot_count' "$work_dir/merged.ll"

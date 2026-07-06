@@ -33,6 +33,61 @@ require_project_file_count() {
 
 "$YCC_YCPL" parse compiler/ycpl >/tmp/ycpl-stage-parse.out
 "$YCC_YCPL" check compiler/ycpl >/tmp/ycpl-stage-check.out
+eightarg_stage_dir="$(mktemp -d "${TMPDIR:-/tmp}/ycpl-stage-eightarg-check.XXXXXX")"
+cat >"$eightarg_stage_dir/eightarg.yc" <<'YCPL'
+extern fn sum8(a i32, b i32, c i32, d i32, e i32, f i32, g i32, h i32) i32 as "sum8"
+
+fn main() i32 {
+    return sum8(1, 2, 3, 1, 2, 1, 2, 1)
+}
+YCPL
+"$YCC_YCPL" check "$eightarg_stage_dir/eightarg.yc" >/tmp/ycpl-stage-eightarg-check.out
+grep -q 'value=13' /tmp/ycpl-stage-eightarg-check.out
+cat >"$eightarg_stage_dir/helper8.yc" <<'YCPL'
+fn sum8(a i32, b i32, c i32, d i32, e i32, f i32, g i32, h i32) i32 {
+    return a + b + c + d + e + f + g + h
+}
+
+fn main() i32 {
+    return sum8(1, 2, 3, 1, 2, 1, 2, 1)
+}
+YCPL
+"$YCC_YCPL" check "$eightarg_stage_dir/helper8.yc" >/tmp/ycpl-stage-helper8-check.out
+grep -q 'value=13' /tmp/ycpl-stage-helper8-check.out
+cat >"$eightarg_stage_dir/manyhelpers.yc" <<'YCPL'
+fn h0() i32 { return 0 }
+fn h1() i32 { return 1 }
+fn h2() i32 { return 2 }
+fn h3() i32 { return 3 }
+fn h4() i32 { return 4 }
+fn h5() i32 { return 5 }
+fn h6() i32 { return 6 }
+fn h7() i32 { return 7 }
+fn h8() i32 { return 13 }
+
+fn main() i32 {
+    return h8()
+}
+YCPL
+"$YCC_YCPL" check "$eightarg_stage_dir/manyhelpers.yc" >/tmp/ycpl-stage-manyhelpers-check.out
+grep -q 'value=13' /tmp/ycpl-stage-manyhelpers-check.out
+cat >"$eightarg_stage_dir/manylocals.yc" <<'YCPL'
+fn main() i32 {
+    a0 := 0
+    a1 := 1
+    a2 := 2
+    a3 := 3
+    a4 := 4
+    a5 := 5
+    a6 := 6
+    a7 := 7
+    items := [4, 2, 7]
+    items[1] = items[0] + items[2]
+    return items[1] + 2
+}
+YCPL
+"$YCC_YCPL" check "$eightarg_stage_dir/manylocals.yc" >/tmp/ycpl-stage-manylocals-check.out
+grep -q 'value=13' /tmp/ycpl-stage-manylocals-check.out
 traversal_dir="$(mktemp -d "${TMPDIR:-/tmp}/ycpl-stage-traversal.XXXXXX")"
 cp -R compiler/ycpl "$traversal_dir/ycpl"
 mkdir -p "$traversal_dir/ycpl/src/generated/deep"
@@ -653,6 +708,10 @@ grep -q 'function_body_resolved_return_reference_type_flow_slot' "$strict_ir_dir
 grep -q 'function_body_resolved_statement_role_type_state' "$strict_ir_dir/project_body.ll"
 grep -q 'function_body_resolved_statement_type_flow_state' "$strict_ir_dir/project_body.ll"
 grep -q 'function_body_real_resolved_type_lowered_state' "$strict_ir_dir/project_body.ll"
+grep -q 'expr_lower_call_resolved_arity_value' "$strict_ir_dir/project_body.ll"
+grep -q 'function_expr_call_resolved_arity_value' "$strict_ir_dir/project_body.ll"
+grep -q 'function_expr_call_resolved_arity_state' "$strict_ir_dir/project_body.ll"
+grep -q 'function_expr_project_call_signature_type_state' "$strict_ir_dir/project_body.ll"
 grep -q 'function_body_statement_expr_typed_environment' "$strict_ir_dir/project_body.ll"
 grep -q 'function_body_expr_typed_with_statement_environment' "$strict_ir_dir/project_body.ll"
 grep -q 'function_body_statement_expr_owner_state' "$strict_ir_dir/project_body.ll"
@@ -1431,6 +1490,14 @@ fi
 
 "$STAGE2" parse compiler/ycpl >/tmp/ycpl-stage2-parse.out
 "$STAGE2" check compiler/ycpl >/tmp/ycpl-stage2-check.out
+"$STAGE2" check "$eightarg_stage_dir/eightarg.yc" >/tmp/ycpl-stage2-eightarg-check.out
+grep -q 'value=13' /tmp/ycpl-stage2-eightarg-check.out
+"$STAGE2" check "$eightarg_stage_dir/helper8.yc" >/tmp/ycpl-stage2-helper8-check.out
+grep -q 'value=13' /tmp/ycpl-stage2-helper8-check.out
+"$STAGE2" check "$eightarg_stage_dir/manyhelpers.yc" >/tmp/ycpl-stage2-manyhelpers-check.out
+grep -q 'value=13' /tmp/ycpl-stage2-manyhelpers-check.out
+"$STAGE2" check "$eightarg_stage_dir/manylocals.yc" >/tmp/ycpl-stage2-manylocals-check.out
+grep -q 'value=13' /tmp/ycpl-stage2-manylocals-check.out
 require_project_file_count /tmp/ycpl-stage2-parse.out 23 "stage2 parse"
 require_project_file_count /tmp/ycpl-stage2-check.out 23 "stage2 check"
 grep -q 'fn_digest=' /tmp/ycpl-stage2-parse.out
