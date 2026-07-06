@@ -1170,6 +1170,17 @@ grep -q 'define i32 @h8' "$self_manyhelpers_dir/merged.ll"
 grep -q 'call i32 @h8' "$self_manyhelpers_dir/merged.ll"
 grep -Eq 'ret i32 %calltmp[0-9]*' "$self_manyhelpers_dir/merged.ll"
 
+self_eightarg_dir="$(mktemp -d "${TMPDIR:-/tmp}/ycpl-self-eightarg.XXXXXX")"
+"$YCC_YCPL" build-ir-self "$eightarg_dir/eightarg.yc" -o "$self_eightarg_dir" >/dev/null
+grep -q 'declare i32 @sum8(i32, i32, i32, i32, i32, i32, i32, i32)' "$self_eightarg_dir/merged.ll"
+grep -q 'call i32 @sum8(i32 1, i32 2, i32 3, i32 1, i32 2, i32 1, i32 2, i32 1)' "$self_eightarg_dir/merged.ll"
+
+self_helper8_dir="$(mktemp -d "${TMPDIR:-/tmp}/ycpl-self-helper8.XXXXXX")"
+"$YCC_YCPL" build-ir-self "$eightarg_dir/helper8.yc" -o "$self_helper8_dir" >/dev/null
+grep -q 'define i32 @sum8(i32' "$self_helper8_dir/merged.ll"
+grep -q 'call i32 @sum8(i32 1, i32 2, i32 3, i32 1, i32 2, i32 1, i32 2, i32 1)' "$self_helper8_dir/merged.ll"
+grep -Eq 'ret i32 %addtmp[0-9]*' "$self_helper8_dir/merged.ll"
+
 self_twoarg_dir="$(mktemp -d "${TMPDIR:-/tmp}/ycpl-self-twoarg.XXXXXX")"
 "$YCC_YCPL" build-ir-self examples/61_self_codegen_two_arg_call.yc -o "$self_twoarg_dir" >/dev/null
 grep -q 'define i32 @add_pair(i32' "$self_twoarg_dir/merged.ll"
@@ -1277,10 +1288,10 @@ grep -q 'ret i32 13' "$self_llvm_builder_memory_dir/merged.ll"
 
 self_llvm_call2_icmp_dir="$(mktemp -d "${TMPDIR:-/tmp}/ycpl-self-llvm-call2-icmp.XXXXXX")"
 "$YCC_YCPL" build-ir-self examples/72_self_codegen_llvm_call2_icmp_call.yc -o "$self_llvm_call2_icmp_dir" >/dev/null
-grep -q 'declare ptr @LLVMBuildICmp(...)' "$self_llvm_call2_icmp_dir/merged.ll"
-grep -q 'declare ptr @LLVMBuildCall2(...)' "$self_llvm_call2_icmp_dir/merged.ll"
-grep -q 'call ptr (...) @LLVMBuildICmp(ptr' "$self_llvm_call2_icmp_dir/merged.ll"
-grep -q 'call ptr (...) @LLVMBuildCall2(ptr' "$self_llvm_call2_icmp_dir/merged.ll"
+grep -q 'declare ptr @LLVMBuildICmp(ptr, i32, ptr, ptr, ptr)' "$self_llvm_call2_icmp_dir/merged.ll"
+grep -q 'declare ptr @LLVMBuildCall2(ptr, ptr, ptr, ptr, i32, ptr)' "$self_llvm_call2_icmp_dir/merged.ll"
+grep -q 'call ptr @LLVMBuildICmp(ptr' "$self_llvm_call2_icmp_dir/merged.ll"
+grep -q 'call ptr @LLVMBuildCall2(ptr' "$self_llvm_call2_icmp_dir/merged.ll"
 grep -q 'i32 32' "$self_llvm_call2_icmp_dir/merged.ll"
 grep -q 'ptr null' "$self_llvm_call2_icmp_dir/merged.ll"
 grep -q '@strlit' "$self_llvm_call2_icmp_dir/merged.ll"
