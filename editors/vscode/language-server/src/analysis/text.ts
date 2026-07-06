@@ -1,4 +1,4 @@
-import { type Position, Range } from "vscode-languageserver/node.js";
+import { type Position, Range } from "vscode-languageserver/node";
 import type { WordAtPosition } from "./model.js";
 
 /** Returns UTF-16 line start offsets for a document. */
