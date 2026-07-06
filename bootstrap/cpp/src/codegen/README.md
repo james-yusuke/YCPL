@@ -15,12 +15,12 @@ arrays/           array header layout, checked element access, literals, append,
 assignment/       assignment and compound assignment
 branches/         if/else branch lowering
 expressions/      unary/binary expression lowering
-formatting/       print/format intrinsics
+formatting/       print/println/printf/sprintf intrinsics
 functions/        function signatures and function body lowering
 literals/         literals, identifiers, byte arrays
 loops/            for and for-in lowering
 postfix/          postfix expression lowering
-runtime/          std intrinsics and lazy C function declaration
+runtime/          std mem/str/math intrinsics, casts, len/new, lazy C declarations
 structures/       struct types, literals, member access
 types/            type-name shape helpers shared by codegen domains
 variables/        variable declaration and type name lowering
@@ -29,11 +29,13 @@ variables/        variable declaration and type name lowering
 File names should describe the lowering role (`if_stmt.h`, `array_literal.h`,
 `index_value.h`, `index_address.h`, `type_resolver.h`, `c_symbols.h`) rather
 than mirror token names or grammar keywords. Shared runtime mechanics should
-live in named helpers: `runtime/value_casts.h` owns LLVM value coercions,
+live in named helpers: `formatting/print.h` owns `fmt.print`, `runtime/value_casts.h` owns LLVM value coercions,
 `arrays/access.h` owns `YCPLArrayHeader` pointer/field/bounds-check operations,
 `arrays/index_value.h` and `arrays/index_address.h` split expression reads from
 assignable-address lowering, `arrays/std_intrinsics.h` owns `std/array` calls, and
-`types/type_shape.h` owns lightweight type-name suffix parsing. This keeps the C++
+`runtime/memory_intrinsics.h`, `runtime/string_intrinsics.h`, and
+`runtime/math_intrinsics.h` own their matching `std` domains. `types/type_shape.h`
+owns lightweight type-name suffix parsing. This keeps the C++
 bootstrap easy to compare with the YCPL self-host modules as they gain
 equivalent AST lowering.
 
