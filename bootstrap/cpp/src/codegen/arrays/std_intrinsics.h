@@ -115,13 +115,9 @@ Value *CodeGen::codegen_array_intrinsic_call(const std::string &name, const ast:
             if (std::string *typeHint = lookup_local_type(id->name))
             {
                 TypeShape parsed = parse_type_shape(*typeHint);
-                if (parsed.array_rank > 0)
+                if (parsed.is_array())
                 {
-                    std::string elemTypeName = parsed.base;
-                    for (int i = 1; i < parsed.array_rank; ++i)
-                        elemTypeName += "[]";
-                    for (int i = 0; i < parsed.pointer_depth; ++i)
-                        elemTypeName += "*";
+                    std::string elemTypeName = parsed.array_element_type_name();
 
                     Type *elemTy = parsed.array_rank > 1
                                        ? detail::getPtrTy(context)

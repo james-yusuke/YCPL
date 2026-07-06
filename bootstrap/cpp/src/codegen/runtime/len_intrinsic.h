@@ -27,19 +27,19 @@ Value *CodeGen::codegen_len_call(const ast::CallExpr *ce)
 
     if (const auto id = dynamic_cast<const ast::Ident *>(ce->args[0].get()))
     {
-        if (*lookup_local_type(id->name) == std::string("string"))
+        if (const auto *localType = lookup_local_type(id->name))
         {
-            isStr = true;
+            isStr = parse_type_shape(*localType).is_plain_string();
         }
     }
     else if (const auto as = dynamic_cast<const ast::IndexExpr *>(ce->args[0].get()))
     {
         if (const auto id = dynamic_cast<const ast::Ident *>(as->collection.get()))
         {
-            TypeShape pt = parse_type_shape(*lookup_local_type(id->name));
-            if (pt.base == std::string("string"))
+            if (const auto *localType = lookup_local_type(id->name))
             {
-                isStr = true;
+                TypeShape pt = parse_type_shape(*localType);
+                isStr = pt.base == std::string("string");
             }
         }
     }
