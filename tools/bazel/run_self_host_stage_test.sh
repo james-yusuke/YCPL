@@ -133,6 +133,33 @@ fn traversal_flow_surface(items []i32) i32 {
     }
     return total
 }
+
+fn traversal_switch_surface(value i32) i32 {
+    switch value {
+        case 0 {
+            return 1
+        }
+        default {
+            return 2
+        }
+    }
+    return 3
+}
+YCPL
+cat >"$traversal_dir/ycpl/src/aaa_switch.yc" <<'YCPL'
+module compiler.ycpl.generated.switchsurface
+
+fn traversal_switch_surface(value i32) i32 {
+    switch value {
+        case 0 {
+            return 1
+        }
+        default {
+            return 2
+        }
+    }
+    return 3
+}
 YCPL
 "$YCC_YCPL" parse "$traversal_dir/ycpl" >/tmp/ycpl-stage-traversal-parse.out
 require_project_file_count /tmp/ycpl-stage-traversal-parse.out 24 "recursive traversal in $traversal_dir/ycpl"
@@ -142,6 +169,8 @@ grep -q 'node_lower_else_body' "$traversal_ir_dir/project_body.ll"
 grep -q 'node_lower_break_slot' "$traversal_ir_dir/project_body.ll"
 grep -q 'node_lower_continue_slot' "$traversal_ir_dir/project_body.ll"
 grep -q 'node_lower_for_in_check' "$traversal_ir_dir/project_body.ll"
+grep -q 'node_lower_switch_case' "$traversal_ir_dir/project_body.ll"
+grep -q 'switch i32' "$traversal_ir_dir/project_body.ll"
 require_project_file_count /tmp/ycpl-stage-parse.out 23 "stage parse"
 require_project_file_count /tmp/ycpl-stage-check.out 23 "stage check"
 grep -q 'fn_digest=' /tmp/ycpl-stage-parse.out
