@@ -10,6 +10,7 @@
 #include "../arrays/append_intrinsic.h"
 #include "../arrays/array_literal.h"
 #include "../arrays/index_value.h"
+#include "../arrays/std_intrinsics.h"
 #include "../assignment/assign.h"
 #include "../expressions/binary.h"
 #include "../expressions/unary.h"

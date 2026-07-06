@@ -24,14 +24,14 @@ Value *CodeGen::codegen_index(const ast::IndexExpr *ie)
     Value *colVal = codegen_expr(ie->collection.get());
     if (!colVal)
     {
-        errs() << "codegen_index: colVal == nullptr\n";
+        error("index: failed to lower collection expression");
         return nullptr;
     }
 
     Value *idxVal = codegen_expr(ie->index.get());
     if (!idxVal)
     {
-        errs() << "codegen_index: idxVal == nullptr\n";
+        error("index: failed to lower index expression");
         return nullptr;
     }
 
@@ -50,30 +50,14 @@ Value *CodeGen::codegen_index(const ast::IndexExpr *ie)
         if (pt.base == "string" && pt.array_rank == 0 && pt.pointer_depth == 0)
         {
             Value *v = lookup_local(id->name);
-
-            Value *strPtr = builder.CreateLoad(builder.getPtrTy(), v);
-
-            Value *charPtr = builder.CreateInBoundsGEP(
-                builder.getInt8Ty(),
-                strPtr,
-                {idxVal});
-
-            Value *ch = builder.CreateLoad(builder.getInt8Ty(), charPtr);
-
-            return builder.CreateZExt(ch, builder.getInt32Ty());
+            Value *strPtr = builder.CreateLoad(builder.getPtrTy(), v, "string.local.ptr");
+            return string_element_value(strPtr, idxVal, "string.index");
         }
 
         if (pt.base == "string_params" && pt.array_rank == 0 && pt.pointer_depth == 0)
         {
-            Type *i8Ty = llvm::Type::getInt8Ty(context);
-
             Value *v = lookup_local(id->name);
-            Value *charPtr = builder.CreateInBoundsGEP(
-                i8Ty,
-                v,
-                {idxVal});
-            Value *ch = builder.CreateLoad(i8Ty, charPtr);
-            return builder.CreateZExt(ch, builder.getInt32Ty());
+            return string_element_value(v, idxVal, "string.params.index");
         }
 
         if (pt.pointer_depth > 0 && pt.array_rank == 0)
@@ -85,16 +69,9 @@ Value *CodeGen::codegen_index(const ast::IndexExpr *ie)
                 return nullptr;
             }
 
-            if (!idxVal->getType()->isIntegerTy(64))
-            {
-                if (idxVal->getType()->isIntegerTy())
-                    idxVal = builder.CreateSExtOrTrunc(idxVal, detail::getI64Ty(context), "ptr_idx_i64");
-                else
-                {
-                    error("pointer index is not integer");
-                    return nullptr;
-                }
-            }
+            idxVal = coerce_index_to_i64(idxVal, "ptr_idx_i64");
+            if (!idxVal)
+                return nullptr;
 
             Value *elemPtr = builder.CreateInBoundsGEP(elemTy, colVal, {idxVal}, "ptr_index");
             Value *loaded = builder.CreateLoad(elemTy, elemPtr, "ptr_index_load");
@@ -111,16 +88,7 @@ Value *CodeGen::codegen_index(const ast::IndexExpr *ie)
         TypeShape pt = parse_type_shape(collectionType);
         if ((pt.base == "string" || pt.base == "string_params") && pt.array_rank == 0 && pt.pointer_depth == 0)
         {
-            if (!colVal->getType()->isPointerTy())
-            {
-                error("string index requires pointer string value");
-                return nullptr;
-            }
-
-            Type *i8Ty = llvm::Type::getInt8Ty(context);
-            Value *charPtr = builder.CreateInBoundsGEP(i8Ty, colVal, {idxVal}, "char_ptr_expr");
-            Value *ch = builder.CreateLoad(i8Ty, charPtr);
-            return builder.CreateZExt(ch, builder.getInt32Ty());
+            return string_element_value(colVal, idxVal, "string.expr.index");
         }
     }
 
@@ -133,21 +101,9 @@ Value *CodeGen::codegen_index(const ast::IndexExpr *ie)
     PointerType *i8PtrTy = detail::getPtrTy(context);
     Function *F = builder.GetInsertBlock()->getParent();
 
-    bool staticElemIsArrayStruct = false;
-    bool staticElemIsArrayPtr = false;
-
-    const ast::Expr *collExpr = ie->collection.get();
-    if (const ast::ArrayLiteral *al = dynamic_cast<const ast::ArrayLiteral *>(collExpr))
-    {
-        if (!al->elements.empty())
-        {
-            const ast::Expr *firstElem = al->elements[0].get();
-            if (dynamic_cast<const ast::ArrayLiteral *>(firstElem))
-                staticElemIsArrayStruct = true;
-            else if (dynamic_cast<const ast::IndexExpr *>(firstElem))
-                staticElemIsArrayPtr = true;
-        }
-    }
+    auto staticElementShape = infer_array_literal_element_shape(ie->collection.get());
+    bool staticElemIsArrayStruct = staticElementShape.first;
+    bool staticElemIsArrayPtr = staticElementShape.second;
 
     if (staticElemIsArrayStruct)
     {
