@@ -6,8 +6,8 @@ import {
 } from "vscode-languageserver/node.js";
 import {
   rangeContains,
-  type DefinitionResult,
   type SymbolReference,
+  type SymbolId,
   type YcplDocument,
   type YcplSymbol
 } from "./model.js";
@@ -15,22 +15,22 @@ import {
 /** Maintains the incremental symbol and reference index for open and scanned files. */
 export class WorkspaceIndex {
   private documents = new Map<string, YcplDocument>();
-  private symbolsByName = new Map<string, YcplSymbol[]>();
-  private referencesByName = new Map<string, SymbolReference[]>();
+  private symbolsById = new Map<SymbolId, YcplSymbol>();
+  private referencesBySymbolId = new Map<SymbolId, SymbolReference[]>();
 
   /** Adds or replaces a document in the workspace index. */
   update(document: YcplDocument): void {
     this.remove(document.uri);
     this.documents.set(document.uri, document);
     for (const symbol of document.symbols) {
-      const bucket = this.symbolsByName.get(symbol.name) ?? [];
-      bucket.push(symbol);
-      this.symbolsByName.set(symbol.name, bucket);
+      this.symbolsById.set(symbol.id, symbol);
     }
     for (const reference of document.references) {
-      const bucket = this.referencesByName.get(reference.name) ?? [];
-      bucket.push(reference);
-      this.referencesByName.set(reference.name, bucket);
+      if (reference.symbolId) {
+        const byId = this.referencesBySymbolId.get(reference.symbolId) ?? [];
+        byId.push(reference);
+        this.referencesBySymbolId.set(reference.symbolId, byId);
+      }
     }
   }
 
@@ -42,10 +42,13 @@ export class WorkspaceIndex {
     }
     this.documents.delete(uri);
     for (const symbol of document.symbols) {
-      this.symbolsByName.set(symbol.name, (this.symbolsByName.get(symbol.name) ?? []).filter((entry) => entry.uri !== uri));
+      this.symbolsById.delete(symbol.id);
+      this.referencesBySymbolId.set(symbol.id, (this.referencesBySymbolId.get(symbol.id) ?? []).filter((entry) => entry.uri !== uri));
     }
     for (const reference of document.references) {
-      this.referencesByName.set(reference.name, (this.referencesByName.get(reference.name) ?? []).filter((entry) => entry.uri !== uri));
+      if (reference.symbolId) {
+        this.referencesBySymbolId.set(reference.symbolId, (this.referencesBySymbolId.get(reference.symbolId) ?? []).filter((entry) => entry.uri !== uri));
+      }
     }
   }
 
@@ -70,41 +73,45 @@ export class WorkspaceIndex {
       .sort((left, right) => rangeSize(left.selectionRange) - rangeSize(right.selectionRange))[0];
   }
 
-  /** Finds a definition by name, preferring the current document. */
-  findDefinition(name: string, currentUri?: string): DefinitionResult | undefined {
-    const symbols = this.symbolsByName.get(name) ?? [];
-    const symbol = symbols.find((entry) => entry.uri === currentUri) ?? symbols[0];
-    if (!symbol) {
+  /** Finds a declaration whose selected identifier contains the position. */
+  declarationAt(uri: string, position: Position): YcplSymbol | undefined {
+    const document = this.documents.get(uri);
+    if (!document) {
       return undefined;
     }
-    return {
-      symbol,
-      location: Location.create(symbol.uri, symbol.selectionRange)
-    };
+    return document.symbols.find((symbol) => rangeContains(symbol.selectionRange, position));
   }
 
-  /** Finds all references for a symbol name, including its declaration. */
-  findReferences(name: string, includeDeclaration: boolean): Location[] {
-    const refs = (this.referencesByName.get(name) ?? []).map((reference) => Location.create(reference.uri, reference.range));
+  /** Finds the resolved reference at a position. */
+  referenceAt(uri: string, position: Position): SymbolReference | undefined {
+    const document = this.documents.get(uri);
+    if (!document) {
+      return undefined;
+    }
+    return document.references.find((reference) => rangeContains(reference.range, position));
+  }
+
+  /** Returns one symbol by stable ID. */
+  symbolById(id: SymbolId | undefined): YcplSymbol | undefined {
+    return id ? this.symbolsById.get(id) : undefined;
+  }
+
+  /** Finds all references for a resolved symbol ID, optionally including its declaration. */
+  findReferencesBySymbolId(symbolId: SymbolId, includeDeclaration: boolean): Location[] {
+    const refs = (this.referencesBySymbolId.get(symbolId) ?? []).map((reference) => Location.create(reference.uri, reference.range));
     if (!includeDeclaration) {
       return refs;
     }
-    const decls = (this.symbolsByName.get(name) ?? []).map((symbol) => Location.create(symbol.uri, symbol.selectionRange));
-    return [...decls, ...refs];
+    const symbol = this.symbolsById.get(symbolId);
+    return symbol ? [Location.create(symbol.uri, symbol.selectionRange), ...refs] : refs;
   }
 
   /** Returns all symbols matching a workspace-symbol query. */
   workspaceSymbols(query: string): SymbolInformation[] {
     const lower = query.trim().toLowerCase();
-    return [...this.symbolsByName.values()]
-      .flat()
+    return [...this.symbolsById.values()]
       .filter((symbol) => lower.length === 0 || symbol.name.toLowerCase().includes(lower))
       .map((symbol) => SymbolInformation.create(symbol.name, symbol.kind, symbol.selectionRange, symbol.uri, symbol.containerName));
-  }
-
-  /** Returns all symbols with a given name. */
-  symbolsNamed(name: string): YcplSymbol[] {
-    return this.symbolsByName.get(name) ?? [];
   }
 }
 

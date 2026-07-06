@@ -174,6 +174,10 @@ stage-2 self-host gate
 ├─ regular ycc-ycpl build/build-ir paths now forbid bootstrap fallback under YCPL_NO_BOOTSTRAP=1 and fail unsupported inputs with an explicit diagnostic
 ├─ project_body.ll no longer relies on fixed expression probes in the compact path; it lowers statement-owned expressions and remaining tail expressions from the real scan.expr_* sequence
 ├─ statement-owned expressions now combine local/assignment/call/return semantic roles with parser/resolver-derived type kinds and lower that resolved role/type flow into IR
+├─ project-wide function signature arity now survives as resolved call-expression arity and is folded into call value/type lowering
+├─ the checker now handles YCPL helper function definitions, extern signatures, and call argument type checks up to eight arguments, with stage1/stage2 self-host gates covering eight-argument calls
+├─ checker helper-function registration/lookup slots now extend to 16, with stage1/stage2 self-host gates covering a call to the ninth helper
+├─ checker local-variable and i32[3] array backing slots now extend to 16, with stage1/stage2 self-host gates covering array load/store through the ninth local
 ├─ project_body.ll now raises the real AST lowering caps to 32 body nodes, 64 expressions, 32 statement expressions, and 32 statement owners, with IR gates pinning those values
 ├─ statement-owned expression lowering also respects the total expression cap, and CI fails if lowered node/expression counts exceed the configured caps
 ├─ project_body.ll now emits named IR markers for lowered and still-unlowered real node/expression counts, so CI can detect remaining summary/smoke coverage
