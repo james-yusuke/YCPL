@@ -12,6 +12,7 @@
 #include <memory>
 #include <string>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 namespace codegen
@@ -94,6 +95,10 @@ namespace codegen
         llvm::Value *array_header_field_ptr(llvm::Value *arrayHeaderPtr, detail::RuntimeArrayField field, const std::string &label);
         llvm::Value *checked_array_element_data_ptr_from_values(llvm::Value *collectionValue, llvm::Value *indexValue, llvm::Value **elementSizeOut, const std::string &label);
         llvm::Value *checked_array_element_data_ptr(const ast::Expr *arrayExpr, const ast::Expr *indexExpr, llvm::Value **elementSizeOut);
+        llvm::Value *coerce_index_to_i64(llvm::Value *indexValue, const std::string &label);
+        llvm::Value *string_element_addr(llvm::Value *stringValue, llvm::Value *indexValue, const std::string &label);
+        llvm::Value *string_element_value(llvm::Value *stringValue, llvm::Value *indexValue, const std::string &label);
+        std::pair<bool, bool> infer_array_literal_element_shape(const ast::Expr *collectionExpr);
 
         llvm::Value *create_entry_alloca(llvm::Function *func, llvm::Type *type, const std::string &name);
 
@@ -106,6 +111,7 @@ namespace codegen
         llvm::Value *codegen_binary(const ast::BinaryExpr *be);
         llvm::Value *codegen_call(const ast::CallExpr *ce);
         llvm::Value *codegen_std_intrinsic_call(const std::string &name, const ast::CallExpr *ce);
+        llvm::Value *codegen_array_intrinsic_call(const std::string &name, const ast::CallExpr *ce);
         llvm::Value *codegen_array(const ast::ArrayLiteral *alit);
         llvm::Value *codegen_index(const ast::IndexExpr *ie);
         llvm::Value *codegen_postfix(const ast::PostfixExpr *pe);

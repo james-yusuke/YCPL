@@ -11,7 +11,7 @@ pipeline.cpp      program-level generation order and LLVM verification
 codegen.cpp       includes header-defined subsystem implementations once
 internal/         private bootstrap-only include glue
 
-arrays/           array header layout, checked element access, literals, append
+arrays/           array header layout, checked element access, literals, append, std/array intrinsics
 assignment/       assignment and compound assignment
 branches/         if/else branch lowering
 expressions/      unary/binary expression lowering
@@ -32,7 +32,7 @@ than mirror token names or grammar keywords. Shared runtime mechanics should
 live in named helpers: `runtime/value_casts.h` owns LLVM value coercions,
 `arrays/access.h` owns `YCPLArrayHeader` pointer/field/bounds-check operations,
 `arrays/index_value.h` and `arrays/index_address.h` split expression reads from
-assignable-address lowering, and
+assignable-address lowering, `arrays/std_intrinsics.h` owns `std/array` calls, and
 `types/type_shape.h` owns lightweight type-name suffix parsing. This keeps the C++
 bootstrap easy to compare with the YCPL self-host modules as they gain
 equivalent AST lowering.
