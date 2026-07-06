@@ -81,7 +81,7 @@ stage-2 self-host gate
 ├─ project parse/check は body node transition digest と local/assign/call/return edge count を出す
 ├─ body if/for node は std/llvm 経由で conditional branch と loop block に lower
 ├─ body else/break/continue/for-in node は body arena に記録し、std/llvm 経由の control-surface path に lower
-├─ tiny single-file codegen は local declaration、assignment、複数の 0/1/2 引数 i32 helper call、arithmetic、return を LLVM C API wrapper で lower
+├─ tiny single-file codegen は local declaration、assignment、0〜8 引数の helper/extern call、arithmetic、return を LLVM C API wrapper で lower
 ├─ tiny single-file codegen は i32 function signature を先に宣言し、main から後続 helper を呼べる
 ├─ YCPL_NO_BOOTSTRAP=1 の project build-ir は valid LLVM IR を生成
 ├─ project build-ir は std/llvm の alloca/store/load/call/ret wrapper で local_return.ll を生成
@@ -175,10 +175,10 @@ stage-2 self-host gate
 ├─ project_body.ll は固定 expression probe を使わず、statement-owned expression と remaining tail expression を実 scan.expr_* sequence から lower する
 ├─ statement-owned expression は local/assignment/call/return の semantic role と parser/resolver 由来の type kind を組み合わせ、resolved role/type flow として IR に lower する
 ├─ project-wide function signature table の arity を call expression の resolved arity として保持し、call value/type lowering に合成する
-├─ checker は YCPL helper function 定義、extern signature、call argument type check を 8 引数まで扱い、stage1/stage2 self-host gate で 8 引数 call を検証する
+├─ checker と tinyir は YCPL helper function 定義、extern signature、固定 LLVM function type、call argument lowering を 8 引数まで扱い、stage1/stage2 self-host gate で 8 引数 call を検証する
 ├─ checker の helper function 登録/lookup slot は 16 まで広げ、stage1/stage2 self-host gate で 9 番目の helper 呼び出しを検証する
 ├─ checker の local variable と i32[3] array backing slot は 16 まで広げ、stage1/stage2 self-host gate で 9 番目 local の array load/store を検証する
-├─ tinyir self-codegen の helper/local slot も 16 まで広げ、9 番目 helper と 9 番目 local array/index/assignment が build-ir-self で LLVM IR へ下りることを gate する
+├─ tinyir self-codegen の helper/local slot も 16 まで広げ、9 番目 helper、8 引数 helper/extern call、9 番目 local array/index/assignment が build-ir-self で LLVM IR へ下りることを gate する
 ├─ project_body.ll の実 AST lowering cap は body node 64、expression 128、statement expression 64、statement owner 64 まで広げ、IR gate で値を固定している
 ├─ statement-owned expression lowering は total expression cap も守り、CI は lowered node/expression count が cap を越えたら失敗する
 ├─ project_body.ll は実 lowering 済み node/expression count と未 lowering node/expression count を名前付き IR marker として出し、summary/smoke の取り残しを CI で検出できる

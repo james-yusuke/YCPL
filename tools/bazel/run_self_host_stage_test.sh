@@ -1135,7 +1135,7 @@ grep -q 'call ptr @LLVMBuildLoad2' "$strict_llvm_builder_memory_ir_dir/merged.ll
 
 strict_llvm_call2_icmp_ir_dir="$(mktemp -d "${TMPDIR:-/tmp}/ycpl-strict-llvm-call2-icmp-ir.XXXXXX")"
 "$strict_native_dir/merged" build-ir examples/72_self_codegen_llvm_call2_icmp_call.yc -o "$strict_llvm_call2_icmp_ir_dir" >/tmp/ycpl-strict-llvm-call2-icmp-ir.out
-grep -q 'declare ptr @LLVMBuildCall2(...)' "$strict_llvm_call2_icmp_ir_dir/merged.ll"
+grep -q 'declare ptr @LLVMBuildCall2(ptr, ptr, ptr, ptr, i32, ptr)' "$strict_llvm_call2_icmp_ir_dir/merged.ll"
 grep -q 'call ptr @LLVMBuildICmp' "$strict_llvm_call2_icmp_ir_dir/merged.ll"
 
 renamed_tiny_dir="$(mktemp -d "${TMPDIR:-/tmp}/ycpl-renamed-tiny.XXXXXX")"
@@ -1330,7 +1330,7 @@ if [ -n "$LLC_BIN" ]; then
   grep -q 'call ptr @LLVMBuildLoad2' "$strict_stage3_llvm_builder_memory_ir_dir/merged.ll"
   strict_stage3_llvm_call2_icmp_ir_dir="$(mktemp -d "${TMPDIR:-/tmp}/ycpl-strict-stage3-llvm-call2-icmp-ir.XXXXXX")"
   "$strict_stage3_native_dir/merged" build-ir examples/72_self_codegen_llvm_call2_icmp_call.yc -o "$strict_stage3_llvm_call2_icmp_ir_dir" >/tmp/ycpl-strict-stage3-llvm-call2-icmp-ir.out
-  grep -q 'declare ptr @LLVMBuildCall2(...)' "$strict_stage3_llvm_call2_icmp_ir_dir/merged.ll"
+  grep -q 'declare ptr @LLVMBuildCall2(ptr, ptr, ptr, ptr, i32, ptr)' "$strict_stage3_llvm_call2_icmp_ir_dir/merged.ll"
   grep -q 'call ptr @LLVMBuildICmp' "$strict_stage3_llvm_call2_icmp_ir_dir/merged.ll"
   strict_stage4_native_dir="$(mktemp -d "${TMPDIR:-/tmp}/ycpl-strict-stage4-native.XXXXXX")"
   LLVM_BINDIR="$(dirname "$LLC_BIN")" "$strict_stage3_native_dir/merged" build compiler/ycpl -o "$strict_stage4_native_dir" >/tmp/ycpl-strict-stage4-native.out

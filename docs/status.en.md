@@ -81,7 +81,7 @@ stage-2 self-host gate
 ├─ project parse/check emits body node transition digest and local/assign/call/return edge counts
 ├─ body if/for nodes lower through std/llvm into conditional branch and loop blocks
 ├─ body else/break/continue/for-in nodes are recorded in the body arena and lower through std/llvm control-surface paths
-├─ tiny single-file codegen lowers local declarations, assignments, multiple zero/one/two-argument i32 helper calls, arithmetic, and returns through LLVM C API wrappers
+├─ tiny single-file codegen lowers local declarations, assignments, zero-through-eight-argument helper/extern calls, arithmetic, and returns through LLVM C API wrappers
 ├─ tiny single-file codegen predeclares i32 function signatures so main can call helpers defined later in the file
 ├─ YCPL_NO_BOOTSTRAP=1 project build-ir emits valid LLVM IR
 ├─ project build-ir writes local_return.ll via std/llvm alloca/store/load/call/ret wrappers
@@ -175,10 +175,10 @@ stage-2 self-host gate
 ├─ project_body.ll no longer relies on fixed expression probes in the compact path; it lowers statement-owned expressions and remaining tail expressions from the real scan.expr_* sequence
 ├─ statement-owned expressions now combine local/assignment/call/return semantic roles with parser/resolver-derived type kinds and lower that resolved role/type flow into IR
 ├─ project-wide function signature arity now survives as resolved call-expression arity and is folded into call value/type lowering
-├─ the checker now handles YCPL helper function definitions, extern signatures, and call argument type checks up to eight arguments, with stage1/stage2 self-host gates covering eight-argument calls
+├─ checker and tinyir now handle YCPL helper function definitions, extern signatures, fixed LLVM function types, and call argument lowering up to eight arguments, with stage1/stage2 self-host gates covering eight-argument calls
 ├─ checker helper-function registration/lookup slots now extend to 16, with stage1/stage2 self-host gates covering a call to the ninth helper
 ├─ checker local-variable and i32[3] array backing slots now extend to 16, with stage1/stage2 self-host gates covering array load/store through the ninth local
-├─ tinyir self-codegen helper/local slots now extend to 16, and build-ir-self gates the ninth helper plus ninth-local array/index/assignment lowering into LLVM IR
+├─ tinyir self-codegen helper/local slots now extend to 16, and build-ir-self gates the ninth helper plus eight-argument helper/extern calls and ninth-local array/index/assignment lowering into LLVM IR
 ├─ project_body.ll now raises the real AST lowering caps to 64 body nodes, 128 expressions, 64 statement expressions, and 64 statement owners, with IR gates pinning those values
 ├─ statement-owned expression lowering also respects the total expression cap, and CI fails if lowered node/expression counts exceed the configured caps
 ├─ project_body.ll now emits named IR markers for lowered and still-unlowered real node/expression counts, so CI can detect remaining summary/smoke coverage
