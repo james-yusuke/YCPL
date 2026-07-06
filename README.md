@@ -142,7 +142,7 @@ Transition
    ├─ written in YCPL
    ├─ lexes and parses YCPL sources
    ├─ type-checks a tiny self-codegen subset
-   ├─ emits LLVM IR for i32 main, locals, assignments, multiple zero/one/two-argument i32 helper calls, arithmetic, and returns
+   ├─ emits LLVM IR for i32 main, locals, assignments, zero-through-eight-argument helper/extern calls, arithmetic, and returns
    ├─ predeclares function signatures so main can call helpers defined later in the file
    ├─ builds that subset to native binary without bootstrap ycc
    ├─ parses/checks compiler/ycpl by traversing src/**/*.yc
@@ -232,7 +232,7 @@ YCPL_NO_BOOTSTRAP=1 bazel-bin/ycc-ycpl build compiler/ycpl -o /tmp/ycpl-strict-n
 stage-2 gate
 ├─ compiler/ycpl project parse/check is handled by ycc-ycpl
 ├─ nested source folders such as src/ast and src/codegen are discovered through src/**/*.yc traversal
-├─ tiny arithmetic/call/control-flow/else-helper/one-argument i32 helper-call/multi-helper chain/two-argument helper-call/forward helper-call builds can run with YCPL_NO_BOOTSTRAP=1
+├─ tiny arithmetic/call/control-flow/else-helper/helper-call/extern-call builds, including eight-argument calls, can run with YCPL_NO_BOOTSTRAP=1
 ├─ project build-ir runs without bootstrap fallback
 ├─ project build-ir emits local_return.ll and project_body.ll through LLVM C API wrappers
 ├─ merged.ll includes the LLVM-wrapper-generated node probe for local, assignment, call, return, transitions, and if/for control flow

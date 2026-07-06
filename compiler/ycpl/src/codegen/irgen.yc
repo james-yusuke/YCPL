@@ -2093,7 +2093,7 @@ fn tiny_llvm_builder_memory13_ir_text() string {
 }
 
 fn tiny_llvm_call2_icmp13_ir_text() string {
-    return "; YCPL tiny LLVM call2/icmp stage IR\n@.tiny.cmp = private unnamed_addr constant [4 x i8] c\"cmp\\00\"\n@.tiny.call = private unnamed_addr constant [5 x i8] c\"call\\00\"\ndeclare ptr @LLVMBuildICmp(ptr, i32, ptr, ptr, ptr)\ndeclare ptr @LLVMBuildCall2(...)\n\ndefine i32 @main() {\nentry:\n  %cmpname = getelementptr inbounds [4 x i8], ptr @.tiny.cmp, i32 0, i32 0\n  %callname = getelementptr inbounds [5 x i8], ptr @.tiny.call, i32 0, i32 0\n  %cmp = call ptr @LLVMBuildICmp(ptr null, i32 32, ptr null, ptr null, ptr %cmpname)\n  %calltmp = call ptr (...) @LLVMBuildCall2(ptr null, ptr null, ptr null, ptr null, i32 0, ptr %callname)\n  ret i32 13\n}\n"
+    return "; YCPL tiny LLVM call2/icmp stage IR\n@.tiny.cmp = private unnamed_addr constant [4 x i8] c\"cmp\\00\"\n@.tiny.call = private unnamed_addr constant [5 x i8] c\"call\\00\"\ndeclare ptr @LLVMBuildICmp(ptr, i32, ptr, ptr, ptr)\ndeclare ptr @LLVMBuildCall2(ptr, ptr, ptr, ptr, i32, ptr)\n\ndefine i32 @main() {\nentry:\n  %cmpname = getelementptr inbounds [4 x i8], ptr @.tiny.cmp, i32 0, i32 0\n  %callname = getelementptr inbounds [5 x i8], ptr @.tiny.call, i32 0, i32 0\n  %cmp = call ptr @LLVMBuildICmp(ptr null, i32 32, ptr null, ptr null, ptr %cmpname)\n  %calltmp = call ptr @LLVMBuildCall2(ptr null, ptr null, ptr null, ptr null, i32 0, ptr %callname)\n  ret i32 13\n}\n"
 }
 
 fn project_parse_line(project ProjectResult) string {
