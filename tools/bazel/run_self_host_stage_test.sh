@@ -997,6 +997,7 @@ grep -q '@.stage3.tinyexternmalloc.ir' "$strict_stage3_ir_dir/merged.ll"
 grep -q '@.stage3.tinyexternstring.ir' "$strict_stage3_ir_dir/merged.ll"
 grep -q '@.stage3.tinystring.ir' "$strict_stage3_ir_dir/merged.ll"
 grep -q '@.stage3.tinyarray.ir' "$strict_stage3_ir_dir/merged.ll"
+grep -q '@.stage3.tinyenumswitch.ir' "$strict_stage3_ir_dir/merged.ll"
 grep -q '@.stage3.tinyboolhelper.ir' "$strict_stage3_ir_dir/merged.ll"
 grep -q '@.stage3.tinybool.ir' "$strict_stage3_ir_dir/merged.ll"
 grep -q '@.stage3.tinyelse.ir' "$strict_stage3_ir_dir/merged.ll"
@@ -1153,6 +1154,39 @@ grep -q 'YCPL tiny array index stage IR' "$strict_array_ir_dir/merged.ll"
 grep -q 'alloca \[3 x i32\]' "$strict_array_ir_dir/merged.ll"
 grep -q 'getelementptr \[3 x i32\]' "$strict_array_ir_dir/merged.ll"
 grep -q 'ret i32 %result' "$strict_array_ir_dir/merged.ll"
+
+enum_alias_switch_dir="$(mktemp -d "${TMPDIR:-/tmp}/ycpl-enum-alias-switch.XXXXXX")"
+enum_alias_switch_file="$enum_alias_switch_dir/enum_alias_switch.yc"
+cat > "$enum_alias_switch_file" <<'YCPL'
+enum Color {
+    Red = 2,
+    Green,
+    Blue = 8,
+}
+
+type Score = i32
+
+fn main() i32 {
+    choice: Score = Green
+    switch choice {
+        case Color.Red {
+            return 7
+        }
+        case Green {
+            return 13
+        }
+        default {
+            return 99
+        }
+    }
+    return 0
+}
+YCPL
+strict_enum_alias_switch_ir_dir="$(mktemp -d "${TMPDIR:-/tmp}/ycpl-strict-enum-alias-switch-ir.XXXXXX")"
+"$strict_native_dir/merged" build-ir "$enum_alias_switch_file" -o "$strict_enum_alias_switch_ir_dir" >/tmp/ycpl-strict-enum-alias-switch-ir.out
+grep -q 'YCPL tiny enum alias switch stage IR' "$strict_enum_alias_switch_ir_dir/merged.ll"
+grep -q 'switch i32' "$strict_enum_alias_switch_ir_dir/merged.ll"
+grep -q 'ret i32 13' "$strict_enum_alias_switch_ir_dir/merged.ll"
 
 strict_extern_string_ir_dir="$(mktemp -d "${TMPDIR:-/tmp}/ycpl-strict-extern-string-ir.XXXXXX")"
 "$strict_native_dir/merged" build-ir examples/66_self_codegen_extern_string_call.yc -o "$strict_extern_string_ir_dir" >/tmp/ycpl-strict-extern-string-ir.out
@@ -1355,6 +1389,11 @@ if [ -n "$LLC_BIN" ]; then
   grep -q 'alloca \[3 x i32\]' "$strict_stage3_array_ir_dir/merged.ll"
   grep -q 'getelementptr \[3 x i32\]' "$strict_stage3_array_ir_dir/merged.ll"
   grep -q 'ret i32 %result' "$strict_stage3_array_ir_dir/merged.ll"
+  strict_stage3_enum_alias_switch_ir_dir="$(mktemp -d "${TMPDIR:-/tmp}/ycpl-strict-stage3-enum-alias-switch-ir.XXXXXX")"
+  "$strict_stage3_native_dir/merged" build-ir "$enum_alias_switch_file" -o "$strict_stage3_enum_alias_switch_ir_dir" >/tmp/ycpl-strict-stage3-enum-alias-switch-ir.out
+  grep -q 'YCPL tiny enum alias switch stage IR' "$strict_stage3_enum_alias_switch_ir_dir/merged.ll"
+  grep -q 'switch i32' "$strict_stage3_enum_alias_switch_ir_dir/merged.ll"
+  grep -q 'ret i32 13' "$strict_stage3_enum_alias_switch_ir_dir/merged.ll"
   strict_stage3_extern_string_ir_dir="$(mktemp -d "${TMPDIR:-/tmp}/ycpl-strict-stage3-extern-string-ir.XXXXXX")"
   "$strict_stage3_native_dir/merged" build-ir examples/66_self_codegen_extern_string_call.yc -o "$strict_stage3_extern_string_ir_dir" >/tmp/ycpl-strict-stage3-extern-string-ir.out
   grep -q 'declare i32 @strcmp' "$strict_stage3_extern_string_ir_dir/merged.ll"
@@ -1500,6 +1539,16 @@ if [ -n "$LLC_BIN" ]; then
   set -e
   if [ "$strict_stage3_forward_status" -ne 13 ]; then
     printf 'Expected strict stage3 generated compiler forward-call native to exit 13, got %d\n' "$strict_stage3_forward_status" >&2
+    exit 1
+  fi
+  strict_stage3_enum_alias_switch_native_dir="$(mktemp -d "${TMPDIR:-/tmp}/ycpl-strict-stage3-enum-alias-switch-native.XXXXXX")"
+  LLVM_BINDIR="$(dirname "$LLC_BIN")" "$strict_stage3_native_dir/merged" build "$enum_alias_switch_file" -o "$strict_stage3_enum_alias_switch_native_dir" >/tmp/ycpl-strict-stage3-enum-alias-switch-native.out
+  set +e
+  "$strict_stage3_enum_alias_switch_native_dir/merged" >/dev/null 2>&1
+  strict_stage3_enum_alias_switch_status=$?
+  set -e
+  if [ "$strict_stage3_enum_alias_switch_status" -ne 13 ]; then
+    printf 'Expected strict stage3 generated compiler enum/alias/switch native to exit 13, got %d\n' "$strict_stage3_enum_alias_switch_status" >&2
     exit 1
   fi
 
