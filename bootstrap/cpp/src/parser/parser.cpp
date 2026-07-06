@@ -499,12 +499,11 @@ namespace path
             }
         }
 
-        if (check(TokenType::KW_CONST) || check(TokenType::KW_MUT))
+        if (check(TokenType::KW_CONST))
         {
-            bool is_const = check(TokenType::KW_CONST);
             advance();
 
-            Token id = expect(TokenType::IDENT, is_const ? "expected identifier after 'const'" : "expected identifier after 'mut'");
+            Token id = expect(TokenType::IDENT, "expected identifier after 'const'");
             std::unique_ptr<ast::Type> annotated_type = nullptr;
 
             if (check(TokenType::COLON))
@@ -521,12 +520,11 @@ namespace path
                 auto decl = annotated_type
                                 ? std::make_unique<VarDecl>(id.lexeme, std::move(annotated_type), std::move(rhs))
                                 : std::make_unique<VarDecl>(id.lexeme, std::move(rhs));
-                decl->is_const = is_const;
-                decl->is_mut = !is_const;
+                decl->is_const = true;
                 return decl;
             }
 
-            emit_error(cur, is_const ? "expected ':=' or '=' after const declaration" : "expected ':=' or '=' after mut declaration");
+            emit_error(cur, "expected ':=' or '=' after const declaration");
             return nullptr;
         }
 

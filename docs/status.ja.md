@@ -176,10 +176,11 @@ stage-2 self-host gate
 ├─ statement-owned expression は local/assignment/call/return の semantic role と parser/resolver 由来の type kind を組み合わせ、resolved role/type flow として IR に lower する
 ├─ project-wide function signature table の arity を call expression の resolved arity として保持し、call value/type lowering に合成する
 ├─ checker と tinyir は YCPL helper function 定義、extern signature、固定 LLVM function type、call argument lowering を 8 引数まで扱い、stage1/stage2 self-host gate で 8 引数 call を検証する
+├─ checker と tinyir は C-style `main(argc i32, argv *string) i32` を受け入れ、`build-ir-self` は argv pointer parameter を LLVM alloca/store/load IR に lower し、main-args fixture で検証する
 ├─ checker の helper function 登録/lookup slot は 16 まで広げ、stage1/stage2 self-host gate で 9 番目の helper 呼び出しを検証する
 ├─ checker の local variable と i32[3] array backing slot は 16 まで広げ、stage1/stage2 self-host gate で 9 番目 local の array load/store を検証する
 ├─ tinyir self-codegen の helper/local slot も 16 まで広げ、9 番目 helper、8 引数 helper/extern call、9 番目 local array/index/assignment が build-ir-self で LLVM IR へ下りることを gate する
-├─ project_body.ll の実 AST lowering cap は body node 64、expression 128、statement expression 64、statement owner 64 まで広げ、IR gate で値を固定している
+├─ project_body.ll の実 AST lowering cap は body node 128、expression 256、statement expression 128、statement owner 128 まで広げ、IR gate で値を固定している
 ├─ statement-owned expression lowering は total expression cap も守り、CI は lowered node/expression count が cap を越えたら失敗する
 ├─ project_body.ll は実 lowering 済み node/expression count と未 lowering node/expression count を名前付き IR marker として出し、summary/smoke の取り残しを CI で検出できる
 ├─ traversal project gate は i64 と []T/slice parameter を typed AST flow に載せ、i64/reference statement-expression marker を生成 IR で検証する
@@ -189,7 +190,7 @@ stage-2 self-host gate
 ## 予約済みだが未実装
 
 ```text
-enum interface match is go defer select switch or type importas
+enum switch type
 ```
 
 ```text

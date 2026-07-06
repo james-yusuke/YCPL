@@ -1285,11 +1285,11 @@ fn skip_to_block_end(p TinyIrParser) TinyIrParser {
 fn parse_type_name(p TinyIrParser, message string) TinyIrParser {
     if p.lx.kind == tok.star() {
         p = advance_sig(p)
-        if p.lx.kind == tok.kw_byte() {
+        if p.lx.kind == tok.kw_byte() || (p.lx.kind == tok.ident() && str.eq(p.lx.lexeme, "string")) {
             p.value_type = tiny_ptr_type_kind()
             return advance_sig(p)
         }
-        return unsupported_parser(p, "self codegen currently supports only *byte pointer types")
+        return unsupported_parser(p, "self codegen currently supports only *byte and *string pointer types")
     }
     if p.lx.kind != tok.ident() {
         return fail_parser(p, message)
@@ -1304,7 +1304,7 @@ fn parse_type_name(p TinyIrParser, message string) TinyIrParser {
     }
     p.value_type = tiny_type_from_name(p.lx.lexeme)
     if p.value_type == 0 {
-        return unsupported_parser(p, "self codegen currently supports i32, i64, bool, string, and *byte types")
+        return unsupported_parser(p, "self codegen currently supports i32, i64, bool, string, *byte, and *string types")
     }
     return advance_sig(p)
 }
@@ -1584,9 +1584,6 @@ fn scan_function_decl(p TinyIrParser) TinyIrParser {
     param6_type := tiny_i32_type_kind()
     param7_type := tiny_i32_type_kind()
     if p.lx.kind != tok.rparen() {
-        if is_main {
-            return unsupported_parser(p, "self codegen does not support main parameters yet")
-        }
         if p.lx.kind != tok.ident() {
             return fail_parser(p, "expected parameter name")
         }
@@ -1674,6 +1671,11 @@ fn scan_function_decl(p TinyIrParser) TinyIrParser {
         }
         if p.lx.kind != tok.rparen() {
             return unsupported_parser(p, "self codegen currently supports up to eight helper parameters")
+        }
+    }
+    if is_main && param_count != 0 {
+        if param_count != 2 || param0_type != tiny_i32_type_kind() || param1_type != tiny_ptr_type_kind() {
+            return unsupported_parser(p, "self codegen main parameters must be () or (i32, *string)")
         }
     }
     p = advance_sig(p)
@@ -2809,9 +2811,6 @@ fn parse_function(p TinyIrParser) TinyIrParser {
     param6_type := tiny_i32_type_kind()
     param7_type := tiny_i32_type_kind()
     if p.lx.kind != tok.rparen() {
-        if is_main {
-            return unsupported_parser(p, "self codegen does not support main parameters yet")
-        }
         if p.lx.kind != tok.ident() {
             return fail_parser(p, "expected parameter name")
         }
@@ -2907,6 +2906,11 @@ fn parse_function(p TinyIrParser) TinyIrParser {
         }
         if p.lx.kind != tok.rparen() {
             return unsupported_parser(p, "self codegen currently supports up to eight helper parameters")
+        }
+    }
+    if is_main && param_count != 0 {
+        if param_count != 2 || param0_type != tiny_i32_type_kind() || param1_type != tiny_ptr_type_kind() {
+            return unsupported_parser(p, "self codegen main parameters must be () or (i32, *string)")
         }
     }
     p = advance_sig(p)

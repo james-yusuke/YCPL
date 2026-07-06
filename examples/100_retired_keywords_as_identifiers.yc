@@ -1,0 +1,15 @@
+import "std/fmt" as fmt
+
+fn main() {
+    match := 1
+    or := 2
+    go := match + or
+    defer := go + 4
+    select := defer + 5
+    interface := select + 6
+    is := interface + 7
+    importas := is + 8
+    mut := importas + 9
+
+    fmt.println(mut)
+}

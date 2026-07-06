@@ -2,7 +2,7 @@ import "std/fmt" as fmt
 
 fn main() {
     const label: string := "ok"
-    mut name: string := none
+    name: string := none
 
     if name == none {
         fmt.println(label)
