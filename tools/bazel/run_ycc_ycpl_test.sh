@@ -308,8 +308,9 @@ enum Color {
 
 type Score = i32
 
-fn classify(color Score) Score {
-    switch color {
+fn main() i32 {
+    choice: Score = Green
+    switch choice {
         case Color.Red {
             return 7
         }
@@ -321,10 +322,6 @@ fn classify(color Score) Score {
         }
     }
     return 0
-}
-
-fn main() i32 {
-    return classify(Green)
 }
 YCPL
 "$YCC_YCPL" check "$switch_dir/enum_alias_switch.yc" >/tmp/ycc-ycpl-check-enum-alias-switch.out
