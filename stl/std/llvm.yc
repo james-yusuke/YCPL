@@ -12,6 +12,8 @@ extern fn c_dispose_message(message string) as "LLVMDisposeMessage"
 extern fn c_create_builder_in_context(ctx *byte) *byte as "LLVMCreateBuilderInContext"
 extern fn c_dispose_builder(builder_ref *byte) as "LLVMDisposeBuilder"
 extern fn c_position_builder_at_end(builder_ref *byte, block_ref *byte) as "LLVMPositionBuilderAtEnd"
+extern fn c_get_insert_block(builder_ref *byte) *byte as "LLVMGetInsertBlock"
+extern fn c_get_basic_block_terminator(block_ref *byte) *byte as "LLVMGetBasicBlockTerminator"
 
 extern fn c_void_type_in_context(ctx *byte) *byte as "LLVMVoidTypeInContext"
 extern fn c_int1_type_in_context(ctx *byte) *byte as "LLVMInt1TypeInContext"
@@ -43,6 +45,8 @@ extern fn c_build_sext(builder_ref *byte, value_ref *byte, dest_type *byte, name
 extern fn c_build_icmp(builder_ref *byte, predicate i32, lhs *byte, rhs *byte, name string) *byte as "LLVMBuildICmp"
 extern fn c_build_br(builder_ref *byte, dest *byte) *byte as "LLVMBuildBr"
 extern fn c_build_cond_br(builder_ref *byte, cond *byte, then_block *byte, else_block *byte) *byte as "LLVMBuildCondBr"
+extern fn c_build_switch(builder_ref *byte, value_ref *byte, else_block *byte, case_count i32) *byte as "LLVMBuildSwitch"
+extern fn c_add_case(switch_ref *byte, on_value *byte, dest *byte) as "LLVMAddCase"
 extern fn c_build_unreachable(builder_ref *byte) *byte as "LLVMBuildUnreachable"
 extern fn c_build_call2(builder_ref *byte, function_type *byte, function_ref *byte, args *byte, arg_count i32, name string) *byte as "LLVMBuildCall2"
 extern fn c_build_struct_gep2(builder_ref *byte, type_ref *byte, pointer_ref *byte, index i32, name string) *byte as "LLVMBuildStructGEP2"
@@ -147,6 +151,22 @@ pub fn dispose_builder(builder *byte) {
 
 pub fn position_builder_at_end(builder *byte, block *byte) {
     c_position_builder_at_end(builder, block)
+}
+
+pub fn get_insert_block(builder *byte) *byte {
+    return c_get_insert_block(builder)
+}
+
+pub fn get_basic_block_terminator(block *byte) *byte {
+    return c_get_basic_block_terminator(block)
+}
+
+pub fn current_block_has_terminator(builder *byte) bool {
+    block := c_get_insert_block(builder)
+    if block == none {
+        return false
+    }
+    return c_get_basic_block_terminator(block) != none
 }
 
 pub fn void_type_in_context(ctx *byte) *byte {
@@ -319,6 +339,14 @@ pub fn build_br(builder *byte, dest *byte) *byte {
 
 pub fn build_cond_br(builder *byte, cond *byte, then_block *byte, else_block *byte) *byte {
     return c_build_cond_br(builder, cond, then_block, else_block)
+}
+
+pub fn build_switch(builder *byte, value *byte, else_block *byte, case_count i32) *byte {
+    return c_build_switch(builder, value, else_block, case_count)
+}
+
+pub fn add_case(switch_ref *byte, on_value *byte, dest *byte) {
+    c_add_case(switch_ref, on_value, dest)
 }
 
 pub fn build_unreachable(builder *byte) *byte {
