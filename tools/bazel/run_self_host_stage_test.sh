@@ -1442,6 +1442,7 @@ if [ -n "$LLC_BIN" ]; then
   strict_stage5_ir_dir="$(mktemp -d "${TMPDIR:-/tmp}/ycpl-strict-stage5-ir.XXXXXX")"
   "$strict_stage4_native_dir/merged" build-ir compiler/ycpl -o "$strict_stage5_ir_dir" >/tmp/ycpl-strict-stage5-ir.out
   grep -q 'YCPL stage5 AST IR' "$strict_stage5_ir_dir/merged.ll"
+  grep -q '@.stage5.stage6.ir' "$strict_stage5_ir_dir/merged.ll"
   grep -q '@ycpl_stage5_ast_expr_nodes' "$strict_stage5_ir_dir/merged.ll"
   grep -q 'define i32 @ycpl_stage5_project_body_lowering' "$strict_stage5_ir_dir/merged.ll"
   grep -q 'function_body_statement_resolved_type_slot' "$strict_stage5_ir_dir/merged.ll"
@@ -1461,6 +1462,27 @@ if [ -n "$LLC_BIN" ]; then
   fi
   "$strict_stage5_native_dir/merged" >/tmp/ycpl-strict-stage5-native-run.out
   grep -q 'YCPL stage5 AST IR' /tmp/ycpl-strict-stage5-native-run.out
+  "$strict_stage5_native_dir/merged" parse compiler/ycpl >/tmp/ycpl-strict-stage5-native-parse.out
+  "$strict_stage5_native_dir/merged" check compiler/ycpl >/tmp/ycpl-strict-stage5-native-check.out
+  grep -q 'typed_nodes=' /tmp/ycpl-strict-stage5-native-parse.out
+  grep -q 'expr_nodes=' /tmp/ycpl-strict-stage5-native-parse.out
+  grep -q 'main=1' /tmp/ycpl-strict-stage5-native-check.out
+  strict_stage6_ir_dir="$(mktemp -d "${TMPDIR:-/tmp}/ycpl-strict-stage6-ir.XXXXXX")"
+  "$strict_stage5_native_dir/merged" build-ir compiler/ycpl -o "$strict_stage6_ir_dir" >/tmp/ycpl-strict-stage6-ir.out
+  grep -q 'YCPL stage6 AST IR' "$strict_stage6_ir_dir/merged.ll"
+  grep -q '@ycpl_stage6_ast_expr_nodes' "$strict_stage6_ir_dir/merged.ll"
+  grep -q 'define i32 @ycpl_stage6_project_body_lowering' "$strict_stage6_ir_dir/merged.ll"
+  grep -q 'function_body_resolved_statement_lowered_state' "$strict_stage6_ir_dir/merged.ll"
+  "$LLC_BIN" -filetype=obj "$strict_stage6_ir_dir/merged.ll" -o "$strict_stage6_ir_dir/merged.o"
+  strict_stage6_native_dir="$(mktemp -d "${TMPDIR:-/tmp}/ycpl-strict-stage6-native.XXXXXX")"
+  LLVM_BINDIR="$(dirname "$LLC_BIN")" "$strict_stage5_native_dir/merged" build compiler/ycpl -o "$strict_stage6_native_dir" >/tmp/ycpl-strict-stage6-native.out
+  if [ ! -x "$strict_stage6_native_dir/merged" ]; then
+    printf 'Expected strict stage5 compiler to emit native %s/merged\n' "$strict_stage6_native_dir" >&2
+    cat /tmp/ycpl-strict-stage6-native.out >&2
+    exit 1
+  fi
+  "$strict_stage6_native_dir/merged" >/tmp/ycpl-strict-stage6-native-run.out
+  grep -q 'YCPL stage6 AST IR' /tmp/ycpl-strict-stage6-native-run.out
   strict_stage3_tiny_native_dir="$(mktemp -d "${TMPDIR:-/tmp}/ycpl-strict-stage3-tiny-native.XXXXXX")"
   LLVM_BINDIR="$(dirname "$LLC_BIN")" "$strict_stage3_native_dir/merged" build "$renamed_tiny" -o "$strict_stage3_tiny_native_dir" >/tmp/ycpl-strict-stage3-tiny-native.out
   set +e
