@@ -112,6 +112,9 @@ namespace codegen
         llvm::Value *codegen_call(const ast::CallExpr *ce);
         llvm::Value *codegen_std_intrinsic_call(const std::string &name, const ast::CallExpr *ce);
         llvm::Value *codegen_array_intrinsic_call(const std::string &name, const ast::CallExpr *ce);
+        llvm::Value *codegen_memory_intrinsic_call(const std::string &name, const ast::CallExpr *ce);
+        llvm::Value *codegen_string_intrinsic_call(const std::string &name, const ast::CallExpr *ce);
+        llvm::Value *codegen_math_intrinsic_call(const std::string &name, const ast::CallExpr *ce);
         llvm::Value *codegen_array(const ast::ArrayLiteral *alit);
         llvm::Value *codegen_index(const ast::IndexExpr *ie);
         llvm::Value *codegen_postfix(const ast::PostfixExpr *pe);
@@ -122,6 +125,7 @@ namespace codegen
         llvm::Value *codegen_for_loop(const ast::ForStmt *forStmt);
         llvm::Value *codegen_for_in_loop(const ast::ForInStmt *forInStmt);
         llvm::Value *codegen_append_call(const ast::CallExpr *ce);
+        llvm::Value *codegen_print_call(const ast::CallExpr *ce);
         llvm::Value *codegen_println_call(const ast::CallExpr *ce);
         llvm::Value *codegen_printf_call(const ast::CallExpr *ce);
         llvm::Value *codegen_sprintf_call(const ast::CallExpr *ce);
