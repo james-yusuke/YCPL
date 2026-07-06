@@ -133,8 +133,8 @@ fn send_hover_for_word(id i32, source string, word string) {
 }
 
 fn send_completion(id i32) {
-    size := 556 + json.digits_i32(id)
-    fmt.printf("Content-Length: %d\r\n\r\n{\"jsonrpc\":\"2.0\",\"id\":%d,\"result\":{\"isIncomplete\":false,\"items\":[{\"label\":\"fn\",\"kind\":14},{\"label\":\"main\",\"kind\":15,\"insertTextFormat\":2,\"insertText\":\"fn main() i32 {\\n    $1\\n}\"},{\"label\":\"struct\",\"kind\":14},{\"label\":\"import\",\"kind\":14},{\"label\":\"const\",\"kind\":14},{\"label\":\"mut\",\"kind\":14},{\"label\":\"i32\",\"kind\":7},{\"label\":\"string\",\"kind\":7},{\"label\":\"bool\",\"kind\":7},{\"label\":\"std/fmt\",\"kind\":9},{\"label\":\"std/array\",\"kind\":9},{\"label\":\"std/json\",\"kind\":9},{\"label\":\"std/io\",\"kind\":9},{\"label\":\"fmt.println\",\"kind\":3},{\"label\":\"array.append\",\"kind\":3}]}}", size, id)
+    size := 530 + json.digits_i32(id)
+    fmt.printf("Content-Length: %d\r\n\r\n{\"jsonrpc\":\"2.0\",\"id\":%d,\"result\":{\"isIncomplete\":false,\"items\":[{\"label\":\"fn\",\"kind\":14},{\"label\":\"main\",\"kind\":15,\"insertTextFormat\":2,\"insertText\":\"fn main() i32 {\\n    $1\\n}\"},{\"label\":\"struct\",\"kind\":14},{\"label\":\"import\",\"kind\":14},{\"label\":\"const\",\"kind\":14},{\"label\":\"i32\",\"kind\":7},{\"label\":\"string\",\"kind\":7},{\"label\":\"bool\",\"kind\":7},{\"label\":\"std/fmt\",\"kind\":9},{\"label\":\"std/array\",\"kind\":9},{\"label\":\"std/json\",\"kind\":9},{\"label\":\"std/io\",\"kind\":9},{\"label\":\"fmt.println\",\"kind\":3},{\"label\":\"array.append\",\"kind\":3}]}}", size, id)
 }
 
 fn is_ident_char(ch i32) bool {
@@ -206,7 +206,7 @@ fn slice_eq(source string, start i32, len i32, value string) bool {
 }
 
 fn is_keyword_token(source string, start i32, len i32) bool {
-    return slice_eq(source, start, len, "module") || slice_eq(source, start, len, "package") || slice_eq(source, start, len, "import") || slice_eq(source, start, len, "pub") || slice_eq(source, start, len, "extern") || slice_eq(source, start, len, "intrinsic") || slice_eq(source, start, len, "fn") || slice_eq(source, start, len, "struct") || slice_eq(source, start, len, "const") || slice_eq(source, start, len, "mut") || slice_eq(source, start, len, "if") || slice_eq(source, start, len, "else") || slice_eq(source, start, len, "for") || slice_eq(source, start, len, "in") || slice_eq(source, start, len, "return") || slice_eq(source, start, len, "break") || slice_eq(source, start, len, "continue") || slice_eq(source, start, len, "as") || slice_eq(source, start, len, "none") || slice_eq(source, start, len, "true") || slice_eq(source, start, len, "false") || slice_eq(source, start, len, "enum") || slice_eq(source, start, len, "interface") || slice_eq(source, start, len, "match") || slice_eq(source, start, len, "switch")
+    return slice_eq(source, start, len, "module") || slice_eq(source, start, len, "package") || slice_eq(source, start, len, "import") || slice_eq(source, start, len, "pub") || slice_eq(source, start, len, "extern") || slice_eq(source, start, len, "intrinsic") || slice_eq(source, start, len, "fn") || slice_eq(source, start, len, "struct") || slice_eq(source, start, len, "const") || slice_eq(source, start, len, "if") || slice_eq(source, start, len, "else") || slice_eq(source, start, len, "for") || slice_eq(source, start, len, "in") || slice_eq(source, start, len, "return") || slice_eq(source, start, len, "break") || slice_eq(source, start, len, "continue") || slice_eq(source, start, len, "as") || slice_eq(source, start, len, "none") || slice_eq(source, start, len, "true") || slice_eq(source, start, len, "false") || slice_eq(source, start, len, "enum") || slice_eq(source, start, len, "match") || slice_eq(source, start, len, "switch")
 }
 
 fn is_type_token(source string, start i32, len i32) bool {
@@ -637,7 +637,7 @@ fn find_declaration_offset(source string, word string) i32 {
     word_len := text.len(word)
     n := text.len(source)
     for (; pos >= 0; ) {
-        if word_before_eq(source, pos, "fn") || word_before_eq(source, pos, "struct") || word_before_eq(source, pos, "module") || word_before_eq(source, pos, "package") || word_before_eq(source, pos, "as") || word_before_eq(source, pos, "const") || word_before_eq(source, pos, "mut") {
+        if word_before_eq(source, pos, "fn") || word_before_eq(source, pos, "struct") || word_before_eq(source, pos, "module") || word_before_eq(source, pos, "package") || word_before_eq(source, pos, "as") || word_before_eq(source, pos, "const") {
             return pos
         }
 

@@ -190,7 +190,7 @@ stage-2 self-host gate
 ## 予約済みだが未実装
 
 ```text
-enum interface match is go defer select switch or type importas
+enum match switch or type
 ```
 
 ```text

@@ -259,7 +259,6 @@ namespace ast
 
         std::unique_ptr<Expr> init;
         bool is_const = false;
-        bool is_mut = false;
 
         VarDecl(const std::string &n, std::unique_ptr<Expr> i) : name(n), type(nullptr), init(std::move(i)) {}
 
