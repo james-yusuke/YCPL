@@ -26,6 +26,10 @@ std/
 ├─ text   find, offsets
 ├─ json   parse, get, stringify
 ├─ map    caller-owned arrays
+├─ bytes  owned/wrapped binary buffers
+├─ hex    bytes <-> hexadecimal text
+├─ base64 bytes <-> base64 text
+├─ hash   FNV-1a32, CRC32
 └─ llvm   LLVM C API bridge
 ```
 
@@ -42,6 +46,10 @@ std/
 | `std/text` | `stl/std/text.yc` |
 | `std/json` | `stl/std/json.yc` |
 | `std/map` | `stl/std/map.yc` |
+| `std/bytes` | `stl/std/bytes.yc` |
+| `std/hex` | `stl/std/hex.yc` |
+| `std/base64` | `stl/std/base64.yc` |
+| `std/hash` | `stl/std/hash.yc` |
 | `std/llvm` | `stl/std/llvm.yc` |
 
 ## よく使う流れ
@@ -58,6 +66,12 @@ json.parse(text)
     -> JsonValue root
     -> json.get / json.at views
     -> json.free(root)
+
+bytes.from_string(text)
+    -> Bytes { data, len, cap, owned }
+    -> bytes.to_string / bytes.byte_to_string
+    -> hex.encode / base64.encode / hash.crc32
+    -> bytes.free
 ```
 
 ```YCPL
@@ -89,6 +103,10 @@ json.get / json.at
 `std/os` は compiler tooling に必要な最小限の process hook です。
 `YCPL_BOOTSTRAP_YCC` のような明示的な tool path を読む `getenv` と、移行中の
 `ycc-ycpl build` stage driver が使う `system` を提供します。
+
+`std/bytes`、`std/hex`、`std/base64`、`std/hash` は zip などのファイル形式や
+学習用暗号処理に向けた基盤です。`std/hash` の FNV-1a32 と CRC32 は検査・識別用で、
+セキュリティ用途の暗号ハッシュではありません。
 
 ## LLVM C API
 

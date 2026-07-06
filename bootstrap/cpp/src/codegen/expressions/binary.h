@@ -138,6 +138,12 @@ Value *CodeGen::codegen_binary(const ast::BinaryExpr *be)
             if (be->op == "%")
                 return builder.CreateSRem(L, R, "remtmp");
 
+            if (be->op == "&")
+                return builder.CreateAnd(L, R, "andtmp");
+            if (be->op == "|")
+                return builder.CreateOr(L, R, "ortmp");
+            if (be->op == "^")
+                return builder.CreateXor(L, R, "xortmp");
             if (be->op == "<<")
                 return builder.CreateShl(L, R, "shltmp");
             if (be->op == ">>")
@@ -242,6 +248,12 @@ Value *CodeGen::codegen_binary(const ast::BinaryExpr *be)
             if (be->op == "%")
                 return builder.CreateSRem(L, R, "remtmp");
 
+            if (be->op == "&")
+                return builder.CreateAnd(L, R, "andtmp");
+            if (be->op == "|")
+                return builder.CreateOr(L, R, "ortmp");
+            if (be->op == "^")
+                return builder.CreateXor(L, R, "xortmp");
             if (be->op == "<<")
                 return builder.CreateShl(L, R, "shltmp");
             if (be->op == ">>")

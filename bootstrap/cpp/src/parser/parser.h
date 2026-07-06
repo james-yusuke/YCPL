@@ -52,6 +52,9 @@ namespace path
         std::unique_ptr<ast::Expr> parse_assignment();
         std::unique_ptr<ast::Expr> parse_logical_or();
         std::unique_ptr<ast::Expr> parse_logical_and();
+        std::unique_ptr<ast::Expr> parse_bitwise_or();
+        std::unique_ptr<ast::Expr> parse_bitwise_xor();
+        std::unique_ptr<ast::Expr> parse_bitwise_and();
         std::unique_ptr<ast::Expr> parse_equality();
         std::unique_ptr<ast::Expr> parse_comparison();
         std::unique_ptr<ast::Expr> parse_additive();
@@ -63,7 +66,6 @@ namespace path
         std::unique_ptr<ast::Expr> parse_postfix(std::unique_ptr<ast::Expr> left);
         std::unique_ptr<ast::Expr> parse_call_arg_for(const ast::Expr *callee, size_t arg_index);
         std::unique_ptr<ast::Expr> parse_shift();
-        std::unique_ptr<ast::Expr> parse_bitwise_and();
         std::unique_ptr<ast::Type> parse_type();
 
         bool is_at_end() const;
