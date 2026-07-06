@@ -698,24 +698,38 @@ namespace path
 
     std::unique_ptr<Expr> Parser::parse_logical_and()
     {
-        auto left = parse_bitwise_and();
+        auto left = parse_bitwise_or();
         while (check(TokenType::AND))
         {
             Token op = cur;
             advance();
-            auto right = parse_bitwise_and();
+            auto right = parse_bitwise_or();
             left = std::make_unique<BinaryExpr>(op.lexeme, std::move(left), std::move(right));
         }
         return left;
     }
-    std::unique_ptr<Expr> Parser::parse_equality()
+
+    std::unique_ptr<Expr> Parser::parse_bitwise_or()
     {
-        auto left = parse_comparison();
-        while (check(TokenType::EQ) || check(TokenType::NEQ))
+        auto left = parse_bitwise_xor();
+        while (check(TokenType::BIT_OR) || check(TokenType::PIPE))
         {
             Token op = cur;
             advance();
-            auto right = parse_comparison();
+            auto right = parse_bitwise_xor();
+            left = std::make_unique<BinaryExpr>(op.lexeme, std::move(left), std::move(right));
+        }
+        return left;
+    }
+
+    std::unique_ptr<Expr> Parser::parse_bitwise_xor()
+    {
+        auto left = parse_bitwise_and();
+        while (check(TokenType::BIT_XOR) || check(TokenType::CARET))
+        {
+            Token op = cur;
+            advance();
+            auto right = parse_bitwise_and();
             left = std::make_unique<BinaryExpr>(op.lexeme, std::move(left), std::move(right));
         }
         return left;
@@ -726,11 +740,24 @@ namespace path
 
         auto left = parse_equality();
 
-        while (check(TokenType::ADDRESS_OF))
+        while (check(TokenType::BIT_AND) || check(TokenType::ADDRESS_OF) || check(TokenType::AMP))
         {
             Token op = cur;
             advance();
             auto right = parse_equality();
+            left = std::make_unique<BinaryExpr>(op.lexeme, std::move(left), std::move(right));
+        }
+        return left;
+    }
+
+    std::unique_ptr<Expr> Parser::parse_equality()
+    {
+        auto left = parse_comparison();
+        while (check(TokenType::EQ) || check(TokenType::NEQ))
+        {
+            Token op = cur;
+            advance();
+            auto right = parse_comparison();
             left = std::make_unique<BinaryExpr>(op.lexeme, std::move(left), std::move(right));
         }
         return left;

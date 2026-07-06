@@ -2803,6 +2803,113 @@ fn parse_for_statement(p TinyParser) TinyParser {
     return p
 }
 
+fn parse_switch_case_value(p TinyParser) TinyParser {
+    sign := 1
+    if p.lx.kind == tok.minus() {
+        sign = -1
+        p = advance_sig(p)
+    }
+    if p.lx.kind != tok.int_lit() {
+        return unsupported_parser(p, "self checker switch cases currently require i32 integer literals")
+    }
+    p.value = parse_i32(p.lx.lexeme) * sign
+    p.value_type = tiny_i32_type_kind()
+    return advance_sig(p)
+}
+
+fn parse_switch_statement(p TinyParser) TinyParser {
+    p = advance_sig(p)
+    p = parse_expr_or_comparison(p)
+    if !p.ok { return p }
+    p = ensure_i32_value(p, "self checker switch expression currently requires i32")
+    if !p.ok { return p }
+    selector := p.value
+    if p.lx.kind != tok.lbrace() {
+        return fail_parser(p, "expected '{' after switch expression")
+    }
+    p = advance_sig(p)
+
+    matched := false
+    for (; p.ok && p.lx.kind != tok.rbrace() && p.lx.kind != tok.eof(); ) {
+        if p.lx.kind != tok.ident() {
+            return fail_parser(p, "expected switch case or default")
+        }
+        if str.eq(p.lx.lexeme, "case") {
+            p = advance_sig(p)
+            p = parse_switch_case_value(p)
+            if !p.ok { return p }
+            case_value := p.value
+            if p.lx.kind != tok.lbrace() {
+                return fail_parser(p, "expected '{' after switch case")
+            }
+            if !matched && case_value == selector {
+                matched = true
+                p = parse_block_body(p)
+                if !p.ok { return p }
+                if p.returned || p.loop_continue {
+                    p = skip_to_block_end(p)
+                    if !p.ok { return p }
+                    if p.lx.kind == tok.rbrace() {
+                        return advance_sig(p)
+                    }
+                    return p
+                }
+                if p.loop_break {
+                    p.loop_break = false
+                    p.loop_continue = false
+                    p = skip_to_block_end(p)
+                    if !p.ok { return p }
+                    if p.lx.kind == tok.rbrace() {
+                        return advance_sig(p)
+                    }
+                    return p
+                }
+            } else {
+                p = skip_block(p)
+                if !p.ok { return p }
+            }
+        } else if str.eq(p.lx.lexeme, "default") {
+            p = advance_sig(p)
+            if p.lx.kind != tok.lbrace() {
+                return fail_parser(p, "expected '{' after switch default")
+            }
+            if !matched {
+                matched = true
+                p = parse_block_body(p)
+                if !p.ok { return p }
+                if p.returned || p.loop_continue {
+                    p = skip_to_block_end(p)
+                    if !p.ok { return p }
+                    if p.lx.kind == tok.rbrace() {
+                        return advance_sig(p)
+                    }
+                    return p
+                }
+                if p.loop_break {
+                    p.loop_break = false
+                    p.loop_continue = false
+                    p = skip_to_block_end(p)
+                    if !p.ok { return p }
+                    if p.lx.kind == tok.rbrace() {
+                        return advance_sig(p)
+                    }
+                    return p
+                }
+            } else {
+                p = skip_block(p)
+                if !p.ok { return p }
+            }
+        } else {
+            return fail_parser(p, "expected switch case or default")
+        }
+    }
+    if !p.ok { return p }
+    if p.lx.kind != tok.rbrace() {
+        return fail_parser(p, "expected '}' after switch")
+    }
+    return advance_sig(p)
+}
+
 fn parse_statement(p TinyParser) TinyParser {
     if p.lx.kind == tok.kw_break() {
         p.loop_break = true
@@ -2841,6 +2948,10 @@ fn parse_statement(p TinyParser) TinyParser {
         return parse_for_statement(p)
     }
 
+    if p.lx.kind == tok.kw_switch() {
+        return parse_switch_statement(p)
+    }
+
     if p.lx.kind == tok.ident() {
         probe := p
         probe = advance_sig(probe)
@@ -2853,7 +2964,7 @@ fn parse_statement(p TinyParser) TinyParser {
         return parse_var_or_assign(p)
     }
 
-    return unsupported_parser(p, "self codegen currently supports local statements, if, for, and return")
+    return unsupported_parser(p, "self codegen currently supports local statements, if, for, switch, and return")
 }
 
 fn parse_function(p TinyParser) TinyParser {

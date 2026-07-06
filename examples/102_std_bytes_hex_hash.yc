@@ -1,0 +1,32 @@
+import "std/bytes" as bytes
+import "std/fmt" as fmt
+import "std/hash" as hash
+import "std/hex" as hex
+
+fn main() {
+    b := bytes.from_string("YCPL")
+    fmt.println(b.len)
+    fmt.println(bytes.get(b, 0))
+    fmt.println(bytes.to_string(b))
+    fmt.println(bytes.byte_to_string(bytes.get(b, 0)))
+
+    bytes.set(b, 1, 'x')
+    fmt.println(bytes.get(b, 1))
+    bytes.set(b, 1, 'C')
+
+    copy := bytes.clone(b)
+    fmt.println(bytes.eq(b, copy))
+
+    encoded := hex.encode(b)
+    fmt.println(encoded)
+
+    decoded := hex.decode(encoded)
+    fmt.println(bytes.eq(b, decoded))
+
+    fmt.println(hash.fnv1a32(b))
+    fmt.println(hash.crc32(b))
+
+    bytes.free(b)
+    bytes.free(copy)
+    bytes.free(decoded)
+}
