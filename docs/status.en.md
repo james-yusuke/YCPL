@@ -178,7 +178,7 @@ stage-2 self-host gate
 ├─ the checker now handles YCPL helper function definitions, extern signatures, and call argument type checks up to eight arguments, with stage1/stage2 self-host gates covering eight-argument calls
 ├─ checker helper-function registration/lookup slots now extend to 16, with stage1/stage2 self-host gates covering a call to the ninth helper
 ├─ checker local-variable and i32[3] array backing slots now extend to 16, with stage1/stage2 self-host gates covering array load/store through the ninth local
-├─ project_body.ll now raises the real AST lowering caps to 32 body nodes, 64 expressions, 32 statement expressions, and 32 statement owners, with IR gates pinning those values
+├─ project_body.ll now raises the real AST lowering caps to 64 body nodes, 128 expressions, 64 statement expressions, and 64 statement owners, with IR gates pinning those values
 ├─ statement-owned expression lowering also respects the total expression cap, and CI fails if lowered node/expression counts exceed the configured caps
 ├─ project_body.ll now emits named IR markers for lowered and still-unlowered real node/expression counts, so CI can detect remaining summary/smoke coverage
 ├─ traversal project gates now carry i64 and []T/slice parameters through typed AST flow and verify i64/reference statement-expression markers in generated IR

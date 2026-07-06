@@ -6,7 +6,7 @@ import {
   TransportKind,
   type LanguageClientOptions,
   type ServerOptions
-} from "vscode-languageclient/node.js";
+} from "vscode-languageclient/node";
 
 let client: LanguageClient | undefined;
 
@@ -73,7 +73,7 @@ async function startLanguageServer(context: vscode.ExtensionContext): Promise<vo
         }
       };
 
-  const outputChannel = vscode.window.createOutputChannel("YCPL Language Server");
+  const outputChannel = vscode.window.createOutputChannel("YCPL Language Server", { log: true });
   const clientOptions: LanguageClientOptions = {
     documentSelector: [{ scheme: "file", language: "ycpl" }],
     outputChannel,
