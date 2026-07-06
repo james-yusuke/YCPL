@@ -37,7 +37,9 @@ test("stdlib member completion adds missing import edits", async () => {
 
   const items = await providers.completion({ textDocument: { uri: document.uri }, position: Position.create(1, 8) });
   const println = items.find((item) => item.label === "println");
-  assert.ok(println);
+  if (!println) {
+    assert.fail("Expected println completion");
+  }
   assert.equal(println.additionalTextEdits?.[0].newText, "import \"std/fmt\" as fmt\n");
 });
 
