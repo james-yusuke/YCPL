@@ -97,3 +97,35 @@ test("return statements are not indexed as struct fields", () => {
   assert.equal(document.symbols.some((symbol) => symbol.name === "return" && symbol.category === "field"), false);
   assert.equal(document.diagnostics.some((diagnostic) => diagnostic.message.includes("Duplicate field 'return'")), false);
 });
+
+test("parser indexes enum and type alias syntax", () => {
+  const document = parser.parse("file:///switch.yc", 1, [
+    "enum Color {",
+    "    Red = 2,",
+    "    Green,",
+    "}",
+    "",
+    "type Score = i32",
+    "",
+    "fn classify(color Score) Score {",
+    "    switch color {",
+    "        case Color.Red {",
+    "            return 10",
+    "        }",
+    "        case Green {",
+    "            return 20",
+    "        }",
+    "        default {",
+    "            return 30",
+    "        }",
+    "    }",
+    "    return 0",
+    "}"
+  ].join("\n"));
+
+  assert.equal(document.symbols.some((symbol) => symbol.name === "Color" && symbol.category === "enum"), true);
+  assert.equal(document.symbols.some((symbol) => symbol.name === "Red" && symbol.category === "enumMember" && symbol.containerName === "Color"), true);
+  assert.equal(document.symbols.some((symbol) => symbol.name === "Score" && symbol.category === "typeAlias"), true);
+  assert.equal(document.symbols.find((symbol) => symbol.id === document.references.find((reference) => reference.name === "Green")?.symbolId)?.category, "enumMember");
+  assert.equal(document.references.some((reference) => ["switch", "case", "default"].includes(reference.name)), false);
+});

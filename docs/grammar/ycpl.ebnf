@@ -9,6 +9,8 @@ top_level_decl     = function_decl
                    | extern_function_decl
                    | intrinsic_function_decl
                    | struct_decl
+                   | enum_decl
+                   | type_alias_decl
                    | const_decl ;
 
 visibility         = "pub" ;
@@ -24,6 +26,11 @@ parameter          = identifier type ;
 struct_decl        = [ visibility ] "struct" identifier "{" { field_decl newline } "}" ;
 field_decl         = [ visibility ] identifier type ;
 
+enum_decl          = [ visibility ] "enum" identifier "{" { enum_variant [ "," ] newline } "}" ;
+enum_variant       = identifier [ "=" integer_literal ] ;
+
+type_alias_decl    = [ visibility ] "type" identifier [ "=" ] type ;
+
 const_decl         = "const" identifier [ ":" type ] ":=" expression ;
 
 block              = "{" { statement newline } "}" ;
@@ -32,6 +39,7 @@ statement          = var_decl
                    | assignment
                    | if_statement
                    | for_statement
+                   | switch_statement
                    | return_statement
                    | break_statement
                    | continue_statement
@@ -46,6 +54,9 @@ if_statement       = "if" expression block [ "else" ( block | if_statement ) ] ;
 for_statement      = "for" ( for_c_style | for_in | expression? ) block ;
 for_c_style        = statement? ";" expression? ";" statement? ;
 for_in             = identifier "in" expression ;
+switch_statement   = "switch" expression "{" { switch_case newline } [ switch_default newline ] "}" ;
+switch_case        = "case" expression block ;
+switch_default     = "default" block ;
 return_statement   = "return" [ expression ] ;
 break_statement    = "break" ;
 continue_statement = "continue" ;

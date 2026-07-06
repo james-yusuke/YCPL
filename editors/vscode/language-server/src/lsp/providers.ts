@@ -91,22 +91,19 @@ export class YcplProviders {
   async completion(params: CompletionParams): Promise<CompletionItem[]> {
     const document = this.requireDocument(params.textDocument.uri);
     const line = lineText(document.text, document.lineOffsets, params.position.line).slice(0, params.position.character);
+    const stdlibItems = await this.stdlib.completionItems();
     if (/\bimport\s+"[^"]*$/.test(line)) {
-      return (await this.stdlib.completionItems())
+      return stdlibItems
         .filter((item) => item.kind === CompletionItemKind.Module)
         .map((item) => ({ label: item.modulePath, kind: item.kind, detail: item.detail }));
     }
     if (line.trimEnd().endsWith(".")) {
       const alias = line.trimEnd().match(/([A-Za-z_][A-Za-z0-9_]*)\.$/)?.[1];
-      return this.memberCompletions(document, alias, await this.stdlib.completionItems());
+      return this.memberCompletions(document, alias, stdlibItems);
     }
 
     const localItems = this.visibleSymbolsForPosition(document, params.position).map(symbolToCompletion);
-    const stdItems = (await this.stdlib.completionItems()).map((item) => ({
-      label: item.label,
-      kind: item.kind,
-      detail: item.detail
-    }));
+    const stdItems = this.stdlibFunctionCompletions(document, stdlibItems);
     return [
       ...keywords.map((label) => ({ label, kind: CompletionItemKind.Keyword })),
       ...primitiveTypes.map((label) => ({ label, kind: CompletionItemKind.TypeParameter })),
@@ -116,6 +113,13 @@ export class YcplProviders {
         insertTextFormat: InsertTextFormat.Snippet,
         insertText: "fn main() i32 {\n    $1\n    return 0\n}",
         detail: "YCPL main function"
+      },
+      {
+        label: "switch",
+        kind: CompletionItemKind.Snippet,
+        insertTextFormat: InsertTextFormat.Snippet,
+        insertText: "switch ${1:value} {\n    case ${2:0} {\n        $0\n    }\n    default {\n    }\n}",
+        detail: "YCPL switch statement"
       },
       ...localItems,
       ...stdItems
@@ -252,7 +256,7 @@ export class YcplProviders {
       }
     }
 
-    const pattern = /\b(module|package|import|pub|extern|intrinsic|fn|struct|const|mut|if|else|for|in|return|break|continue|as|true|false|none|i32|i64|bool|char|byte|string|float|double|void|size_t|Type|T|any)\b|\/\/.*$|\/\*[\s\S]*?\*\/|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])'|`[^`]*`|0x[0-9A-Fa-f]+|0b[01]+|[0-9]+(?:\.[0-9]+)?|(:=|==|!=|<=|>=|&&|\|\||[=+\-*/%<>!&|.])/gm;
+    const pattern = /\b(module|package|import|pub|extern|intrinsic|fn|struct|enum|type|const|mut|if|else|for|in|switch|case|default|return|break|continue|as|true|false|none|i32|i64|bool|char|byte|string|float|double|void|size_t|Type|T|any)\b|\/\/.*$|\/\*[\s\S]*?\*\/|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])'|`[^`]*`|0x[0-9A-Fa-f]+|0b[01]+|[0-9]+(?:\.[0-9]+)?|(:=|==|!=|<=|>=|&&|\|\||[=+\-*/%<>!&|.])/gm;
     for (const match of document.text.matchAll(pattern)) {
       const start = match.index ?? 0;
       const value = match[0];
@@ -470,6 +474,26 @@ export class YcplProviders {
     return [...stdlibMembers, ...workspaceMembers];
   }
 
+  private stdlibFunctionCompletions(document: YcplDocument, stdlibItems: Awaited<ReturnType<StandardLibraryIndex["completionItems"]>>): CompletionItem[] {
+    return stdlibItems
+      .filter((item) => item.symbolName && item.kind === CompletionItemKind.Function)
+      .map((item) => {
+        const alias = aliasForModule(document, item.modulePath, item.moduleAlias);
+        const importEdit = importEditFor(document, item.modulePath, alias);
+        const label = `${alias}.${item.symbolName}`;
+        return {
+          label,
+          kind: item.kind,
+          detail: item.detail,
+          filterText: `${label} ${item.symbolName} ${item.modulePath}`,
+          sortText: `8_${label}`,
+          insertTextFormat: InsertTextFormat.Snippet,
+          insertText: `${label}($0)`,
+          additionalTextEdits: importEdit ? [importEdit] : undefined
+        };
+      });
+  }
+
   private symbolForPosition(document: YcplDocument, position: Position): YcplSymbol | undefined {
     const declared = this.index.declarationAt(document.uri, position);
     if (declared) {
@@ -553,7 +577,14 @@ function completionKindForSymbol(symbol: YcplSymbol): CompletionItemKind {
   switch (symbol.category) {
     case "function":
       return CompletionItemKind.Function;
+    case "enum":
+      return CompletionItemKind.Enum;
+    case "enumMember":
+      return CompletionItemKind.EnumMember;
     case "struct":
+      return CompletionItemKind.Struct;
+    case "typeAlias":
+      return CompletionItemKind.TypeParameter;
     case "constant":
       return CompletionItemKind.Constant;
     case "module":
@@ -609,6 +640,10 @@ function importEditFor(document: YcplDocument, modulePath: string, alias: string
   }
   const insertion = importInsertionPosition(document);
   return TextEdit.insert(insertion, `import "${modulePath}" as ${alias}\n`);
+}
+
+function aliasForModule(document: YcplDocument, modulePath: string, fallbackAlias: string): string {
+  return document.imports.find((entry) => entry.modulePath === modulePath)?.alias ?? fallbackAlias;
 }
 
 function importInsertionPosition(document: YcplDocument): Position {

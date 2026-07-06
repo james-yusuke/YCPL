@@ -299,6 +299,40 @@ switch_ir_dir="$(mktemp -d "${TMPDIR:-/tmp}/ycpl-switch-ir.XXXXXX")"
 YCPL_NO_BOOTSTRAP=1 "$YCC_YCPL" build-ir "$switch_dir/switch.yc" -o "$switch_ir_dir" >/tmp/ycc-ycpl-ir-switch.out
 grep -q 'switch i32' "$switch_ir_dir/merged.ll"
 grep -q 'ret i32 13' "$switch_ir_dir/merged.ll"
+cat >"$switch_dir/enum_alias_switch.yc" <<'YCPL'
+enum Color {
+    Red = 2,
+    Green,
+    Blue = 8,
+}
+
+type Score = i32
+
+fn classify(color Score) Score {
+    switch color {
+        case Color.Red {
+            return 7
+        }
+        case Green {
+            return 13
+        }
+        default {
+            return 99
+        }
+    }
+    return 0
+}
+
+fn main() i32 {
+    return classify(Green)
+}
+YCPL
+"$YCC_YCPL" check "$switch_dir/enum_alias_switch.yc" >/tmp/ycc-ycpl-check-enum-alias-switch.out
+grep -q 'value=13' /tmp/ycc-ycpl-check-enum-alias-switch.out
+enum_alias_ir_dir="$(mktemp -d "${TMPDIR:-/tmp}/ycpl-enum-alias-ir.XXXXXX")"
+YCPL_NO_BOOTSTRAP=1 "$YCC_YCPL" build-ir "$switch_dir/enum_alias_switch.yc" -o "$enum_alias_ir_dir" >/tmp/ycc-ycpl-ir-enum-alias-switch.out
+grep -q 'switch i32' "$enum_alias_ir_dir/merged.ll"
+grep -q 'ret i32 13' "$enum_alias_ir_dir/merged.ll"
 if "$YCC_YCPL" check examples/55_self_codegen_unknown_failure.yc >/tmp/ycc-ycpl-check-failure.out 2>&1; then
   printf 'Expected ycc-ycpl check to reject unknown local symbol\n' >&2
   exit 1

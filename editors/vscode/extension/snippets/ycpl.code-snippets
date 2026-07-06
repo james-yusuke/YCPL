@@ -27,9 +27,52 @@
     ],
     "description": "Create a YCPL struct"
   },
+  "Enum": {
+    "prefix": "enum",
+    "body": [
+      "enum ${1:Name} {",
+      "    ${2:First} = ${3:0},",
+      "    ${4:Second},",
+      "}"
+    ],
+    "description": "Create a YCPL enum"
+  },
+  "Type alias": {
+    "prefix": "type",
+    "body": "type ${1:Name} = ${2:i32}",
+    "description": "Create a YCPL type alias"
+  },
+  "Switch": {
+    "prefix": "switch",
+    "body": [
+      "switch ${1:value} {",
+      "    case ${2:0} {",
+      "        $0",
+      "    }",
+      "    default {",
+      "    }",
+      "}"
+    ],
+    "description": "Create a YCPL switch statement"
+  },
   "Import with alias": {
     "prefix": "import",
     "body": "import \"${1:std/fmt}\" as ${2:fmt}",
     "description": "Import a YCPL module with an alias"
+  },
+  "Import std bytes": {
+    "prefix": "import-bytes",
+    "body": "import \"std/bytes\" as bytes",
+    "description": "Import the std/bytes module"
+  },
+  "Import std hex": {
+    "prefix": "import-hex",
+    "body": "import \"std/hex\" as hex",
+    "description": "Import the std/hex module"
+  },
+  "Import std base64": {
+    "prefix": "import-base64",
+    "body": "import \"std/base64\" as base64",
+    "description": "Import the std/base64 module"
   }
 }
