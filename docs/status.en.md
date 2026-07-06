@@ -176,6 +176,7 @@ stage-2 self-host gate
 ├─ statement-owned expressions now combine local/assignment/call/return semantic roles with parser/resolver-derived type kinds and lower that resolved role/type flow into IR
 ├─ project-wide function signature arity now survives as resolved call-expression arity and is folded into call value/type lowering
 ├─ checker and tinyir now handle YCPL helper function definitions, extern signatures, fixed LLVM function types, and call argument lowering up to eight arguments, with stage1/stage2 self-host gates covering eight-argument calls
+├─ checker and tinyir now accept C-style `main(argc i32, argv *string) i32`; `build-ir-self` lowers the argv pointer parameter into LLVM alloca/store/load IR and verifies the output with the main-args fixture
 ├─ checker helper-function registration/lookup slots now extend to 16, with stage1/stage2 self-host gates covering a call to the ninth helper
 ├─ checker local-variable and i32[3] array backing slots now extend to 16, with stage1/stage2 self-host gates covering array load/store through the ninth local
 ├─ tinyir self-codegen helper/local slots now extend to 16, and build-ir-self gates the ninth helper plus eight-argument helper/extern calls and ninth-local array/index/assignment lowering into LLVM IR

@@ -142,7 +142,7 @@ Transition
    ├─ written in YCPL
    ├─ lexes and parses YCPL sources
    ├─ type-checks a tiny self-codegen subset
-   ├─ emits LLVM IR for i32 main, locals, assignments, zero-through-eight-argument helper/extern calls, arithmetic, and returns
+   ├─ emits LLVM IR for i32 main, C-style main(argc i32, argv *string), locals, assignments, zero-through-eight-argument helper/extern calls, arithmetic, and returns
    ├─ predeclares function signatures so main can call helpers defined later in the file
    ├─ builds that subset to native binary without bootstrap ycc
    ├─ parses/checks compiler/ycpl by traversing src/**/*.yc
@@ -218,6 +218,7 @@ bazel-bin/ycc-ycpl build examples/58_self_codegen_else_helper.yc -o /tmp/ycpl-se
 bazel-bin/ycc-ycpl build examples/59_self_codegen_param_call.yc -o /tmp/ycpl-self-param
 bazel-bin/ycc-ycpl build examples/60_self_codegen_helper_chain.yc -o /tmp/ycpl-self-chain
 bazel-bin/ycc-ycpl build examples/61_self_codegen_two_arg_call.yc -o /tmp/ycpl-self-twoarg
+bazel-bin/ycc-ycpl build-ir-self examples/99_self_codegen_main_args.yc -o /tmp/ycpl-self-main-args
 bazel-bin/ycc-ycpl build examples/62_self_codegen_forward_call.yc -o /tmp/ycpl-self-forward
 bazel-bin/ycc-ycpl parse compiler/ycpl
 bazel-bin/ycc-ycpl check compiler/ycpl
