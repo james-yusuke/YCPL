@@ -150,6 +150,32 @@ pub fn write_local_return_probe(project ProjectResult, out_dir string) NodeIrRes
     final_control := llvm.build_load2(builder, i32_type, control_slot, "final_control_flow")
     llvm.build_ret(builder, final_control)
 
+    switch_fn := llvm.add_function(mod, "ycpl_node_switch_probe", fn_type)
+    switch_entry := llvm.append_basic_block_in_context(ctx, switch_fn, "entry")
+    switch_local_case := llvm.append_basic_block_in_context(ctx, switch_fn, "switch_local_case")
+    switch_return_case := llvm.append_basic_block_in_context(ctx, switch_fn, "switch_return_case")
+    switch_default := llvm.append_basic_block_in_context(ctx, switch_fn, "switch_default")
+    llvm.position_builder_at_end(builder, switch_entry)
+    switch_selector := llvm.const_int(i32_type, project.body_first_node_kind, 1)
+    switch_inst := llvm.build_switch(builder, switch_selector, switch_default, 2)
+    llvm.add_case(switch_inst, llvm.const_int(i32_type, 1, 1), switch_local_case)
+    llvm.add_case(switch_inst, llvm.const_int(i32_type, 4, 1), switch_return_case)
+    if !llvm.current_block_has_terminator(builder) {
+        llvm.build_unreachable(builder)
+    }
+
+    llvm.position_builder_at_end(builder, switch_local_case)
+    switch_local_value := llvm.const_int(i32_type, project.body_local_nodes, 1)
+    llvm.build_ret(builder, switch_local_value)
+
+    llvm.position_builder_at_end(builder, switch_return_case)
+    switch_return_value := llvm.const_int(i32_type, project.body_return_nodes, 1)
+    llvm.build_ret(builder, switch_return_value)
+
+    llvm.position_builder_at_end(builder, switch_default)
+    switch_default_value := llvm.const_int(i32_type, project.body_node_count, 1)
+    llvm.build_ret(builder, switch_default_value)
+
     fn_ref := llvm.add_function(mod, "ycpl_node_local_return_probe", fn_type)
     entry := llvm.append_basic_block_in_context(ctx, fn_ref, "entry")
     llvm.position_builder_at_end(builder, entry)
@@ -176,6 +202,7 @@ pub fn write_local_return_probe(project ProjectResult, out_dir string) NodeIrRes
     loaded_transition_digest := llvm.build_load2(builder, i32_type, transition_digest_slot, "loaded_transition_digest")
     loaded_transitions := llvm.build_call2(builder, fn_type, transition_fn, none, 0, "loaded_transitions")
     loaded_control_flow := llvm.build_call2(builder, fn_type, control_fn, none, 0, "loaded_control_flow")
+    loaded_switch_flow := llvm.build_call2(builder, fn_type, switch_fn, none, 0, "loaded_switch_flow")
     assignment_call_sum := llvm.build_add(builder, loaded_assignments, loaded_calls, "assignment_call_sum")
     local_return_sum := llvm.build_add(builder, loaded_locals, loaded_returns, "local_return_sum")
     node_sequence_sum := llvm.build_add(builder, local_return_sum, assignment_call_sum, "node_sequence_sum")
@@ -183,7 +210,8 @@ pub fn write_local_return_probe(project ProjectResult, out_dir string) NodeIrRes
     node_count_sum := llvm.build_add(builder, node_sequence_sum, node_count, "node_count_sum")
     transition_sum := llvm.build_add(builder, node_count_sum, loaded_transitions, "node_transition_sum")
     control_sum := llvm.build_add(builder, transition_sum, loaded_control_flow, "node_control_sum")
-    total := llvm.build_add(builder, control_sum, loaded_transition_digest, "node_total")
+    switch_sum := llvm.build_add(builder, control_sum, loaded_switch_flow, "node_switch_sum")
+    total := llvm.build_add(builder, switch_sum, loaded_transition_digest, "node_total")
     llvm.build_ret(builder, total)
 
     ir := llvm.print_module_to_string(mod)
