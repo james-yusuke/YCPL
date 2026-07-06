@@ -216,6 +216,16 @@ pub fn function_type6(return_type *byte, param0 *byte, param1 *byte, param2 *byt
     return c_function_type(return_type, &args, 6, is_var_arg)
 }
 
+pub fn function_type7(return_type *byte, param0 *byte, param1 *byte, param2 *byte, param3 *byte, param4 *byte, param5 *byte, param6 *byte, is_var_arg i32) *byte {
+    args := RefArgs16{arg0: param0, arg1: param1, arg2: param2, arg3: param3, arg4: param4, arg5: param5, arg6: param6, arg7: param6, arg8: param6, arg9: param6, arg10: param6, arg11: param6, arg12: param6, arg13: param6, arg14: param6, arg15: param6}
+    return c_function_type(return_type, &args, 7, is_var_arg)
+}
+
+pub fn function_type8(return_type *byte, param0 *byte, param1 *byte, param2 *byte, param3 *byte, param4 *byte, param5 *byte, param6 *byte, param7 *byte, is_var_arg i32) *byte {
+    args := RefArgs16{arg0: param0, arg1: param1, arg2: param2, arg3: param3, arg4: param4, arg5: param5, arg6: param6, arg7: param7, arg8: param7, arg9: param7, arg10: param7, arg11: param7, arg12: param7, arg13: param7, arg14: param7, arg15: param7}
+    return c_function_type(return_type, &args, 8, is_var_arg)
+}
+
 pub fn add_function(mod *byte, name string, function_type *byte) *byte {
     return c_add_function(mod, name, function_type)
 }
@@ -337,6 +347,16 @@ pub fn build_call_args5(builder *byte, function_type *byte, function *byte, arg0
 pub fn build_call_args6(builder *byte, function_type *byte, function *byte, arg0 *byte, arg1 *byte, arg2 *byte, arg3 *byte, arg4 *byte, arg5 *byte, name string) *byte {
     args := RefArgs6{arg0: arg0, arg1: arg1, arg2: arg2, arg3: arg3, arg4: arg4, arg5: arg5}
     return c_build_call2(builder, function_type, function, &args, 6, name)
+}
+
+pub fn build_call_args7(builder *byte, function_type *byte, function *byte, arg0 *byte, arg1 *byte, arg2 *byte, arg3 *byte, arg4 *byte, arg5 *byte, arg6 *byte, name string) *byte {
+    args := RefArgs16{arg0: arg0, arg1: arg1, arg2: arg2, arg3: arg3, arg4: arg4, arg5: arg5, arg6: arg6, arg7: arg6, arg8: arg6, arg9: arg6, arg10: arg6, arg11: arg6, arg12: arg6, arg13: arg6, arg14: arg6, arg15: arg6}
+    return c_build_call2(builder, function_type, function, &args, 7, name)
+}
+
+pub fn build_call_args8(builder *byte, function_type *byte, function *byte, arg0 *byte, arg1 *byte, arg2 *byte, arg3 *byte, arg4 *byte, arg5 *byte, arg6 *byte, arg7 *byte, name string) *byte {
+    args := RefArgs16{arg0: arg0, arg1: arg1, arg2: arg2, arg3: arg3, arg4: arg4, arg5: arg5, arg6: arg6, arg7: arg7, arg8: arg7, arg9: arg7, arg10: arg7, arg11: arg7, arg12: arg7, arg13: arg7, arg14: arg7, arg15: arg7}
+    return c_build_call2(builder, function_type, function, &args, 8, name)
 }
 
 pub fn build_struct_gep2(builder *byte, type_ref *byte, pointer *byte, index i32, name string) *byte {

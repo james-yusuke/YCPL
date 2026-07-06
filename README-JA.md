@@ -142,7 +142,7 @@ cd examples/04_module_project && ../../bazel-bin/ycc build
    ├─ YCPL で実装
    ├─ YCPL source を lex/parse
    ├─ 小さな self-codegen subset を型検査
-   ├─ i32 main、local、assignment、複数の 0/1/2 引数 i32 helper call、arithmetic、return は LLVM IR を直接生成
+   ├─ i32 main、local、assignment、0〜8 引数の helper/extern call、arithmetic、return は LLVM IR を直接生成
    ├─ function signature を先に宣言し、main から後続 helper を呼べる
    ├─ その subset は bootstrap ycc なしで native binary まで生成
    ├─ src/**/*.yc traversal で compiler/ycpl を parse/check
@@ -232,7 +232,7 @@ YCPL_NO_BOOTSTRAP=1 bazel-bin/ycc-ycpl build compiler/ycpl -o /tmp/ycpl-strict-n
 stage-2 gate
 ├─ compiler/ycpl project parse/check は ycc-ycpl 側で処理
 ├─ src/ast や src/codegen のような nested source folder は src/**/*.yc traversal で検出
-├─ tiny arithmetic/call/control-flow/else-helper/1 引数 i32 helper-call/multi-helper chain/2 引数 helper-call/forward helper-call build は YCPL_NO_BOOTSTRAP=1 で実行可能
+├─ tiny arithmetic/call/control-flow/else-helper/helper-call/extern-call build は、8 引数 call を含めて YCPL_NO_BOOTSTRAP=1 で実行可能
 ├─ project build-ir は bootstrap fallback なしで実行
 ├─ project build-ir は LLVM C API wrapper 経由で local_return.ll と project_body.ll を生成
 ├─ merged.ll は local、assignment、call、return、transition、if/for control flow 用の LLVM-wrapper-generated node probe を含む
