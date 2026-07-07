@@ -988,6 +988,8 @@ grep -q '@.stage3.stage4.ir' "$strict_stage3_ir_dir/merged.ll"
 grep -q 'LLVM_CONFIG' "$strict_stage3_ir_dir/merged.ll"
 grep -q 'PATH=/opt/homebrew/opt/llvm/bin' "$strict_stage3_ir_dir/merged.ll"
 grep -q '/usr/lib/llvm-22/bin' "$strict_stage3_ir_dir/merged.ll"
+grep -q '@.stage3.tinystdbase64.ir' "$strict_stage3_ir_dir/merged.ll"
+grep -q '@.stage3.tinystdbytes.ir' "$strict_stage3_ir_dir/merged.ll"
 grep -q '@.stage3.tinyllvmcall2icmp.ir' "$strict_stage3_ir_dir/merged.ll"
 grep -q '@.stage3.tinyllvmbuildermemory.ir' "$strict_stage3_ir_dir/merged.ll"
 grep -q '@.stage3.tinyllvmfunctiontype.ir' "$strict_stage3_ir_dir/merged.ll"
@@ -1392,6 +1394,19 @@ if [ -n "$LLC_BIN" ]; then
   grep -q 'alloca ptr' "$strict_stage3_main_args_ir_dir/merged.ll"
   grep -q 'store ptr %argv' "$strict_stage3_main_args_ir_dir/merged.ll"
   grep -q 'ret i32 13' "$strict_stage3_main_args_ir_dir/merged.ll"
+  strict_stage3_std_bytes_ir_dir="$(mktemp -d "${TMPDIR:-/tmp}/ycpl-strict-stage3-std-bytes-ir.XXXXXX")"
+  "$strict_stage3_native_dir/merged" build-ir examples/102_std_bytes_hex_hash.yc -o "$strict_stage3_std_bytes_ir_dir" >/tmp/ycpl-strict-stage3-std-bytes-ir.out
+  grep -q 'YCPL tiny std bytes/hex/hash stage IR' "$strict_stage3_std_bytes_ir_dir/merged.ll"
+  grep -q '@.tiny.std.bytes.out' "$strict_stage3_std_bytes_ir_dir/merged.ll"
+  grep -q 'declare i32 @printf' "$strict_stage3_std_bytes_ir_dir/merged.ll"
+  grep -q '1041946889' "$strict_stage3_std_bytes_ir_dir/merged.ll"
+  grep -q '541916226' "$strict_stage3_std_bytes_ir_dir/merged.ll"
+  strict_stage3_std_base64_ir_dir="$(mktemp -d "${TMPDIR:-/tmp}/ycpl-strict-stage3-std-base64-ir.XXXXXX")"
+  "$strict_stage3_native_dir/merged" build-ir examples/103_std_base64.yc -o "$strict_stage3_std_base64_ir_dir" >/tmp/ycpl-strict-stage3-std-base64-ir.out
+  grep -q 'YCPL tiny std base64 stage IR' "$strict_stage3_std_base64_ir_dir/merged.ll"
+  grep -q '@.tiny.std.base64.out' "$strict_stage3_std_base64_ir_dir/merged.ll"
+  grep -q 'declare i32 @printf' "$strict_stage3_std_base64_ir_dir/merged.ll"
+  grep -q 'Zm9vYg==' "$strict_stage3_std_base64_ir_dir/merged.ll"
   strict_stage3_array_ir_dir="$(mktemp -d "${TMPDIR:-/tmp}/ycpl-strict-stage3-array-ir.XXXXXX")"
   "$strict_stage3_native_dir/merged" build-ir examples/81_self_codegen_array_index.yc -o "$strict_stage3_array_ir_dir" >/tmp/ycpl-strict-stage3-array-ir.out
   grep -q 'YCPL tiny array index stage IR' "$strict_stage3_array_ir_dir/merged.ll"
@@ -1751,6 +1766,26 @@ if [ -n "$LLC_BIN" ]; then
   set -e
   if [ "$strict_stage3_main_args_status" -ne 13 ]; then
     printf 'Expected strict stage3 generated compiler main-args native to exit 13, got %d\n' "$strict_stage3_main_args_status" >&2
+    exit 1
+  fi
+  strict_stage3_std_bytes_native_dir="$(mktemp -d "${TMPDIR:-/tmp}/ycpl-strict-stage3-std-bytes-native.XXXXXX")"
+  LLVM_BINDIR="$(dirname "$LLC_BIN")" "$strict_stage3_native_dir/merged" build examples/102_std_bytes_hex_hash.yc -o "$strict_stage3_std_bytes_native_dir" >/tmp/ycpl-strict-stage3-std-bytes-native.out
+  strict_stage3_std_bytes_output="$("$strict_stage3_std_bytes_native_dir/merged")"
+  strict_stage3_std_bytes_expected=$'4\n89\nYCPL\nY\n120\n1\n5943504c\n1\n1041946889\n541916226'
+  if [ "$strict_stage3_std_bytes_output" != "$strict_stage3_std_bytes_expected" ]; then
+    printf 'Expected strict stage3 generated compiler std bytes output mismatch\n' >&2
+    printf 'Expected:\n%s\n' "$strict_stage3_std_bytes_expected" >&2
+    printf 'Got:\n%s\n' "$strict_stage3_std_bytes_output" >&2
+    exit 1
+  fi
+  strict_stage3_std_base64_native_dir="$(mktemp -d "${TMPDIR:-/tmp}/ycpl-strict-stage3-std-base64-native.XXXXXX")"
+  LLVM_BINDIR="$(dirname "$LLC_BIN")" "$strict_stage3_native_dir/merged" build examples/103_std_base64.yc -o "$strict_stage3_std_base64_native_dir" >/tmp/ycpl-strict-stage3-std-base64-native.out
+  strict_stage3_std_base64_output="$("$strict_stage3_std_base64_native_dir/merged")"
+  strict_stage3_std_base64_expected=$'\nZg==\n1\nZm8=\n1\nZm9v\n1\nZm9vYg==\n1'
+  if [ "$strict_stage3_std_base64_output" != "$strict_stage3_std_base64_expected" ]; then
+    printf 'Expected strict stage3 generated compiler std base64 output mismatch\n' >&2
+    printf 'Expected:\n%s\n' "$strict_stage3_std_base64_expected" >&2
+    printf 'Got:\n%s\n' "$strict_stage3_std_base64_output" >&2
     exit 1
   fi
 
