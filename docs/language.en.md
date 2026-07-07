@@ -31,8 +31,8 @@ top-level statement     -> rejected by codegen
 Identifiers start with a letter or `_`, followed by letters, digits, or `_`.
 
 ```text
-module package import pub extern intrinsic fn struct enum type const
-if else for in switch case default return break continue as
+module package import pub extern intrinsic fn struct enum type const owned
+if else for in switch case default return break continue defer scope as
 true false none byte
 ```
 
@@ -97,6 +97,7 @@ Types
 ├─ primitive: i32 i64 bool char byte string float double void size_t
 ├─ pointer:   *T
 ├─ slice:     []T
+├─ owned:     owned T
 ├─ alias:     type Score = i32
 ├─ enum:      enum Color { Red, Green }
 └─ nested:    [][]T
@@ -104,6 +105,8 @@ Types
 
 Runtime slices use `{ data, len, cap, elem_size }` and are manually managed
 when created by `std/array`.
+In the bootstrap C++ compiler, `owned T` is accepted as an ownership-intent type
+qualifier and currently has the same ABI as `T`.
 
 ```YCPL
 enum Color {
@@ -175,3 +178,20 @@ switch color {
 `switch` uses `switch expression { case expression { ... } default { ... } }`.
 The self-host checker/codegen path currently leads with i32 selectors and
 integer literal cases.
+
+## defer, scope, and UFCS
+
+The bootstrap C++ compiler supports `defer`. `defer expr` or `defer { ... }`
+runs just before the current function exits, in LIFO order.
+
+```YCPL
+b: owned Bytes := bytes.from_string("YCPL")
+defer b.free()
+```
+
+`scope name { ... }` is a named lexical scope for making temporary work regions
+explicit.
+
+When exactly one imported module exposes a matching public function,
+`value.method(x)` is treated as `module.method(value, x)`. For example,
+`b.free()` is sugar for `bytes.free(b)`.

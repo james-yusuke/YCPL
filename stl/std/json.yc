@@ -9,12 +9,12 @@ pub struct JsonValue {
     source string
     start i32
     end i32
-    owned bool
+    owns bool
     message string
 }
 
 pub fn invalid_value(message string) JsonValue {
-    return JsonValue{kind: -1, source: none, start: 0, end: 0, owned: false, message: message}
+    return JsonValue{kind: -1, source: none, start: 0, end: 0, owns: false, message: message}
 }
 
 pub fn skip_ws(message string, i i32) i32 {
@@ -138,14 +138,14 @@ fn value_end(source string, start i32) i32 {
     return i
 }
 
-fn make_view(source string, start i32, end_pos i32, owned bool) JsonValue {
+fn make_view(source string, start i32, end_pos i32, should_own bool) JsonValue {
     real_start := skip_ws(source, start)
     k := value_kind_at(source, real_start)
     if k < 0 || end_pos < real_start {
         return invalid_value("invalid JSON value")
     }
 
-    return JsonValue{kind: k, source: source, start: real_start, end: end_pos, owned: owned, message: ""}
+    return JsonValue{kind: k, source: source, start: real_start, end: end_pos, owns: should_own, message: ""}
 }
 
 pub fn parse(source string) JsonValue {
@@ -430,7 +430,7 @@ pub fn len(value JsonValue) i32 {
 }
 
 pub fn free(value JsonValue) {
-    if value.owned && value.source != none {
+    if value.owns && value.source != none {
         mem.free(value.source)
     }
 }

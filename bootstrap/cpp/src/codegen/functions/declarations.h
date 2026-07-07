@@ -166,6 +166,7 @@ Function *CodeGen::codegen_function_decl(const ast::FuncDecl *funcDecl)
 {
     if (!funcDecl)
         return nullptr;
+    deferred_stmts.clear();
 
     if (funcDecl->is_intrinsic)
     {
@@ -328,6 +329,7 @@ Function *CodeGen::codegen_function_decl(const ast::FuncDecl *funcDecl)
     {
         if (!currentBB->getTerminator())
         {
+            emit_deferred_statements();
             if (returnType->isVoidTy())
                 builder.CreateRetVoid();
             else if (main_implicit_i32)
@@ -345,10 +347,12 @@ Function *CodeGen::codegen_function_decl(const ast::FuncDecl *funcDecl)
         error("function verification failed: " + llvmName);
         functionValue->eraseFromParent();
         pop_scope();
+        deferred_stmts.clear();
         return nullptr;
     }
 
     pop_scope();
+    deferred_stmts.clear();
     return functionValue;
 }
 

@@ -21,6 +21,23 @@ namespace codegen
             locals_stack_const.pop_back();
     }
 
+    void CodeGen::emit_deferred_statements()
+    {
+        if (emitting_deferred)
+            return;
+        if (!builder.GetInsertBlock() || builder.GetInsertBlock()->getTerminator())
+            return;
+
+        emitting_deferred = true;
+        for (int i = static_cast<int>(deferred_stmts.size()) - 1; i >= 0; --i)
+        {
+            const ast::Stmt *stmt = deferred_stmts[static_cast<size_t>(i)];
+            if (stmt && !builder.GetInsertBlock()->getTerminator())
+                codegen_stmt(stmt);
+        }
+        emitting_deferred = false;
+    }
+
     void CodeGen::bind_local(const std::string &name, const std::string type, llvm::Value *v)
     {
         bind_local_const(name, type, v, false);

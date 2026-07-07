@@ -133,11 +133,11 @@
       "patterns": [
         {
           "name": "keyword.control.ycpl",
-          "match": "\\b(module|package|import|if|else|for|in|switch|case|default|return|break|continue|as)\\b"
+          "match": "\\b(module|package|import|if|else|for|in|switch|case|default|return|break|continue|defer|scope|as)\\b"
         },
         {
           "name": "keyword.declaration.ycpl",
-          "match": "\\b(pub|extern|intrinsic|fn|struct|enum|type|const|mut)\\b"
+          "match": "\\b(pub|extern|intrinsic|fn|struct|enum|type|const|owned|mut)\\b"
         },
         {
           "name": "constant.language.ycpl",

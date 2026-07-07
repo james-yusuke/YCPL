@@ -47,6 +47,8 @@ namespace codegen
         std::vector<std::map<std::string, bool>> locals_stack_const;
         std::unordered_map<std::string, llvm::Type *> localPointedType;
         std::unordered_map<std::string, llvm::Type *> globalPointedType;
+        std::vector<const ast::Stmt *> deferred_stmts;
+        bool emitting_deferred = false;
 
         // Function and loop state shared by expression/statement lowering.
         std::map<std::string, llvm::Function *> function_protos;
@@ -142,6 +144,8 @@ namespace codegen
         llvm::Value *codegen_new_call(const ast::CallExpr *ce);
         llvm::Value *codegen_assign(const ast::AssignStmt *as);
         llvm::Value *codegen_vardecl(const ast::VarDecl *vd);
+        llvm::Value *codegen_defer(const ast::DeferStmt *ds);
+        llvm::Value *codegen_scope_stmt(const ast::ScopeStmt *ss);
         llvm::Value *codegen_c_style_for_loop(const ast::ForCStyleStmt *forStmt);
 
         // Type and function lowering.
@@ -168,6 +172,7 @@ namespace codegen
         std::string *lookup_local_type(const std::string &name);
         std::string infer_expr_type_name(const ast::Expr *expr);
         bool is_local_const(const std::string &name);
+        void emit_deferred_statements();
 
         void predeclare_functions(const std::vector<const ast::FuncDecl *> &funcs);
         llvm::Function *get_or_declare_c_function(const std::string &name);

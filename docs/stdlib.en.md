@@ -34,6 +34,24 @@ std/
 └─ llvm   LLVM C API bridge
 ```
 
+## std2 Experimental Library
+
+`stl/std2/<module>/index.yc` contains a folder-based standard-library candidate,
+similar to Go's `src/fmt` layout. It is separate from the existing `stl/std`.
+Modules such as `std2/base32`, `std2/base64`, `std2/bytes`, `std2/hex`, and
+`std2/hash` can be imported with paths like `import "std2/base32" as base32`.
+
+```YCPL
+b: owned Bytes := bytes.from_string("YCPL")
+defer b.free()
+
+encoded := base32.encode(b)
+decoded := base32.decode(encoded)
+defer decoded.free()
+
+fmt.println(b.eq(decoded))
+```
+
 | Module | Source |
 |---|---|
 | `std/fmt` | `stl/std/fmt.yc` |
@@ -69,7 +87,7 @@ json.parse(text)
     -> json.free(root)
 
 bytes.from_string(text)
-    -> Bytes { data, len, cap, owned }
+    -> Bytes { data, len, cap, owns }
     -> bytes.to_string / bytes.byte_to_string
     -> hex.encode / base64.encode / hash.crc32
     -> bytes.free

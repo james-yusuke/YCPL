@@ -1,0 +1,267 @@
+module std2.bytes
+
+import "std2/mem" as mem
+
+pub struct Bytes {
+    data string
+    len i32
+    cap i32
+    owns bool
+}
+
+fn invalid() Bytes {
+    return Bytes{data: none, len: 0, cap: 0, owns: false}
+}
+
+fn strlen_local(s string) i32 {
+    if s == none {
+        return 0
+    }
+
+    i: i32 := 0
+    for (; s[i] != 0; i++) {
+    }
+    return i
+}
+
+fn ensure_cap(b Bytes, needed i32) Bytes {
+    if needed <= b.cap {
+        return b
+    }
+
+    next := b.cap
+    if next < 1 {
+        next = 1
+    }
+    for (; next < needed; ) {
+        next = next * 2
+    }
+
+    if b.data == none {
+        data: string := mem.calloc(next + 1, 1)
+        return Bytes{data: data, len: b.len, cap: next, owns: true}
+    }
+
+    if b.owns {
+        data: string := mem.realloc(b.data, next + 1)
+        data[next] = 0
+        return Bytes{data: data, len: b.len, cap: next, owns: true}
+    }
+
+    data: string := mem.calloc(next + 1, 1)
+    i: i32 := 0
+    for (; i < b.len; i++) {
+        data[i] = b.data[i]
+    }
+    return Bytes{data: data, len: b.len, cap: next, owns: true}
+}
+
+pub fn new(cap i32) Bytes {
+    if cap < 0 {
+        return invalid()
+    }
+
+    data: string := mem.calloc(cap + 1, 1)
+    return Bytes{data: data, len: 0, cap: cap, owns: true}
+}
+
+pub fn empty() Bytes {
+    return new(0)
+}
+
+pub fn is_valid(b Bytes) bool {
+    return b.data != none
+}
+
+pub fn is_empty(b Bytes) bool {
+    return b.len == 0
+}
+
+pub fn wrap(data string, len i32) Bytes {
+    if data == none || len < 0 {
+        return invalid()
+    }
+
+    return Bytes{data: data, len: len, cap: len, owns: false}
+}
+
+pub fn from_string(text string) Bytes {
+    n := strlen_local(text)
+    out := new(n)
+    i: i32 := 0
+    for (; i < n; i++) {
+        out.data[i] = text[i]
+    }
+    out.len = n
+    return out
+}
+
+pub fn to_string(b Bytes) string {
+    if b.data == none {
+        return none
+    }
+
+    out: string := mem.calloc(b.len + 1, 1)
+    i: i32 := 0
+    for (; i < b.len; i++) {
+        out[i] = b.data[i]
+    }
+    return out
+}
+
+pub fn byte_to_string(value i32) string {
+    out: string := mem.calloc(2, 1)
+    out[0] = value & 255
+    return out
+}
+
+pub fn free(b Bytes) {
+    if b.owns && b.data != none {
+        mem.free(b.data)
+    }
+}
+
+pub fn get(b Bytes, index i32) i32 {
+    if b.data == none || index < 0 || index >= b.len {
+        return 0
+    }
+
+    return b.data[index] & 255
+}
+
+pub fn set(b Bytes, index i32, value i32) {
+    if b.data == none || index < 0 || index >= b.len {
+        return
+    }
+
+    b.data[index] = value & 255
+}
+
+pub fn append(b Bytes, value i32) Bytes {
+    out := ensure_cap(b, b.len + 1)
+    out.data[out.len] = value & 255
+    out.len += 1
+    out.data[out.len] = 0
+    return out
+}
+
+pub fn reserve(b Bytes, cap i32) Bytes {
+    if cap < 0 {
+        return invalid()
+    }
+
+    return ensure_cap(b, cap)
+}
+
+pub fn clear(b Bytes) Bytes {
+    if b.data != none {
+        b.data[0] = 0
+    }
+    b.len = 0
+    return b
+}
+
+pub fn append_string(b Bytes, text string) Bytes {
+    n := strlen_local(text)
+    out := ensure_cap(b, b.len + n)
+
+    i: i32 := 0
+    for (; i < n; i++) {
+        out.data[out.len] = text[i]
+        out.len += 1
+    }
+    out.data[out.len] = 0
+    return out
+}
+
+pub fn concat(a Bytes, b Bytes) Bytes {
+    out := new(a.len + b.len)
+
+    i: i32 := 0
+    for (; i < a.len; i++) {
+        out = append(out, get(a, i))
+    }
+
+    j: i32 := 0
+    for (; j < b.len; j++) {
+        out = append(out, get(b, j))
+    }
+
+    return out
+}
+
+pub fn slice(b Bytes, start i32, count i32) Bytes {
+    if b.data == none || start < 0 || count < 0 || start + count > b.len {
+        return invalid()
+    }
+
+    out := new(count)
+    i: i32 := 0
+    for (; i < count; i++) {
+        out.data[i] = b.data[start + i]
+    }
+    out.len = count
+    return out
+}
+
+pub fn clone(b Bytes) Bytes {
+    return slice(b, 0, b.len)
+}
+
+pub fn eq(a Bytes, b Bytes) bool {
+    if a.len != b.len {
+        return false
+    }
+    if a.data == none || b.data == none {
+        return a.data == b.data
+    }
+
+    i: i32 := 0
+    for (; i < a.len; i++) {
+        if (a.data[i] & 255) != (b.data[i] & 255) {
+            return false
+        }
+    }
+
+    return true
+}
+
+pub fn starts_with(b Bytes, prefix Bytes) bool {
+    if prefix.len > b.len {
+        return false
+    }
+
+    i: i32 := 0
+    for (; i < prefix.len; i++) {
+        if get(b, i) != get(prefix, i) {
+            return false
+        }
+    }
+
+    return true
+}
+
+pub fn index_of_byte(b Bytes, value i32) i32 {
+    needle := value & 255
+
+    i: i32 := 0
+    for (; i < b.len; i++) {
+        if get(b, i) == needle {
+            return i
+        }
+    }
+
+    return -1
+}
+
+pub fn fill(b Bytes, value i32) {
+    if b.data == none {
+        return
+    }
+
+    fill_value := value & 255
+    i: i32 := 0
+    for (; i < b.len; i++) {
+        b.data[i] = fill_value
+    }
+}

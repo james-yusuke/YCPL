@@ -433,6 +433,36 @@ namespace path
             return std::make_unique<ReturnStmt>(std::move(expr));
         }
 
+        if (check(TokenType::KW_DEFER))
+        {
+            advance();
+            std::unique_ptr<Stmt> deferred;
+            if (check(TokenType::LBRACE))
+            {
+                deferred = parse_block();
+            }
+            else
+            {
+                auto expr = parse_expression();
+                match(TokenType::NEWLINE);
+                deferred = std::make_unique<ExprStmt>(std::move(expr));
+            }
+            return std::make_unique<DeferStmt>(std::move(deferred));
+        }
+
+        if (check(TokenType::KW_SCOPE))
+        {
+            advance();
+            std::string name;
+            if (check(TokenType::IDENT) && lexer.peek(1).type == TokenType::LBRACE)
+            {
+                name = cur.lexeme;
+                advance();
+            }
+            auto body = parse_block();
+            return std::make_unique<ScopeStmt>(std::move(name), std::move(body));
+        }
+
         if (check(TokenType::KW_IF))
         {
             advance();
@@ -1336,6 +1366,8 @@ namespace path
 
     std::unique_ptr<ast::Type> Parser::parse_type()
     {
+        while (check(TokenType::IDENT) && cur.lexeme == "owned")
+            advance();
 
         std::string ptr_prefix;
         while (check(TokenType::DEREF) || check(TokenType::ADDRESS_OF))

@@ -96,7 +96,14 @@ pub fn merge(left SymbolScan, right SymbolScan) SymbolScan {
 }
 
 fn is_std_import_path(path string) bool {
-    return path[0] == '"' && path[1] == 's' && path[2] == 't' && path[3] == 'd' && path[4] == '/'
+    n := str.len(path)
+    if n >= 6 && path[0] == '"' && path[1] == 's' && path[2] == 't' && path[3] == 'd' && path[4] == '/' {
+        return true
+    }
+    if n >= 7 && path[0] == '"' && path[1] == 's' && path[2] == 't' && path[3] == 'd' && path[4] == '2' && path[5] == '/' {
+        return true
+    }
+    return false
 }
 
 fn is_relative_import_path(path string) bool {
@@ -109,7 +116,6 @@ fn is_type_token(kind i32) bool {
 
 fn is_removed_keyword(lexeme string) bool {
     if str.eq(lexeme, "go") { return true }
-    if str.eq(lexeme, "defer") { return true }
     if str.eq(lexeme, "select") { return true }
     if str.eq(lexeme, "interface") { return true }
     if str.eq(lexeme, "is") { return true }

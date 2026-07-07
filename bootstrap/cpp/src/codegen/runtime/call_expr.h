@@ -7,31 +7,40 @@ namespace codegen
 
 static bool is_YCPL_std_intrinsic(const std::string &name)
 {
-    return name.rfind("__YCPL_std__", 0) == 0;
+    return name.rfind("__YCPL_std__", 0) == 0 || name.rfind("__YCPL_std2__", 0) == 0;
+}
+
+static std::string canonical_YCPL_std_intrinsic(const std::string &name)
+{
+    if (name.rfind("__YCPL_std2__", 0) == 0)
+        return "__YCPL_std__" + name.substr(std::string("__YCPL_std2__").size());
+    return name;
 }
 
 Value *CodeGen::codegen_std_intrinsic_call(const std::string &name, const ast::CallExpr *ce)
 {
-    if (name == "__YCPL_std__fmt_println")
+    const std::string canonical = canonical_YCPL_std_intrinsic(name);
+
+    if (canonical == "__YCPL_std__fmt_println")
         return codegen_println_call(ce);
 
-    if (name == "__YCPL_std__fmt_printf")
+    if (canonical == "__YCPL_std__fmt_printf")
         return codegen_printf_call(ce);
 
-    if (name == "__YCPL_std__fmt_print")
+    if (canonical == "__YCPL_std__fmt_print")
         return codegen_print_call(ce);
 
-    if (name.rfind("__YCPL_std__array_", 0) == 0)
-        return codegen_array_intrinsic_call(name, ce);
+    if (canonical.rfind("__YCPL_std__array_", 0) == 0)
+        return codegen_array_intrinsic_call(canonical, ce);
 
-    if (name.rfind("__YCPL_std__mem_", 0) == 0)
-        return codegen_memory_intrinsic_call(name, ce);
+    if (canonical.rfind("__YCPL_std__mem_", 0) == 0)
+        return codegen_memory_intrinsic_call(canonical, ce);
 
-    if (name.rfind("__YCPL_std__str_", 0) == 0)
-        return codegen_string_intrinsic_call(name, ce);
+    if (canonical.rfind("__YCPL_std__str_", 0) == 0)
+        return codegen_string_intrinsic_call(canonical, ce);
 
-    if (name.rfind("__YCPL_std__math_", 0) == 0)
-        return codegen_math_intrinsic_call(name, ce);
+    if (canonical.rfind("__YCPL_std__math_", 0) == 0)
+        return codegen_math_intrinsic_call(canonical, ce);
 
     error("unknown std intrinsic: " + name);
     return nullptr;
