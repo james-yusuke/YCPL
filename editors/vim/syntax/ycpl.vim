@@ -5,10 +5,10 @@ endif
 syn case match
 
 syn keyword ycplKeyword module package import as pub extern intrinsic fn
-syn keyword ycplKeyword struct enum interface const mut
+syn keyword ycplKeyword struct enum interface const mut owned
 syn keyword ycplConditional if else match switch
 syn keyword ycplRepeat for in break continue
-syn keyword ycplStatement return go defer select
+syn keyword ycplStatement return go defer scope select
 syn keyword ycplOperator is or
 syn keyword ycplConstant true false none
 syn keyword ycplTodo TODO FIXME NOTE contained

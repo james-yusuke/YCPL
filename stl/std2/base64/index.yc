@@ -1,0 +1,307 @@
+module std2.base64
+
+import "std2/bytes" as bytes
+import "std2/mem" as mem
+import "std2/str" as str
+
+fn alphabet(index i32) i32 {
+    if index < 26 {
+        return 'A' + index
+    }
+    if index < 52 {
+        return 'a' + (index - 26)
+    }
+    if index < 62 {
+        return '0' + (index - 52)
+    }
+    if index == 62 {
+        return '+'
+    }
+    return '/'
+}
+
+fn alphabet_url(index i32) i32 {
+    if index < 26 {
+        return 'A' + index
+    }
+    if index < 52 {
+        return 'a' + (index - 26)
+    }
+    if index < 62 {
+        return '0' + (index - 52)
+    }
+    if index == 62 {
+        return '-'
+    }
+    return '_'
+}
+
+fn value_of(ch i32) i32 {
+    if ch >= 'A' && ch <= 'Z' {
+        return ch - 'A'
+    }
+    if ch >= 'a' && ch <= 'z' {
+        return 26 + ch - 'a'
+    }
+    if ch >= '0' && ch <= '9' {
+        return 52 + ch - '0'
+    }
+    if ch == '+' {
+        return 62
+    }
+    if ch == '/' {
+        return 63
+    }
+    return -1
+}
+
+fn value_of_url(ch i32) i32 {
+    if ch >= 'A' && ch <= 'Z' {
+        return ch - 'A'
+    }
+    if ch >= 'a' && ch <= 'z' {
+        return 26 + ch - 'a'
+    }
+    if ch >= '0' && ch <= '9' {
+        return 52 + ch - '0'
+    }
+    if ch == '-' {
+        return 62
+    }
+    if ch == '_' {
+        return 63
+    }
+    return -1
+}
+
+pub fn encoded_len(byte_len i32) i32 {
+    if byte_len <= 0 {
+        return 0
+    }
+
+    return ((byte_len + 2) / 3) * 4
+}
+
+pub fn decoded_len(text string) i32 {
+    n: i32 := str.len(text)
+    if n == 0 {
+        return 0
+    }
+    if n % 4 != 0 {
+        return -1
+    }
+
+    pad := 0
+    if text[n - 1] == '=' {
+        pad += 1
+    }
+    if text[n - 2] == '=' {
+        pad += 1
+    }
+
+    return (n / 4) * 3 - pad
+}
+
+pub fn encode(b Bytes) string {
+    out_len := encoded_len(b.len)
+    out: string := mem.calloc(out_len + 1, 1)
+    at: i32 := 0
+
+    i: i32 := 0
+    for (; i < b.len; ) {
+        b0 := bytes.get(b, i)
+        b1 := 0
+        b2 := 0
+        have1 := i + 1 < b.len
+        have2 := i + 2 < b.len
+        if have1 {
+            b1 = bytes.get(b, i + 1)
+        }
+        if have2 {
+            b2 = bytes.get(b, i + 2)
+        }
+
+        triple := (b0 << 16) | (b1 << 8) | b2
+        out[at] = alphabet((triple >> 18) & 63)
+        out[at + 1] = alphabet((triple >> 12) & 63)
+        if have1 {
+            out[at + 2] = alphabet((triple >> 6) & 63)
+        } else {
+            out[at + 2] = '='
+        }
+        if have2 {
+            out[at + 3] = alphabet(triple & 63)
+        } else {
+            out[at + 3] = '='
+        }
+        at += 4
+        i = i + 3
+    }
+
+    return out
+}
+
+pub fn encode_url(b Bytes) string {
+    out_len := encoded_len(b.len)
+    out: string := mem.calloc(out_len + 1, 1)
+    at: i32 := 0
+
+    i: i32 := 0
+    for (; i < b.len; ) {
+        b0 := bytes.get(b, i)
+        b1 := 0
+        b2 := 0
+        have1 := i + 1 < b.len
+        have2 := i + 2 < b.len
+        if have1 {
+            b1 = bytes.get(b, i + 1)
+        }
+        if have2 {
+            b2 = bytes.get(b, i + 2)
+        }
+
+        triple := (b0 << 16) | (b1 << 8) | b2
+        out[at] = alphabet_url((triple >> 18) & 63)
+        out[at + 1] = alphabet_url((triple >> 12) & 63)
+        if have1 {
+            out[at + 2] = alphabet_url((triple >> 6) & 63)
+        } else {
+            out[at + 2] = '='
+        }
+        if have2 {
+            out[at + 3] = alphabet_url(triple & 63)
+        } else {
+            out[at + 3] = '='
+        }
+        at += 4
+        i = i + 3
+    }
+
+    return out
+}
+
+pub fn decode(text string) Bytes {
+    n: i32 := str.len(text)
+    if n == 0 {
+        return bytes.new(0)
+    }
+    if n % 4 != 0 {
+        return bytes.wrap(none, 0)
+    }
+
+    pad := 0
+    if text[n - 1] == '=' {
+        pad += 1
+    }
+    if text[n - 2] == '=' {
+        pad += 1
+    }
+
+    out_len := (n / 4) * 3 - pad
+    out := bytes.new(out_len)
+    produced: i32 := 0
+
+    i: i32 := 0
+    for (; i < n; ) {
+        c0 := value_of(text[i])
+        c1 := value_of(text[i + 1])
+        c2 := 0
+        c3 := 0
+        if text[i + 2] != '=' {
+            c2 = value_of(text[i + 2])
+        }
+        if text[i + 3] != '=' {
+            c3 = value_of(text[i + 3])
+        }
+
+        if c0 < 0 || c1 < 0 || c2 < 0 || c3 < 0 {
+            bytes.free(out)
+            return bytes.wrap(none, 0)
+        }
+
+        triple := (c0 << 18) | (c1 << 12) | (c2 << 6) | c3
+        if produced < out_len {
+            out = bytes.append(out, (triple >> 16) & 255)
+            produced += 1
+        }
+        if produced < out_len {
+            out = bytes.append(out, (triple >> 8) & 255)
+            produced += 1
+        }
+        if produced < out_len {
+            out = bytes.append(out, triple & 255)
+            produced += 1
+        }
+        i = i + 4
+    }
+
+    return out
+}
+
+pub fn decode_url(text string) Bytes {
+    n: i32 := str.len(text)
+    if n == 0 {
+        return bytes.new(0)
+    }
+    if n % 4 != 0 {
+        return bytes.wrap(none, 0)
+    }
+
+    out_len := decoded_len(text)
+    if out_len < 0 {
+        return bytes.wrap(none, 0)
+    }
+
+    out := bytes.new(out_len)
+    produced: i32 := 0
+
+    i: i32 := 0
+    for (; i < n; ) {
+        c0 := value_of_url(text[i])
+        c1 := value_of_url(text[i + 1])
+        c2 := 0
+        c3 := 0
+        if text[i + 2] != '=' {
+            c2 = value_of_url(text[i + 2])
+        }
+        if text[i + 3] != '=' {
+            c3 = value_of_url(text[i + 3])
+        }
+
+        if c0 < 0 || c1 < 0 || c2 < 0 || c3 < 0 {
+            bytes.free(out)
+            return bytes.wrap(none, 0)
+        }
+
+        triple := (c0 << 18) | (c1 << 12) | (c2 << 6) | c3
+        if produced < out_len {
+            out = bytes.append(out, (triple >> 16) & 255)
+            produced += 1
+        }
+        if produced < out_len {
+            out = bytes.append(out, (triple >> 8) & 255)
+            produced += 1
+        }
+        if produced < out_len {
+            out = bytes.append(out, triple & 255)
+            produced += 1
+        }
+        i = i + 4
+    }
+
+    return out
+}
+
+pub fn is_valid(text string) bool {
+    out := decode(text)
+    ok := bytes.is_valid(out)
+    bytes.free(out)
+    return ok
+}
+
+pub fn is_valid_url(text string) bool {
+    out := decode_url(text)
+    ok := bytes.is_valid(out)
+    bytes.free(out)
+    return ok
+}

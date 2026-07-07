@@ -18,6 +18,7 @@ stable
 ├─ functions: fn, extern fn, main
 ├─ data: structs, pointers, slices, none
 ├─ flow: if/else, for, for-in, break/continue
+├─ lifetime sugar: defer, scope, owned type marker, UFCS method calls
 ├─ std: fmt, array, mem, str, math, io, fs, os, text, json, map
 └─ tooling: examples, YCPL LSP v0.4, C++ bootstrap ycc
 ```
@@ -190,12 +191,14 @@ stage-2 self-host gate
 ## 追加済みの構文と制限
 
 ```text
-enum switch type
+enum switch type defer scope owned UFCS std2/base32
 ```
 
 ```text
 syntax support
-├─ bootstrap parser/codegen は enum、type alias、switch/case/default を扱う
+├─ bootstrap parser/codegen は enum、type alias、switch/case/default、defer、scope、owned type marker を扱う
+├─ bootstrap module resolver は一意な imported public function への UFCS method sugar を扱う
+├─ std2 は folder-based module layout と base32/base64/bytes/hex/hash 拡張を持つ
 ├─ docs/grammar と VSCode grammar は追加済み構文を追跡する
 └─ self-host checker/codegen の switch は i32 selector と integer literal case が先行
 ```
