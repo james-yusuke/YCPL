@@ -284,6 +284,13 @@ namespace ast
         void print(std::ostream &os, int indent = 0) const override;
     };
 
+    struct DeferStmt : Stmt
+    {
+        std::unique_ptr<Stmt> stmt;
+        DeferStmt(std::unique_ptr<Stmt> s) : stmt(std::move(s)) {}
+        void print(std::ostream &os, int indent = 0) const override;
+    };
+
     struct VarDecl : Stmt
     {
         std::string name;
@@ -317,6 +324,15 @@ namespace ast
     struct BlockStmt : Stmt
     {
         std::vector<std::unique_ptr<Stmt>> stmts;
+        void print(std::ostream &os, int indent = 0) const override;
+    };
+
+    struct ScopeStmt : Stmt
+    {
+        std::string name;
+        std::unique_ptr<BlockStmt> body;
+        ScopeStmt(std::string n, std::unique_ptr<BlockStmt> b)
+            : name(std::move(n)), body(std::move(b)) {}
         void print(std::ostream &os, int indent = 0) const override;
     };
 

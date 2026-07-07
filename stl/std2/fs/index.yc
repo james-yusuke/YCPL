@@ -1,0 +1,189 @@
+module std2.fs
+
+import "std2/mem" as mem
+
+extern fn c_open(path string, flags i32, mode i32) i32 as "open"
+extern fn c_close(fd i32) i32 as "close"
+extern fn c_read(fd i32, buf string, count i32) i32 as "read"
+extern fn c_fopen(path string, mode string) *byte as "fopen"
+extern fn c_fputs(text string, file *byte) i32 as "fputs"
+extern fn c_fclose(file *byte) i32 as "fclose"
+extern fn c_mkdir(path string, mode i32) i32 as "mkdir"
+extern fn c_popen(command string, mode string) *byte as "popen"
+extern fn c_pclose(file *byte) i32 as "pclose"
+extern fn c_fgets(buf string, size i32, file *byte) string as "fgets"
+
+pub struct CommandOutput {
+    ok bool
+    text string
+    message string
+    status i32
+}
+
+fn command_ok(text string, status i32) CommandOutput {
+    return CommandOutput{ok: true, text: text, message: "", status: status}
+}
+
+fn command_fail(message string, status i32) CommandOutput {
+    return CommandOutput{ok: false, text: "", message: message, status: status}
+}
+
+fn safe_project_path(path string) bool {
+    i := 0
+    for (; true; i++) {
+        ch := path[i]
+        if ch == 0 {
+            return true
+        }
+        if ch >= 'a' && ch <= 'z' {
+            continue
+        }
+        if ch >= 'A' && ch <= 'Z' {
+            continue
+        }
+        if ch >= '0' && ch <= '9' {
+            continue
+        }
+        if ch == '/' || ch == '.' || ch == '_' || ch == '-' {
+            continue
+        }
+        return false
+    }
+    return true
+}
+
+fn strlen_local(s string) i32 {
+    i := 0
+    for (; s[i] != 0; i++) {
+    }
+    return i
+}
+
+fn join_path(left string, right string) string {
+    left_len := strlen_local(left)
+    right_len := strlen_local(right)
+    needs_slash := true
+    if left_len > 0 && left[left_len - 1] == '/' {
+        needs_slash = false
+    }
+
+    extra := 1
+    if !needs_slash {
+        extra = 0
+    }
+
+    out: string := mem.calloc(left_len + right_len + extra + 1, 1)
+    mem.copy(out, left, left_len)
+    at := left_len
+    if needs_slash {
+        out[at] = '/'
+        at += 1
+    }
+    mem.copy(out + at, right, right_len)
+    return out
+}
+
+fn build_find_yc_command(root string) string {
+    src := join_path(root, "src")
+    prefix := "find -L "
+    suffix := " -type f -name '*.yc' | sort"
+    prefix_len := strlen_local(prefix)
+    src_len := strlen_local(src)
+    suffix_len := strlen_local(suffix)
+    out: string := mem.calloc(prefix_len + src_len + suffix_len + 1, 1)
+    mem.copy(out, prefix, prefix_len)
+    mem.copy(out + prefix_len, src, src_len)
+    mem.copy(out + prefix_len + src_len, suffix, suffix_len)
+    return out
+}
+
+pub fn command_output(command string) CommandOutput {
+    file := c_popen(command, "r")
+    if file == none {
+        return command_fail("failed to start command", 1)
+    }
+
+    cap := 131072
+    out: string := mem.calloc(cap + 1, 1)
+    line: string := mem.calloc(4096, 1)
+    len := 0
+    truncated := false
+
+    for (; true; ) {
+        got := c_fgets(line, 4096, file)
+        if got == none {
+            break
+        }
+        n := strlen_local(line)
+        if len + n >= cap {
+            truncated = true
+            break
+        }
+        mem.copy(out + len, line, n)
+        len += n
+    }
+
+    status := c_pclose(file)
+    if truncated {
+        return command_fail("command output is too large", status)
+    }
+    if status != 0 {
+        return command_fail("command failed", status)
+    }
+    return command_ok(out, status)
+}
+
+pub fn find_yc_files(root string) CommandOutput {
+    if !safe_project_path(root) {
+        return command_fail("unsafe project path for source traversal", 1)
+    }
+    command := build_find_yc_command(root)
+    return command_output(command)
+}
+
+pub fn exists(path string) bool {
+    fd := c_open(path, 0, 0)
+    if fd < 0 {
+        return false
+    }
+
+    c_close(fd)
+    return true
+}
+
+pub fn read_file(path string) string {
+    fd := c_open(path, 0, 0)
+    if fd < 0 {
+        return none
+    }
+
+    cap := 1048576
+    buf: string := mem.calloc(cap + 1, 1)
+    c_read(fd, buf, cap)
+    c_close(fd)
+    return buf
+}
+
+pub fn write_file(path string, text string) bool {
+    file := c_fopen(path, "w")
+    if file == none {
+        return false
+    }
+
+    rc := c_fputs(text, file)
+    c_fclose(file)
+    return rc >= 0
+}
+
+pub fn mkdir(path string) bool {
+    rc := c_mkdir(path, 493)
+    return rc == 0
+}
+
+pub fn uri_to_path(uri string) string {
+    if uri[0] == 'f' && uri[1] == 'i' && uri[2] == 'l' && uri[3] == 'e' && uri[4] == ':' {
+        return uri + 7
+    }
+
+    return uri
+}

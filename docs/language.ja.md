@@ -29,8 +29,8 @@ fn main() { ... }       -> 実行コードを置ける
 識別子は英字または `_` で始まり、英字、数字、`_` を続けられます。
 
 ```text
-module package import pub extern intrinsic fn struct enum type const
-if else for in switch case default return break continue as
+module package import pub extern intrinsic fn struct enum type const owned
+if else for in switch case default return break continue defer scope as
 true false none byte
 ```
 
@@ -95,6 +95,7 @@ Types
 ├─ primitive: i32 i64 bool char byte string float double void size_t
 ├─ pointer:   *T
 ├─ slice:     []T
+├─ owned:     owned T
 ├─ alias:     type Score = i32
 ├─ enum:      enum Color { Red, Green }
 └─ nested:    [][]T
@@ -102,6 +103,8 @@ Types
 
 runtime slice は `{ data, len, cap, elem_size }` です。`std/array` で作った
 slice は手動で管理します。
+`owned T` は bootstrap C++ compiler では所有値の意図を示す型修飾子として受け付け、
+現時点では ABI 上は `T` と同じです。
 
 ```YCPL
 enum Color {
@@ -173,3 +176,20 @@ switch color {
 `switch` は `switch expression { case expression { ... } default { ... } }` の形です。
 現在の self-host checker/codegen では i32 selector と integer literal case の対応が
 先行しています。
+
+## defer、scope、UFCS
+
+bootstrap C++ compiler は `defer` 文をサポートします。`defer expr` または
+`defer { ... }` は現在の関数を抜ける直前に LIFO 順で実行されます。
+
+```YCPL
+b: owned Bytes := bytes.from_string("YCPL")
+defer b.free()
+```
+
+`scope name { ... }` は名前付きの lexical scope です。局所的な作業領域を明示したい
+時に使えます。
+
+import 済み module に同名の public function が 1 つだけある場合、`value.method(x)` は
+`module.method(value, x)` として扱われます。たとえば `b.free()` は
+`bytes.free(b)` の糖衣です。

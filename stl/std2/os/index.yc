@@ -1,0 +1,12 @@
+module std2.os
+
+extern fn c_getenv(name string) string as "getenv"
+extern fn c_system(command string) i32 as "system"
+
+pub fn getenv(name string) string {
+    return c_getenv(name)
+}
+
+pub fn system(command string) i32 {
+    return c_system(command)
+}

@@ -70,7 +70,9 @@ namespace module
 
     static bool is_std_module_name(const std::string &module_name)
     {
-        return module_name == "std" || module_name.rfind("std.", 0) == 0 || module_name.rfind("std/", 0) == 0;
+        return module_name == "std" || module_name == "std2" ||
+               module_name.rfind("std.", 0) == 0 || module_name.rfind("std/", 0) == 0 ||
+               module_name.rfind("std2.", 0) == 0 || module_name.rfind("std2/", 0) == 0;
     }
 
     static std::vector<std::string> member_path(const ast::Expr *expr)
@@ -109,6 +111,28 @@ namespace module
         return false;
     }
 
+    static const SymbolInfo *find_unique_imported_function(const std::string &name,
+                                                           const ModuleInfo &info,
+                                                           const std::unordered_map<std::string, ModuleInfo> &modules)
+    {
+        const SymbolInfo *matched = nullptr;
+        for (const auto &target_pair : info.import_targets)
+        {
+            if (target_pair.second.empty())
+                continue;
+            auto mod_it = modules.find(target_pair.second);
+            if (mod_it == modules.end())
+                continue;
+            auto sym_it = mod_it->second.exported_symbols.find(name);
+            if (sym_it == mod_it->second.exported_symbols.end() || !sym_it->second.is_function)
+                continue;
+            if (matched)
+                return nullptr;
+            matched = &sym_it->second;
+        }
+        return matched;
+    }
+
     static void rewrite_stmt(std::unique_ptr<ast::Stmt> &stmt,
                              ModuleInfo &info,
                              const std::unordered_map<std::string, std::string> &local_functions,
@@ -125,6 +149,16 @@ namespace module
         else if (auto rs = dynamic_cast<ast::ReturnStmt *>(stmt.get()))
         {
             rewrite_expr(rs->expr, info, local_functions, modules, errors);
+        }
+        else if (auto ds = dynamic_cast<ast::DeferStmt *>(stmt.get()))
+        {
+            rewrite_stmt(ds->stmt, info, local_functions, modules, errors);
+        }
+        else if (auto ss = dynamic_cast<ast::ScopeStmt *>(stmt.get()))
+        {
+            if (ss->body)
+                for (auto &s : ss->body->stmts)
+                    rewrite_stmt(s, info, local_functions, modules, errors);
         }
         else if (auto vd = dynamic_cast<ast::VarDecl *>(stmt.get()))
         {
@@ -244,6 +278,19 @@ namespace module
                         return;
                     }
                     call->callee = std::make_unique<ast::Ident>(sym_it->second.link_name);
+                    return;
+                }
+            }
+
+            if (auto member = dynamic_cast<ast::MemberExpr *>(call->callee.get()))
+            {
+                const SymbolInfo *ufcs = find_unique_imported_function(member->member, info, modules);
+                if (ufcs)
+                {
+                    std::unique_ptr<ast::Expr> receiver = std::move(member->object);
+                    rewrite_expr(receiver, info, local_functions, modules, errors);
+                    call->args.insert(call->args.begin(), std::move(receiver));
+                    call->callee = std::make_unique<ast::Ident>(ufcs->link_name);
                     return;
                 }
             }
@@ -539,16 +586,26 @@ namespace module
             }
         }
 
-        for (const auto &src_dir : source_dirs_)
+        auto resolve_under = [&](const std::filesystem::path &root) -> std::filesystem::path
         {
-            std::filesystem::path full_dir = project_root_ / src_dir;
-            std::filesystem::path resolved = full_dir / (import_path + ".yc");
+            std::filesystem::path resolved = root / (import_path + ".yc");
             if (std::filesystem::exists(resolved))
             {
                 return resolved;
             }
-            resolved = full_dir / import_path / "index.yc";
+            resolved = root / import_path / "index.yc";
             if (std::filesystem::exists(resolved))
+            {
+                return resolved;
+            }
+            return {};
+        };
+
+        for (const auto &src_dir : source_dirs_)
+        {
+            std::filesystem::path full_dir = project_root_ / src_dir;
+            std::filesystem::path resolved = resolve_under(full_dir);
+            if (!resolved.empty())
             {
                 return resolved;
             }
@@ -557,14 +614,8 @@ namespace module
         std::filesystem::path search = project_root_;
         for (int i = 0; i < 12; ++i)
         {
-            std::filesystem::path std_root = search / "stl";
-            std::filesystem::path resolved = std_root / (import_path + ".yc");
-            if (std::filesystem::exists(resolved))
-            {
-                return resolved;
-            }
-            resolved = std_root / import_path / "index.yc";
-            if (std::filesystem::exists(resolved))
+            std::filesystem::path resolved = resolve_under(search / "stl");
+            if (!resolved.empty())
             {
                 return resolved;
             }

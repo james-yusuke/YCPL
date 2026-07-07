@@ -30,6 +30,7 @@ YCPL
 │  ├─ 静的型
 │  ├─ スライス
 │  ├─ 構造体
+│  ├─ defer / UFCS sugar
 │  └─ モジュール
 ├─ コンパイラ
 │  ├─ C++20
@@ -39,7 +40,8 @@ YCPL
 │  ├─ std/fmt
 │  ├─ std/array
 │  ├─ std/mem
-│  └─ std/json
+│  ├─ std/json
+│  └─ std2 folder modules
 └─ ツール
    ├─ VSCode
    ├─ ネイティブ LSP
