@@ -32,6 +32,9 @@ require_project_file_count() {
 }
 
 "$YCC_YCPL" lex examples/01_hello.yc >/dev/null
+"$YCC_YCPL" parse examples/104_std2_encoding.yc >/tmp/ycc-ycpl-std2-syntax-parse.out
+grep -q 'parse ok:' /tmp/ycc-ycpl-std2-syntax-parse.out
+grep -q 'imports=6' /tmp/ycc-ycpl-std2-syntax-parse.out
 if ! "$YCC_YCPL" parse compiler/ycpl >/tmp/ycc-ycpl-project-parse.out 2>/tmp/ycc-ycpl-project-parse.err; then
   cat /tmp/ycc-ycpl-project-parse.out >&2
   cat /tmp/ycc-ycpl-project-parse.err >&2
@@ -82,6 +85,22 @@ grep -q 'node_lower_continue_slot' "$traversal_ir_dir/project_body.ll"
 grep -q 'node_lower_for_in_check' "$traversal_ir_dir/project_body.ll"
 grep -q 'function_body_i64_statement_expr_value' "$traversal_ir_dir/project_body.ll"
 grep -q 'function_body_reference_statement_expr_value' "$traversal_ir_dir/project_body.ll"
+syntax_dir="$(mktemp -d "${TMPDIR:-/tmp}/ycpl-owned-scope.XXXXXX")"
+cat >"$syntax_dir/owned_scope_defer.yc" <<'YCPL'
+fn main() {
+    value: owned i32 := 13
+    defer {
+        value = value
+    }
+    scope cleanup {
+        value = value
+    }
+}
+YCPL
+"$YCC_YCPL" parse "$syntax_dir/owned_scope_defer.yc" >/tmp/ycc-ycpl-owned-scope-parse.out
+grep -q 'parse ok:' /tmp/ycc-ycpl-owned-scope-parse.out
+"$YCC_YCPL" check "$syntax_dir/owned_scope_defer.yc" >/tmp/ycc-ycpl-owned-scope-check.out
+grep -q 'check ok:' /tmp/ycc-ycpl-owned-scope-check.out
 grep -q 'fn_digest=' /tmp/ycc-ycpl-project-parse.out
 grep -q 'body_digest=' /tmp/ycc-ycpl-project-parse.out
 grep -q 'body_tokens=' /tmp/ycc-ycpl-project-parse.out

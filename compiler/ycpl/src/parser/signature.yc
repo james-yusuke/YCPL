@@ -6,7 +6,7 @@ import "lexer/token" as tok
 import "std/str" as str
 
 fn is_type_token(kind i32) bool {
-    return kind == tok.ident() || kind == tok.star() || kind == tok.lbrack() || kind == tok.rbrack() || kind == tok.kw_byte()
+    return kind == tok.ident() || kind == tok.star() || kind == tok.lbrack() || kind == tok.rbrack() || kind == tok.kw_byte() || kind == tok.kw_owned()
 }
 
 fn type_kind_from_name(name string) i32 {
@@ -37,6 +37,9 @@ fn type_kind_from_token(kind i32, text string, pointer_pending bool) i32 {
     }
     if kind == tok.kw_byte() {
         return 1
+    }
+    if kind == tok.kw_owned() {
+        return 0
     }
     if kind == tok.ident() {
         return type_kind_from_name(text)

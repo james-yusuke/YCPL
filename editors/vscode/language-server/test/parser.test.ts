@@ -129,3 +129,21 @@ test("parser indexes enum and type alias syntax", () => {
   assert.equal(document.symbols.find((symbol) => symbol.id === document.references.find((reference) => reference.name === "Green")?.symbolId)?.category, "enumMember");
   assert.equal(document.references.some((reference) => ["switch", "case", "default"].includes(reference.name)), false);
 });
+
+test("parser handles defer owned scope syntax", () => {
+  const document = parser.parse("file:///lifetime.yc", 1, [
+    "import \"std2/bytes\" as bytes",
+    "",
+    "fn main() {",
+    "    b: owned Bytes := bytes.from_string(\"YCPL\")",
+    "    defer b.free()",
+    "    scope encoding {",
+    "        b.len",
+    "    }",
+    "}"
+  ].join("\n"));
+
+  assert.equal(document.symbols.find((symbol) => symbol.name === "b")?.typeName, "owned Bytes");
+  assert.equal(document.references.some((reference) => ["owned", "defer", "scope", "encoding"].includes(reference.name)), false);
+  assert.equal(document.scopes.some((scope) => scope.kind === "scope" && scope.name === "scope"), true);
+});

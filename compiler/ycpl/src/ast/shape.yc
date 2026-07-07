@@ -49,7 +49,7 @@ fn is_builtin_type_name(name string) bool {
 }
 
 fn is_type_position(kind i32) bool {
-    return kind == tok.colon() || kind == tok.rparen() || kind == tok.star() || kind == tok.lbrack()
+    return kind == tok.colon() || kind == tok.rparen() || kind == tok.star() || kind == tok.lbrack() || kind == tok.kw_owned()
 }
 
 fn is_declare_assign(kind i32, lexeme string) bool {
@@ -130,6 +130,12 @@ pub fn scan(path string, source string) AstShape {
         if lx.kind == tok.kw_switch() {
             shape = add_node(shape, 207, lx.lexeme)
         }
+        if lx.kind == tok.kw_defer() {
+            shape = add_node(shape, 208, lx.lexeme)
+        }
+        if lx.kind == tok.kw_scope() {
+            shape = add_node(shape, 209, lx.lexeme)
+        }
         if lx.kind == tok.kw_for() {
             shape = add_node(shape, 203, lx.lexeme)
         }
@@ -157,6 +163,9 @@ pub fn scan(path string, source string) AstShape {
         }
         if lx.kind == tok.star() || lx.kind == tok.lbrack() {
             shape = add_node(shape, 402, lx.lexeme)
+        }
+        if lx.kind == tok.kw_owned() {
+            shape = add_node(shape, 405, lx.lexeme)
         }
 
         prev_prev_kind = prev_kind

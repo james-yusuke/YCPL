@@ -30,7 +30,7 @@ YCPL
 │  ├─ static types
 │  ├─ slices
 │  ├─ structs
-│  ├─ defer / UFCS sugar
+│  ├─ owned / defer / scope / UFCS sugar
 │  └─ modules
 ├─ Compiler
 │  ├─ C++20

@@ -42,7 +42,10 @@ supports import edits: typing `fmt.` and accepting `println` inserts
 `import "std/fmt" as fmt` when the alias is not already imported.
 
 Syntax highlighting and snippets cover current control/type syntax including
-`switch`, `case`, `default`, `enum`, and `type`.
+`switch`, `case`, `default`, `enum`, `type`, `defer`, `scope`, and `owned`.
+The language server also indexes `std2/.../index.yc` modules and offers UFCS
+method-style completions such as `b.free()` when an imported module has a
+matching first-parameter type.
 
 ## Package
 

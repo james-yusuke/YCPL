@@ -27,7 +27,7 @@ This directory contains example programs written in YCPL.
 | `34_std_lsp_foundation.yc` | `std/fs`, `std/text`, `std/json`, and `std/map` LSP foundation APIs |
 | `35_std_io_echo.yc` | `std/io` fd read/write using stdin input |
 | `100_retired_keywords_as_identifiers.yc` | Retired keywords accepted as ordinary identifiers |
-| `104_std2_encoding.yc` | `std2` base32/base64/hex/hash with `defer` cleanup and UFCS method calls |
+| `104_std2_encoding.yc` | `std2` base32/base64/hex/hash with `owned`, `defer`, `scope`, and UFCS method calls |
 | `36_std_json_ast.yc` | `std/json` tagged value parse/get/at/stringify/free |
 | `40_short_circuit_and_string_field.yc` | Short-circuit logic and struct string field indexing |
 

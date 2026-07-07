@@ -30,7 +30,7 @@ YCPL
 │  ├─ 静的型
 │  ├─ スライス
 │  ├─ 構造体
-│  ├─ defer / UFCS sugar
+│  ├─ owned / defer / scope / UFCS sugar
 │  └─ モジュール
 ├─ コンパイラ
 │  ├─ C++20
