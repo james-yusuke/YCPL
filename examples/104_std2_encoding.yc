@@ -7,24 +7,23 @@ import "std2/hex" as hex
 
 fn main() {
     b := bytes.from_string("YCPL")
+    defer b.free()
 
-    encodedbase := base32.encode(b)
-    fmt.println(encodedbase)
-    decodedbase := base32.decode(encodedbase)
-    fmt.println(bytes.eq(b, decodedbase))
+    b32 := base32.encode(b)
+    fmt.println(b32)
+    decoded32 := base32.decode(b32)
+    defer decoded32.free()
+    fmt.println(b.eq(decoded32))
 
-    encodedurl := base64.encode_url(b)
-    fmt.println(encodedurl)
-    decodedurl := base64.decode_url(encodedurl)
-    fmt.println(bytes.eq(b, decodedurl))
+    b64 := base64.encode_url(b)
+    fmt.println(b64)
+    decoded64 := base64.decode_url(b64)
+    defer decoded64.free()
+    fmt.println(b.eq(decoded64))
 
     hx := hex.encode_upper(b)
     fmt.println(hx)
     fmt.println(hex.is_valid(hx))
 
     fmt.println(hash.adler32(b))
-
-    bytes.free(b)
-    bytes.free(decodedbase)
-    bytes.free(decodedurl)
 }
