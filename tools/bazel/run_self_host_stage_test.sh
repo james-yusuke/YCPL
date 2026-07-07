@@ -995,6 +995,7 @@ grep -q '@.stage3.tinyvoidextern.ir' "$strict_stage3_ir_dir/merged.ll"
 grep -q '@.stage3.tinyllvmcapi.ir' "$strict_stage3_ir_dir/merged.ll"
 grep -q '@.stage3.tinyexternmalloc.ir' "$strict_stage3_ir_dir/merged.ll"
 grep -q '@.stage3.tinyexternstring.ir' "$strict_stage3_ir_dir/merged.ll"
+grep -q '@.stage3.tinymainargs.ir' "$strict_stage3_ir_dir/merged.ll"
 grep -q '@.stage3.tinystring.ir' "$strict_stage3_ir_dir/merged.ll"
 grep -q '@.stage3.tinyarray.ir' "$strict_stage3_ir_dir/merged.ll"
 grep -q '@.stage3.tinyenumswitch.ir' "$strict_stage3_ir_dir/merged.ll"
@@ -1383,6 +1384,14 @@ if [ -n "$LLC_BIN" ]; then
   grep -q 'define ptr @label' "$strict_stage3_string_ir_dir/merged.ll"
   grep -q '@.tiny.string.compiler' "$strict_stage3_string_ir_dir/merged.ll"
   grep -q 'store ptr %otherload' "$strict_stage3_string_ir_dir/merged.ll"
+  strict_stage3_main_args_ir_dir="$(mktemp -d "${TMPDIR:-/tmp}/ycpl-strict-stage3-main-args-ir.XXXXXX")"
+  "$strict_stage3_native_dir/merged" build-ir examples/99_self_codegen_main_args.yc -o "$strict_stage3_main_args_ir_dir" >/tmp/ycpl-strict-stage3-main-args-ir.out
+  grep -q 'YCPL tiny main args stage IR' "$strict_stage3_main_args_ir_dir/merged.ll"
+  grep -q 'define i32 @main(i32 %argc, ptr %argv)' "$strict_stage3_main_args_ir_dir/merged.ll"
+  grep -q 'alloca i32' "$strict_stage3_main_args_ir_dir/merged.ll"
+  grep -q 'alloca ptr' "$strict_stage3_main_args_ir_dir/merged.ll"
+  grep -q 'store ptr %argv' "$strict_stage3_main_args_ir_dir/merged.ll"
+  grep -q 'ret i32 13' "$strict_stage3_main_args_ir_dir/merged.ll"
   strict_stage3_array_ir_dir="$(mktemp -d "${TMPDIR:-/tmp}/ycpl-strict-stage3-array-ir.XXXXXX")"
   "$strict_stage3_native_dir/merged" build-ir examples/81_self_codegen_array_index.yc -o "$strict_stage3_array_ir_dir" >/tmp/ycpl-strict-stage3-array-ir.out
   grep -q 'YCPL tiny array index stage IR' "$strict_stage3_array_ir_dir/merged.ll"
@@ -1624,6 +1633,16 @@ if [ -n "$LLC_BIN" ]; then
     printf 'Expected strict stage3 generated compiler array assignment native to exit 13, got %d\n' "$strict_stage3_array_assign_status" >&2
     exit 1
   fi
+  strict_stage3_array_dynamic_native_dir="$(mktemp -d "${TMPDIR:-/tmp}/ycpl-strict-stage3-array-dynamic-native.XXXXXX")"
+  LLVM_BINDIR="$(dirname "$LLC_BIN")" "$strict_stage3_native_dir/merged" build examples/83_self_codegen_array_dynamic_index.yc -o "$strict_stage3_array_dynamic_native_dir" >/tmp/ycpl-strict-stage3-array-dynamic-native.out
+  set +e
+  "$strict_stage3_array_dynamic_native_dir/merged" >/dev/null 2>&1
+  strict_stage3_array_dynamic_status=$?
+  set -e
+  if [ "$strict_stage3_array_dynamic_status" -ne 13 ]; then
+    printf 'Expected strict stage3 generated compiler array dynamic index native to exit 13, got %d\n' "$strict_stage3_array_dynamic_status" >&2
+    exit 1
+  fi
   strict_stage3_array_for_in_native_dir="$(mktemp -d "${TMPDIR:-/tmp}/ycpl-strict-stage3-array-for-in-native.XXXXXX")"
   LLVM_BINDIR="$(dirname "$LLC_BIN")" "$strict_stage3_native_dir/merged" build examples/84_self_codegen_array_for_in.yc -o "$strict_stage3_array_for_in_native_dir" >/tmp/ycpl-strict-stage3-array-for-in-native.out
   set +e
@@ -1664,6 +1683,36 @@ if [ -n "$LLC_BIN" ]; then
     printf 'Expected strict stage3 generated compiler struct2 native to exit 13, got %d\n' "$strict_stage3_struct2_status" >&2
     exit 1
   fi
+  strict_stage3_struct2_assign_native_dir="$(mktemp -d "${TMPDIR:-/tmp}/ycpl-strict-stage3-struct2-assign-native.XXXXXX")"
+  LLVM_BINDIR="$(dirname "$LLC_BIN")" "$strict_stage3_native_dir/merged" build examples/93_self_codegen_struct_member_assignment.yc -o "$strict_stage3_struct2_assign_native_dir" >/tmp/ycpl-strict-stage3-struct2-assign-native.out
+  set +e
+  "$strict_stage3_struct2_assign_native_dir/merged" >/dev/null 2>&1
+  strict_stage3_struct2_assign_status=$?
+  set -e
+  if [ "$strict_stage3_struct2_assign_status" -ne 13 ]; then
+    printf 'Expected strict stage3 generated compiler struct2 assignment native to exit 13, got %d\n' "$strict_stage3_struct2_assign_status" >&2
+    exit 1
+  fi
+  strict_stage3_struct2_param_native_dir="$(mktemp -d "${TMPDIR:-/tmp}/ycpl-strict-stage3-struct2-param-native.XXXXXX")"
+  LLVM_BINDIR="$(dirname "$LLC_BIN")" "$strict_stage3_native_dir/merged" build examples/94_self_codegen_struct_param_call.yc -o "$strict_stage3_struct2_param_native_dir" >/tmp/ycpl-strict-stage3-struct2-param-native.out
+  set +e
+  "$strict_stage3_struct2_param_native_dir/merged" >/dev/null 2>&1
+  strict_stage3_struct2_param_status=$?
+  set -e
+  if [ "$strict_stage3_struct2_param_status" -ne 13 ]; then
+    printf 'Expected strict stage3 generated compiler struct2 param native to exit 13, got %d\n' "$strict_stage3_struct2_param_status" >&2
+    exit 1
+  fi
+  strict_stage3_struct2_return_native_dir="$(mktemp -d "${TMPDIR:-/tmp}/ycpl-strict-stage3-struct2-return-native.XXXXXX")"
+  LLVM_BINDIR="$(dirname "$LLC_BIN")" "$strict_stage3_native_dir/merged" build examples/95_self_codegen_struct_return.yc -o "$strict_stage3_struct2_return_native_dir" >/tmp/ycpl-strict-stage3-struct2-return-native.out
+  set +e
+  "$strict_stage3_struct2_return_native_dir/merged" >/dev/null 2>&1
+  strict_stage3_struct2_return_status=$?
+  set -e
+  if [ "$strict_stage3_struct2_return_status" -ne 13 ]; then
+    printf 'Expected strict stage3 generated compiler struct2 return native to exit 13, got %d\n' "$strict_stage3_struct2_return_status" >&2
+    exit 1
+  fi
   strict_stage3_struct3_native_dir="$(mktemp -d "${TMPDIR:-/tmp}/ycpl-strict-stage3-struct3-native.XXXXXX")"
   LLVM_BINDIR="$(dirname "$LLC_BIN")" "$strict_stage3_native_dir/merged" build examples/96_self_codegen_struct3_member.yc -o "$strict_stage3_struct3_native_dir" >/tmp/ycpl-strict-stage3-struct3-native.out
   set +e
@@ -1672,6 +1721,36 @@ if [ -n "$LLC_BIN" ]; then
   set -e
   if [ "$strict_stage3_struct3_status" -ne 13 ]; then
     printf 'Expected strict stage3 generated compiler struct3 native to exit 13, got %d\n' "$strict_stage3_struct3_status" >&2
+    exit 1
+  fi
+  strict_stage3_struct3_param_native_dir="$(mktemp -d "${TMPDIR:-/tmp}/ycpl-strict-stage3-struct3-param-native.XXXXXX")"
+  LLVM_BINDIR="$(dirname "$LLC_BIN")" "$strict_stage3_native_dir/merged" build examples/97_self_codegen_struct3_param_call.yc -o "$strict_stage3_struct3_param_native_dir" >/tmp/ycpl-strict-stage3-struct3-param-native.out
+  set +e
+  "$strict_stage3_struct3_param_native_dir/merged" >/dev/null 2>&1
+  strict_stage3_struct3_param_status=$?
+  set -e
+  if [ "$strict_stage3_struct3_param_status" -ne 13 ]; then
+    printf 'Expected strict stage3 generated compiler struct3 param native to exit 13, got %d\n' "$strict_stage3_struct3_param_status" >&2
+    exit 1
+  fi
+  strict_stage3_struct3_return_native_dir="$(mktemp -d "${TMPDIR:-/tmp}/ycpl-strict-stage3-struct3-return-native.XXXXXX")"
+  LLVM_BINDIR="$(dirname "$LLC_BIN")" "$strict_stage3_native_dir/merged" build examples/98_self_codegen_struct3_return.yc -o "$strict_stage3_struct3_return_native_dir" >/tmp/ycpl-strict-stage3-struct3-return-native.out
+  set +e
+  "$strict_stage3_struct3_return_native_dir/merged" >/dev/null 2>&1
+  strict_stage3_struct3_return_status=$?
+  set -e
+  if [ "$strict_stage3_struct3_return_status" -ne 13 ]; then
+    printf 'Expected strict stage3 generated compiler struct3 return native to exit 13, got %d\n' "$strict_stage3_struct3_return_status" >&2
+    exit 1
+  fi
+  strict_stage3_main_args_native_dir="$(mktemp -d "${TMPDIR:-/tmp}/ycpl-strict-stage3-main-args-native.XXXXXX")"
+  LLVM_BINDIR="$(dirname "$LLC_BIN")" "$strict_stage3_native_dir/merged" build examples/99_self_codegen_main_args.yc -o "$strict_stage3_main_args_native_dir" >/tmp/ycpl-strict-stage3-main-args-native.out
+  set +e
+  "$strict_stage3_main_args_native_dir/merged" >/dev/null 2>&1
+  strict_stage3_main_args_status=$?
+  set -e
+  if [ "$strict_stage3_main_args_status" -ne 13 ]; then
+    printf 'Expected strict stage3 generated compiler main-args native to exit 13, got %d\n' "$strict_stage3_main_args_status" >&2
     exit 1
   fi
 
