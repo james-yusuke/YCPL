@@ -30,6 +30,7 @@ YCPL
 │  ├─ static types
 │  ├─ slices
 │  ├─ structs
+│  ├─ defer / UFCS sugar
 │  └─ modules
 ├─ Compiler
 │  ├─ C++20
@@ -39,7 +40,8 @@ YCPL
 │  ├─ std/fmt
 │  ├─ std/array
 │  ├─ std/mem
-│  └─ std/json
+│  ├─ std/json
+│  └─ std2 folder modules
 └─ Tooling
    ├─ VSCode
    ├─ native LSP

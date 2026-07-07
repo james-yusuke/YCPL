@@ -2180,6 +2180,9 @@ fn skip_function_body(p TinyParser) TinyParser {
     if depth != 0 {
         return fail_parser(p, "expected ')' after function parameters")
     }
+    if p.lx.kind == tok.lbrace() {
+        return skip_block(p)
+    }
     if p.lx.kind != tok.ident() {
         return fail_parser(p, "expected function return type")
     }
@@ -3336,8 +3339,8 @@ fn parse_function(p TinyParser) TinyParser {
         if !p.ok { return p }
         return_type = p.value_type
     }
-    if is_main && return_type != tiny_i32_type_kind() {
-        return unsupported_parser(p, "self checker currently requires main to return i32")
+    if is_main && return_type != tiny_i32_type_kind() && return_type != tiny_void_type_kind() {
+        return unsupported_parser(p, "self checker currently requires main to return i32 or void")
     }
 
     if p.lx.kind != tok.lbrace() {

@@ -297,6 +297,14 @@ namespace ast
             expr->print(os, indent + 2);
     }
 
+    void DeferStmt::print(std::ostream &os, int indent) const
+    {
+        print_indent(os, indent);
+        os << "DeferStmt\n";
+        if (stmt)
+            stmt->print(os, indent + 2);
+    }
+
     void VarDecl::print(std::ostream &os, int indent) const
     {
         print_indent(os, indent);
@@ -337,6 +345,17 @@ namespace ast
         for (const auto &s : stmts)
             if (s)
                 s->print(os, indent + 2);
+    }
+
+    void ScopeStmt::print(std::ostream &os, int indent) const
+    {
+        print_indent(os, indent);
+        os << "ScopeStmt";
+        if (!name.empty())
+            os << "(" << name << ")";
+        os << "\n";
+        if (body)
+            body->print(os, indent + 2);
     }
 
     void IfStmt::print(std::ostream &os, int indent) const

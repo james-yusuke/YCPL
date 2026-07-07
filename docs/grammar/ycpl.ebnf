@@ -37,6 +37,8 @@ block              = "{" { statement newline } "}" ;
 statement          = var_decl
                    | const_decl
                    | assignment
+                   | defer_statement
+                   | scope_statement
                    | if_statement
                    | for_statement
                    | switch_statement
@@ -50,6 +52,8 @@ assignment         = expression assignment_operator expression ;
 assignment_operator
                    = "=" | "+=" | "-=" | "*=" | "/=" | "%=" ;
 
+defer_statement    = "defer" ( expression | block ) ;
+scope_statement    = "scope" [ identifier ] block ;
 if_statement       = "if" expression block [ "else" ( block | if_statement ) ] ;
 for_statement      = "for" ( for_c_style | for_in | expression? ) block ;
 for_c_style        = statement? ";" expression? ";" statement? ;
@@ -85,10 +89,10 @@ array_literal      = "[" [ argument_list ] "]" ;
 struct_literal     = identifier "{" [ field_initializer { "," field_initializer } [ "," ] ] "}" ;
 field_initializer  = identifier ":" expression ;
 
-type               = primitive_type
+type               = [ "owned" ] ( primitive_type
                    | qualified_name
                    | "*" type
-                   | "[]" type ;
+                   | "[]" type ) ;
 primitive_type     = "i32" | "i64" | "bool" | "char" | "byte" | "string" | "float" | "double" | "void" | "size_t" | "Type" | "T" | "any" ;
 
 literal            = integer_literal

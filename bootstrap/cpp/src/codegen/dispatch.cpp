@@ -46,7 +46,11 @@ namespace codegen
         if (!blk)
             return nullptr;
         for (const auto &s : blk->stmts)
+        {
+            if (builder.GetInsertBlock() && builder.GetInsertBlock()->getTerminator())
+                break;
             codegen_stmt(s.get());
+        }
         return nullptr;
     }
 
@@ -62,6 +66,7 @@ namespace codegen
             Value *rv = nullptr;
             if (rs->expr)
                 rv = codegen_expr(rs->expr.get());
+            emit_deferred_statements();
             Function *F = builder.GetInsertBlock()->getParent();
             Type *retTy = F ? F->getReturnType() : nullptr;
             if (!rv)
@@ -114,6 +119,10 @@ namespace codegen
 
         if (auto vd = dynamic_cast<const ast::VarDecl *>(s))
             return codegen_vardecl(vd);
+        if (auto ds = dynamic_cast<const ast::DeferStmt *>(s))
+            return codegen_defer(ds);
+        if (auto sc = dynamic_cast<const ast::ScopeStmt *>(s))
+            return codegen_scope_stmt(sc);
         if (auto as = dynamic_cast<const ast::AssignStmt *>(s))
             return codegen_assign(as);
         if (auto ifs = dynamic_cast<const ast::IfStmt *>(s))
@@ -158,6 +167,24 @@ namespace codegen
             return codegen_for_loop(forStmt);
 
         error("unhandled stmt type in codegen");
+        return nullptr;
+    }
+
+    Value *CodeGen::codegen_defer(const ast::DeferStmt *ds)
+    {
+        if (!ds || !ds->stmt)
+            return nullptr;
+        deferred_stmts.push_back(ds->stmt.get());
+        return nullptr;
+    }
+
+    Value *CodeGen::codegen_scope_stmt(const ast::ScopeStmt *ss)
+    {
+        if (!ss || !ss->body)
+            return nullptr;
+        push_scope();
+        codegen_block(ss->body.get());
+        pop_scope();
         return nullptr;
     }
 }

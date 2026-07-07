@@ -44,6 +44,8 @@ namespace lex
         KW_FALSE,
         KW_NONE,
         KW_TYPE,
+        KW_DEFER,
+        KW_SCOPE,
 
         // punctuation
         LPAREN,
@@ -151,6 +153,8 @@ namespace lex
             {TokenType::KW_FALSE, "false"},
             {TokenType::KW_NONE, "none"},
             {TokenType::KW_TYPE, "type"},
+            {TokenType::KW_DEFER, "defer"},
+            {TokenType::KW_SCOPE, "scope"},
             {TokenType::LPAREN, "("},
             {TokenType::RPAREN, ")"},
             {TokenType::LBRACE, "{"},
