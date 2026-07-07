@@ -489,7 +489,7 @@ compile_run_and_verify "$SCRIPT_DIR/100_retired_keywords_as_identifiers.yc" "42"
 compile_run_and_verify "$SCRIPT_DIR/101_enum_switch_type_alias.yc" $'10\n20\n30' "switch i32"
 compile_run_and_verify "$SCRIPT_DIR/102_std_bytes_hex_hash.yc" $'4\n89\nYCPL\nY\n120\n1\n5943504c\n1\n1041946889\n541916226'
 compile_run_and_verify "$SCRIPT_DIR/103_std_base64.yc" $'\nZg==\n1\nZm8=\n1\nZm9v\n1\nZm9vYg==\n1'
-compile_run_and_verify "$SCRIPT_DIR/104_std2_encoding.yc" $'LFBVATA=\n1\nWUNQTA==\n1\n5943504C\n1\n52232505' "@std2__base32__encode" "@std2__base64__encode_url"
+compile_run_and_verify "$SCRIPT_DIR/104_std2_encoding.yc" $'LFBVATA=\n1\nWUNQTA==\n1\n5943504C\n1\n52232505' "@std2__base32__encode" "@std2__base64__encode_url" "@std2__bytes__eq" "@std2__bytes__free"
 
 echo ""
 echo "--- Project Tests ---"
