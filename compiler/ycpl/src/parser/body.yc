@@ -37,7 +37,7 @@ fn is_unary_operator(kind i32, prev_kind i32) bool {
         return true
     }
     if kind == tok.star() || kind == tok.minus() {
-        if prev_kind == tok.assign() || prev_kind == tok.lparen() || prev_kind == tok.comma() || prev_kind == tok.kw_return() || prev_kind == tok.colon() || prev_kind == tok.newline() {
+        if prev_kind == tok.assign() || prev_kind == tok.lparen() || prev_kind == tok.comma() || prev_kind == tok.kw_return() || prev_kind == tok.kw_defer() || prev_kind == tok.colon() || prev_kind == tok.newline() {
             return true
         }
     }
@@ -202,6 +202,14 @@ fn parse_at(path string, source string, target_index i32, target_count i32) Body
             if lx.kind == tok.kw_switch() {
                 seq = astbody.add_with_role(seq, astbody.switch_node_kind(), lx.tok_line, lx.tok_col, lx.lexeme, astbody.control_payload_kind(), astbody.control_flow_role())
                 expression_owner_open = true
+            }
+            if lx.kind == tok.kw_defer() {
+                seq = astbody.add_with_role(seq, astbody.defer_node_kind(), lx.tok_line, lx.tok_col, lx.lexeme, astbody.control_payload_kind(), astbody.control_flow_role())
+                expression_owner_open = true
+            }
+            if lx.kind == tok.kw_scope() {
+                seq = astbody.add_with_role(seq, astbody.scope_node_kind(), lx.tok_line, lx.tok_col, lx.lexeme, astbody.control_payload_kind(), astbody.control_flow_role())
+                expression_owner_open = false
             }
             if lx.kind == tok.kw_else() {
                 seq = astbody.add_with_role(seq, astbody.else_node_kind(), lx.tok_line, lx.tok_col, lx.lexeme, astbody.control_payload_kind(), astbody.control_flow_role())

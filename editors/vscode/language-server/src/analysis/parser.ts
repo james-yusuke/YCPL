@@ -24,6 +24,7 @@ const declarationKeywords = new Set(["fn", "struct", "enum", "type", "module", "
 const keywordSet = new Set<string>(keywords);
 const primitiveSet = new Set<string>(primitiveTypes);
 const typeCategories: SymbolCategory[] = ["struct", "enum", "typeAlias"];
+const typePatternSource = "(?:owned\\s+)?(?:\\*+\\s*)?(?:(?:\\[\\]\\s*)+)?[A-Za-z_][A-Za-z0-9_.]*";
 
 interface Token {
   text: string;
@@ -283,6 +284,9 @@ export class YcplParser {
       if (keywordSet.has(token.text) || primitiveSet.has(token.text)) {
         continue;
       }
+      if (isScopeLabelToken(text, token)) {
+        continue;
+      }
       if (symbols.some((symbol) => sameRangeOffset(text, lineOffsets, symbol.selectionRange, token.start, token.end))) {
         continue;
       }
@@ -467,19 +471,19 @@ function findNext(text: string, start: number, ...needles: string[]): number {
 
 function parseTypeAfterName(text: string, nameEnd: number): string | undefined {
   const after = text.slice(nameEnd, Math.min(text.length, nameEnd + 80));
-  const match = after.match(/^\s*:\s*([A-Za-z_][A-Za-z0-9_]*|\*?[A-Za-z_][A-Za-z0-9_]*|\[\]\s*[A-Za-z_][A-Za-z0-9_]*)/);
+  const match = after.match(new RegExp(`^\\s*:\\s*(${typePatternSource})`));
   if (match) {
-    return match[1].replace(/\s+/g, "");
+    return normalizeTypeName(match[1]);
   }
-  const spaceType = after.match(/^\s+([A-Za-z_][A-Za-z0-9_]*|\*?[A-Za-z_][A-Za-z0-9_]*|\[\]\s*[A-Za-z_][A-Za-z0-9_]*)\s*(?:,|\)|\{|\n)/);
-  return spaceType?.[1].replace(/\s+/g, "");
+  const spaceType = after.match(new RegExp(`^\\s+(${typePatternSource})\\s*(?:,|\\)|\\{|\\n)`));
+  return spaceType?.[1] ? normalizeTypeName(spaceType[1]) : undefined;
 }
 
 function parseTypeAliasTarget(text: string, nameEnd: number): string | undefined {
   const lineEnd = findNext(text, nameEnd, "\n", "{");
   const end = lineEnd > nameEnd ? lineEnd : Math.min(text.length, nameEnd + 120);
-  const match = text.slice(nameEnd, end).match(/^\s*=?\s*([A-Za-z_][A-Za-z0-9_.]*|\*?[A-Za-z_][A-Za-z0-9_.]*|\[\]\s*[A-Za-z_][A-Za-z0-9_.]*)/);
-  return match?.[1].replace(/\s+/g, "");
+  const match = text.slice(nameEnd, end).match(new RegExp(`^\\s*=?\\s*(${typePatternSource})`));
+  return match?.[1] ? normalizeTypeName(match[1]) : undefined;
 }
 
 function parseParameters(text: string, lineOffsets: number[], nameEnd: number, signatureEnd: number): ParameterInfo[] {
@@ -489,13 +493,13 @@ function parseParameters(text: string, lineOffsets: number[], nameEnd: number, s
     return [];
   }
   const params: ParameterInfo[] = [];
-  const paramPattern = /([A-Za-z_][A-Za-z0-9_]*)\s+(\*?\[?\]?\s*[A-Za-z_][A-Za-z0-9_]*)/g;
+  const paramPattern = new RegExp(`([A-Za-z_][A-Za-z0-9_]*)\\s+(${typePatternSource})`, "g");
   const body = text.slice(open + 1, close);
   for (const match of body.matchAll(paramPattern)) {
     const start = open + 1 + (match.index ?? 0);
     params.push({
       name: match[1],
-      typeName: match[2].replace(/\s+/g, ""),
+      typeName: normalizeTypeName(match[2]),
       range: rangeFromOffsets(lineOffsets, start, start + match[1].length)
     });
   }
@@ -503,8 +507,16 @@ function parseParameters(text: string, lineOffsets: number[], nameEnd: number, s
 }
 
 function parseReturnType(signatureTail: string): string | undefined {
-  const match = signatureTail.match(/\)\s+([A-Za-z_][A-Za-z0-9_]*|\*?[A-Za-z_][A-Za-z0-9_]*|\[\]\s*[A-Za-z_][A-Za-z0-9_]*)/);
-  return match?.[1].replace(/\s+/g, "");
+  const match = signatureTail.match(new RegExp(`\\)\\s+(${typePatternSource})`));
+  return match?.[1] ? normalizeTypeName(match[1]) : undefined;
+}
+
+function normalizeTypeName(typeName: string): string {
+  return typeName.trim().replace(/\s+/g, " ").replace(/\s*(\[\]|\*)\s*/g, "$1");
+}
+
+function canonicalTypeName(typeName: string | undefined): string | undefined {
+  return typeName?.replace(/^owned\s+/, "");
 }
 
 function isLikelyVariableDeclaration(text: string, tokens: Token[], index: number, parameterSpans: Span[], structBodies: Span[]): boolean {
@@ -521,7 +533,7 @@ function isLikelyVariableDeclaration(text: string, tokens: Token[], index: numbe
   }
 
   const after = text.slice(token.end, Math.min(text.length, token.end + 96));
-  return /^\s*:=/.test(after) || /^\s*:\s*(?:\*?\s*)?(?:\[\]\s*)?[A-Za-z_][A-Za-z0-9_]*\s*:=/.test(after);
+  return /^\s*:=/.test(after) || new RegExp(`^\\s*:\\s*${typePatternSource}\\s*:=`).test(after);
 }
 
 function functionParameterSpans(text: string): Array<{ start: number; end: number }> {
@@ -712,6 +724,9 @@ function buildScopes(uri: string, text: string, lineOffsets: number[], functionR
 
 function classifyBlockScope(text: string, openBraceOffset: number): YcplScope["kind"] {
   const before = text.slice(Math.max(0, openBraceOffset - 160), openBraceOffset);
+  if (/\bscope(?:\s+[A-Za-z_][A-Za-z0-9_]*)?\s*$/.test(before)) {
+    return "scope";
+  }
   if (/\bdefault\s*$/.test(before)) {
     return "default";
   }
@@ -745,6 +760,12 @@ function scopeForOffset(scopes: YcplScope[], offset: number): YcplScope {
 
 function fnScopeForSymbol(scopes: YcplScope[], symbol: YcplSymbol): YcplScope {
   return scopes.find((scope) => scope.kind === "function" && scope.name === symbol.name) ?? rootScope(scopes);
+}
+
+function isScopeLabelToken(text: string, token: Token): boolean {
+  const before = text.slice(Math.max(0, token.start - 32), token.start);
+  const after = text.slice(token.end, Math.min(text.length, token.end + 32));
+  return /\bscope\s+$/.test(before) && /^\s*\{/.test(after);
 }
 
 function resolveTokenSymbol(text: string, token: Token, scopes: YcplScope[], symbols: YcplSymbol[]): YcplSymbol | undefined {
@@ -787,7 +808,7 @@ function resolveFieldAccess(text: string, token: Token, scopes: YcplScope[], sym
   if (receiverSymbol?.category === "enum") {
     return symbols.find((symbol) => symbol.category === "enumMember" && symbol.containerName === receiverSymbol.name && symbol.name === token.text);
   }
-  const receiverType = receiverSymbol?.typeName;
+  const receiverType = canonicalTypeName(receiverSymbol?.typeName);
   if (!receiverType) {
     return undefined;
   }

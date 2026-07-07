@@ -19,9 +19,12 @@ pub fn kw_intrinsic() i32 { return 14 }
 pub fn kw_fn() i32 { return 15 }
 pub fn kw_struct() i32 { return 16 }
 pub fn kw_enum() i32 { return 17 }
+pub fn kw_defer() i32 { return 18 }
 pub fn kw_const() i32 { return 19 }
+pub fn kw_scope() i32 { return 20 }
 pub fn kw_if() i32 { return 21 }
 pub fn kw_else() i32 { return 22 }
+pub fn kw_owned() i32 { return 23 }
 pub fn kw_for() i32 { return 24 }
 pub fn kw_in() i32 { return 25 }
 pub fn kw_return() i32 { return 26 }
@@ -96,9 +99,12 @@ pub fn name(kind i32) string {
     if kind == kw_fn() { return "fn" }
     if kind == kw_struct() { return "struct" }
     if kind == kw_enum() { return "enum" }
+    if kind == kw_defer() { return "defer" }
     if kind == kw_const() { return "const" }
+    if kind == kw_scope() { return "scope" }
     if kind == kw_if() { return "if" }
     if kind == kw_else() { return "else" }
+    if kind == kw_owned() { return "owned" }
     if kind == kw_for() { return "for" }
     if kind == kw_in() { return "in" }
     if kind == kw_return() { return "return" }
