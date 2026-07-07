@@ -20,9 +20,10 @@ import {
   rangeFromOffsets
 } from "./text.js";
 
-const declarationKeywords = new Set(["fn", "struct", "module", "package", "const", "mut"]);
+const declarationKeywords = new Set(["fn", "struct", "enum", "type", "module", "package", "const", "mut"]);
 const keywordSet = new Set<string>(keywords);
 const primitiveSet = new Set<string>(primitiveTypes);
+const typeCategories: SymbolCategory[] = ["struct", "enum", "typeAlias"];
 
 interface Token {
   text: string;
@@ -50,6 +51,12 @@ interface FunctionBody extends Span {
   scopeId: ScopeId;
 }
 
+interface EnumBody extends Span {
+  name: string;
+  bodyStart: number;
+  bodyEnd: number;
+}
+
 /**
  * Parses enough YCPL syntax for editor services. The compiler bridge remains
  * the source of truth for complete parsing and typing when it is available.
@@ -64,9 +71,10 @@ export class YcplParser {
 
     const functionRanges = findFunctionBodies(uri, text);
     const structBodies = parseStructBodies(uri, text, lineOffsets);
+    const enumBodies = parseEnumBodies(text, lineOffsets);
     const scopes = buildScopes(uri, text, lineOffsets, functionRanges, structBodies);
     const imports = this.parseImports(text, lineOffsets);
-    const symbols = this.parseSymbols(uri, text, lineOffsets, tokens, imports, scopes, functionRanges, structBodies);
+    const symbols = this.parseSymbols(uri, text, lineOffsets, tokens, imports, scopes, functionRanges, structBodies, enumBodies);
     const references = this.parseReferences(uri, commentsAndStringsMasked, lineOffsets, tokens, scopes, symbols);
     const calls = this.parseCalls(uri, commentsAndStringsMasked, lineOffsets, scopes, symbols, functionRanges);
     const diagnostics = this.parseDiagnostics(text, lineOffsets, symbols, imports);
@@ -112,7 +120,8 @@ export class YcplParser {
     imports: ImportInfo[],
     scopes: YcplScope[],
     functionRanges: FunctionBody[],
-    structBodies: StructBody[]
+    structBodies: StructBody[],
+    enumBodies: EnumBody[]
   ): YcplSymbol[] {
     const symbols: YcplSymbol[] = [];
     const globalScope = rootScope(scopes);
@@ -136,6 +145,9 @@ export class YcplParser {
     for (const body of structBodies) {
       symbols.push(...parseStructFields(uri, text, lineOffsets, body));
     }
+    for (const body of enumBodies) {
+      symbols.push(...parseEnumMembers(uri, text, lineOffsets, body, globalScope.id));
+    }
 
     const parameterSpans = functionParameterSpans(text);
     for (let i = 0; i < tokens.length; i += 1) {
@@ -155,6 +167,12 @@ export class YcplParser {
       }
       if (token.text === "struct" && next.text) {
         symbols.push(this.createSymbol(uri, text, lineOffsets, next, "struct", token.text, exported, globalScope.id));
+      }
+      if (token.text === "enum" && next.text) {
+        symbols.push(this.createSymbol(uri, text, lineOffsets, next, "enum", token.text, exported, globalScope.id));
+      }
+      if (token.text === "type" && next.text) {
+        symbols.push(this.createTypeAliasSymbol(uri, text, lineOffsets, next, exported, globalScope.id));
       }
       if ((token.text === "const" || token.text === "mut") && next.text && !isInsideSpan(next, structBodies)) {
         symbols.push(this.createSymbol(uri, text, lineOffsets, next, token.text === "const" ? "constant" : "variable", this.variableDetail(text, next.end), exported, scopeForOffset(scopes, next.start).id, enclosingFunctionName(next.start, functionRanges)));
@@ -234,6 +252,23 @@ export class YcplParser {
       exported,
       scopeId,
       containerName
+    };
+  }
+
+  private createTypeAliasSymbol(uri: string, text: string, lineOffsets: number[], name: Token, exported: boolean, scopeId: ScopeId): YcplSymbol {
+    const target = parseTypeAliasTarget(text, name.end);
+    return {
+      id: symbolId(uri, "typeAlias", name.text, name.start),
+      name: name.text,
+      category: "typeAlias",
+      kind: kindForCategory("typeAlias"),
+      uri,
+      range: declarationRange(text, lineOffsets, name.start, name.end),
+      selectionRange: rangeFromOffsets(lineOffsets, name.start, name.end),
+      detail: target ? `type ${name.text} = ${target}` : `type ${name.text}`,
+      typeName: target,
+      exported,
+      scopeId
     };
   }
 
@@ -397,6 +432,12 @@ function kindForCategory(category: SymbolCategory): SymbolKind {
       return SymbolKind.Constant;
     case "struct":
       return SymbolKind.Struct;
+    case "enum":
+      return SymbolKind.Enum;
+    case "enumMember":
+      return SymbolKind.EnumMember;
+    case "typeAlias":
+      return SymbolKind.TypeParameter;
     case "module":
     case "namespace":
     case "package":
@@ -432,6 +473,13 @@ function parseTypeAfterName(text: string, nameEnd: number): string | undefined {
   }
   const spaceType = after.match(/^\s+([A-Za-z_][A-Za-z0-9_]*|\*?[A-Za-z_][A-Za-z0-9_]*|\[\]\s*[A-Za-z_][A-Za-z0-9_]*)\s*(?:,|\)|\{|\n)/);
   return spaceType?.[1].replace(/\s+/g, "");
+}
+
+function parseTypeAliasTarget(text: string, nameEnd: number): string | undefined {
+  const lineEnd = findNext(text, nameEnd, "\n", "{");
+  const end = lineEnd > nameEnd ? lineEnd : Math.min(text.length, nameEnd + 120);
+  const match = text.slice(nameEnd, end).match(/^\s*=?\s*([A-Za-z_][A-Za-z0-9_.]*|\*?[A-Za-z_][A-Za-z0-9_.]*|\[\]\s*[A-Za-z_][A-Za-z0-9_.]*)/);
+  return match?.[1].replace(/\s+/g, "");
 }
 
 function parseParameters(text: string, lineOffsets: number[], nameEnd: number, signatureEnd: number): ParameterInfo[] {
@@ -546,6 +594,57 @@ function parseStructBodies(uri: string, text: string, lineOffsets: number[]): St
   return bodies;
 }
 
+function parseEnumBodies(text: string, lineOffsets: number[]): EnumBody[] {
+  const bodies: EnumBody[] = [];
+  const masked = maskCommentsAndStrings(text, false);
+  const pattern = /\benum\s+([A-Za-z_][A-Za-z0-9_]*)[^{]*\{/g;
+  for (const match of masked.matchAll(pattern)) {
+    const start = match.index ?? 0;
+    const open = start + match[0].length - 1;
+    const close = findMatchingBrace(masked, open);
+    const nameStart = start + match[0].indexOf(match[1]);
+    if (close > open) {
+      bodies.push({
+        name: match[1],
+        start: nameStart,
+        end: close + 1,
+        bodyStart: open + 1,
+        bodyEnd: close
+      });
+    }
+  }
+  void lineOffsets;
+  return bodies;
+}
+
+function parseEnumMembers(uri: string, text: string, lineOffsets: number[], body: EnumBody, scopeId: ScopeId): YcplSymbol[] {
+  const members: YcplSymbol[] = [];
+  const variantPattern = /^\s*([A-Za-z_][A-Za-z0-9_]*)(?:\s*=\s*-?(?:0x[0-9A-Fa-f]+|0b[01]+|[0-9]+))?\s*,?\s*$/gm;
+  const bodyText = text.slice(body.bodyStart, body.bodyEnd);
+  for (const match of bodyText.matchAll(variantPattern)) {
+    if (keywordSet.has(match[1]) || primitiveSet.has(match[1])) {
+      continue;
+    }
+    const lineStart = body.bodyStart + (match.index ?? 0);
+    const nameStart = lineStart + match[0].indexOf(match[1]);
+    const nameEnd = nameStart + match[1].length;
+    members.push({
+      id: symbolId(uri, "enumMember", match[1], nameStart),
+      name: match[1],
+      category: "enumMember",
+      kind: SymbolKind.EnumMember,
+      uri,
+      range: rangeFromOffsets(lineOffsets, nameStart, lineStart + match[0].length),
+      selectionRange: rangeFromOffsets(lineOffsets, nameStart, nameEnd),
+      detail: `${body.name}.${match[1]}`,
+      exported: false,
+      scopeId,
+      containerName: body.name
+    });
+  }
+  return members;
+}
+
 function buildScopes(uri: string, text: string, lineOffsets: number[], functionRanges: FunctionBody[], structBodies: StructBody[]): YcplScope[] {
   const masked = maskCommentsAndStrings(text, false);
   const root: YcplScope = {
@@ -613,6 +712,15 @@ function buildScopes(uri: string, text: string, lineOffsets: number[], functionR
 
 function classifyBlockScope(text: string, openBraceOffset: number): YcplScope["kind"] {
   const before = text.slice(Math.max(0, openBraceOffset - 160), openBraceOffset);
+  if (/\bdefault\s*$/.test(before)) {
+    return "default";
+  }
+  if (/\bcase\b[^{;]*$/.test(before)) {
+    return "case";
+  }
+  if (/\bswitch\b[^{;]*$/.test(before)) {
+    return "switch";
+  }
   if (/\belse\s*$/.test(before)) {
     return "else";
   }
@@ -644,19 +752,19 @@ function resolveTokenSymbol(text: string, token: Token, scopes: YcplScope[], sym
   if (field) {
     return field;
   }
-  const wantedKind = isFunctionCallToken(text, token)
-    ? "function"
+  const wantedKind: readonly SymbolCategory[] | undefined = isFunctionCallToken(text, token)
+    ? ["function"]
     : isTypeTokenContext(text, token)
-      ? "struct"
+      ? typeCategories
       : undefined;
   return resolveLexical(token.text, scopeForOffset(scopes, token.start), scopes, symbols, wantedKind);
 }
 
-function resolveLexical(name: string, startScope: YcplScope, scopes: YcplScope[], symbols: YcplSymbol[], wantedKind?: SymbolCategory): YcplSymbol | undefined {
+function resolveLexical(name: string, startScope: YcplScope, scopes: YcplScope[], symbols: YcplSymbol[], wantedKinds?: readonly SymbolCategory[]): YcplSymbol | undefined {
   let scope: YcplScope | undefined = startScope;
   while (scope) {
     const found = symbols
-      .filter((symbol) => symbol.name === name && symbol.scopeId === scope?.id && (!wantedKind || symbol.category === wantedKind))
+      .filter((symbol) => symbol.name === name && symbol.scopeId === scope?.id && (!wantedKinds || wantedKinds.includes(symbol.category)))
       .sort((left, right) => symbolPriority(left) - symbolPriority(right))[0];
     if (found) {
       return found;
@@ -664,7 +772,7 @@ function resolveLexical(name: string, startScope: YcplScope, scopes: YcplScope[]
     scope = scope.parentId ? scopes.find((candidate) => candidate.id === scope?.parentId) : undefined;
   }
   return symbols
-    .filter((symbol) => symbol.name === name && symbol.scopeId === rootScope(scopes).id && (!wantedKind || symbol.category === wantedKind))
+    .filter((symbol) => symbol.name === name && symbol.scopeId === rootScope(scopes).id && (!wantedKinds || wantedKinds.includes(symbol.category)))
     .sort((left, right) => symbolPriority(left) - symbolPriority(right))[0];
 }
 
@@ -676,6 +784,9 @@ function resolveFieldAccess(text: string, token: Token, scopes: YcplScope[], sym
   }
   const receiverOffset = token.start - before.length + before.lastIndexOf(receiver);
   const receiverSymbol = resolveLexical(receiver, scopeForOffset(scopes, receiverOffset), scopes, symbols);
+  if (receiverSymbol?.category === "enum") {
+    return symbols.find((symbol) => symbol.category === "enumMember" && symbol.containerName === receiverSymbol.name && symbol.name === token.text);
+  }
   const receiverType = receiverSymbol?.typeName;
   if (!receiverType) {
     return undefined;
@@ -736,6 +847,9 @@ function isInsideSpan(token: Token, spans: Span[]): boolean {
 function shouldCheckDuplicate(symbol: YcplSymbol): boolean {
   return symbol.category === "function"
     || symbol.category === "struct"
+    || symbol.category === "enum"
+    || symbol.category === "enumMember"
+    || symbol.category === "typeAlias"
     || symbol.category === "module"
     || symbol.category === "package"
     || symbol.category === "constant"
@@ -744,6 +858,9 @@ function shouldCheckDuplicate(symbol: YcplSymbol): boolean {
 
 function duplicateKey(symbol: YcplSymbol): string {
   if (symbol.category === "field") {
+    return `${symbol.category}:${symbol.containerName ?? ""}:${symbol.name}`;
+  }
+  if (symbol.category === "enumMember") {
     return `${symbol.category}:${symbol.containerName ?? ""}:${symbol.name}`;
   }
   if (symbol.category === "constant" && symbol.containerName) {
@@ -785,6 +902,9 @@ function isTypeTokenContext(text: string, token: Token): boolean {
   if (/\.\s*$/.test(before)) {
     return false;
   }
+  if (/\b(?:case|switch|return|if|for|in)\s+$/.test(before)) {
+    return false;
+  }
   return /\)\s*$/.test(before)
     || /:\s*$/.test(before)
     || /\b[A-Za-z_][A-Za-z0-9_]*\s+$/.test(before) && /^\s*(?:,|\)|\{|$)/.test(after);
@@ -802,10 +922,15 @@ function symbolPriority(symbol: YcplSymbol): number {
       return 3;
     case "struct":
       return 4;
-    case "namespace":
+    case "enum":
+    case "typeAlias":
       return 5;
-    case "field":
+    case "enumMember":
       return 6;
+    case "namespace":
+      return 7;
+    case "field":
+      return 8;
     default:
       return 10;
   }

@@ -299,6 +299,37 @@ switch_ir_dir="$(mktemp -d "${TMPDIR:-/tmp}/ycpl-switch-ir.XXXXXX")"
 YCPL_NO_BOOTSTRAP=1 "$YCC_YCPL" build-ir "$switch_dir/switch.yc" -o "$switch_ir_dir" >/tmp/ycc-ycpl-ir-switch.out
 grep -q 'switch i32' "$switch_ir_dir/merged.ll"
 grep -q 'ret i32 13' "$switch_ir_dir/merged.ll"
+cat >"$switch_dir/enum_alias_switch.yc" <<'YCPL'
+enum Color {
+    Red = 2,
+    Green,
+    Blue = 8,
+}
+
+type Score = i32
+
+fn main() i32 {
+    choice: Score = Green
+    switch choice {
+        case Color.Red {
+            return 7
+        }
+        case Green {
+            return 13
+        }
+        default {
+            return 99
+        }
+    }
+    return 0
+}
+YCPL
+"$YCC_YCPL" check "$switch_dir/enum_alias_switch.yc" >/tmp/ycc-ycpl-check-enum-alias-switch.out
+grep -q 'value=13' /tmp/ycc-ycpl-check-enum-alias-switch.out
+enum_alias_ir_dir="$(mktemp -d "${TMPDIR:-/tmp}/ycpl-enum-alias-ir.XXXXXX")"
+YCPL_NO_BOOTSTRAP=1 "$YCC_YCPL" build-ir "$switch_dir/enum_alias_switch.yc" -o "$enum_alias_ir_dir" >/tmp/ycc-ycpl-ir-enum-alias-switch.out
+grep -q 'switch i32' "$enum_alias_ir_dir/merged.ll"
+grep -q 'ret i32 13' "$enum_alias_ir_dir/merged.ll"
 if "$YCC_YCPL" check examples/55_self_codegen_unknown_failure.yc >/tmp/ycc-ycpl-check-failure.out 2>&1; then
   printf 'Expected ycc-ycpl check to reject unknown local symbol\n' >&2
   exit 1
@@ -433,7 +464,14 @@ grep -q '@.stage3.tinyllvmcapi.ir' "$work_dir/merged.ll"
 grep -q '@.stage3.tinyexternmalloc.ir' "$work_dir/merged.ll"
 grep -q '@.stage3.tinyexternstring.ir' "$work_dir/merged.ll"
 grep -q '@.stage3.tinystring.ir' "$work_dir/merged.ll"
+grep -q '@.stage3.tinystruct3.ir' "$work_dir/merged.ll"
+grep -q '@.stage3.tinystruct2.ir' "$work_dir/merged.ll"
+grep -q '@.stage3.tinycfor.ir' "$work_dir/merged.ll"
+grep -q '@.stage3.tinynumericforin.ir' "$work_dir/merged.ll"
+grep -q '@.stage3.tinyforin.ir' "$work_dir/merged.ll"
+grep -q '@.stage3.tinyarraymutation.ir' "$work_dir/merged.ll"
 grep -q '@.stage3.tinyarray.ir' "$work_dir/merged.ll"
+grep -q '@.stage3.tinyenumswitch.ir' "$work_dir/merged.ll"
 grep -q '@.stage3.tinyboolhelper.ir' "$work_dir/merged.ll"
 grep -q '@.stage3.tinybool.ir' "$work_dir/merged.ll"
 grep -q '@.stage3.tinyelse.ir' "$work_dir/merged.ll"
@@ -462,7 +500,14 @@ grep -q '@.ycpl.tinyllvmcapi.ir' "$work_dir/merged.ll"
 grep -q '@.ycpl.tinyexternmalloc.ir' "$work_dir/merged.ll"
 grep -q '@.ycpl.tinyexternstring.ir' "$work_dir/merged.ll"
 grep -q '@.ycpl.tinystring.ir' "$work_dir/merged.ll"
+grep -q '@.ycpl.tinystruct3.ir' "$work_dir/merged.ll"
+grep -q '@.ycpl.tinystruct2.ir' "$work_dir/merged.ll"
+grep -q '@.ycpl.tinycfor.ir' "$work_dir/merged.ll"
+grep -q '@.ycpl.tinynumericforin.ir' "$work_dir/merged.ll"
+grep -q '@.ycpl.tinyforin.ir' "$work_dir/merged.ll"
+grep -q '@.ycpl.tinyarraymutation.ir' "$work_dir/merged.ll"
 grep -q '@.ycpl.tinyarray.ir' "$work_dir/merged.ll"
+grep -q '@.ycpl.tinyenumswitch.ir' "$work_dir/merged.ll"
 grep -q '@.ycpl.tinyboolhelper.ir' "$work_dir/merged.ll"
 grep -q '@.ycpl.tinybool.ir' "$work_dir/merged.ll"
 grep -q '@.ycpl.tinyelse.ir' "$work_dir/merged.ll"

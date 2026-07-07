@@ -12,8 +12,8 @@ run by any LSP-capable editor.
   reference index keyed by `SymbolID`, not by identifier text.
 - `analysis/workspaceScanner.ts` lazily scans `.yc` files, skipping build and
   dependency directories.
-- `analysis/stdlib.ts` discovers YCPL standard-library modules and exported
-  functions.
+- `analysis/stdlib.ts` discovers YCPL standard-library modules, exported
+  functions, and exported structs from `stl/std`.
 - `compiler/compilerBridge.ts` defines the boundary for reusing the real YCPL
   compiler lexer, parser, AST, symbol table, type checker, formatter, and
   diagnostics without coupling LSP providers to compiler internals.
@@ -21,8 +21,9 @@ run by any LSP-capable editor.
   rename, symbols, signature help, semantic tokens, diagnostics, formatting,
   folding, selection ranges, highlights, inlay hints, code actions, code lens,
   implementations, and call hierarchy.
-- Standard-library member completion can attach LSP `additionalTextEdits`, so
-  accepting `fmt.println`-style completions can add the missing `import` line.
+- Standard-library function and member completion can attach LSP
+  `additionalTextEdits`, so accepting `bytes.from_string` or `fmt.println`-style
+  completions can add the missing `import` line.
 - `server.ts` wires the providers to `vscode-languageserver`.
 
 ## Symbol Resolution

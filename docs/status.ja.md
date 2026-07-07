@@ -187,16 +187,17 @@ stage-2 self-host gate
 └─ compiler として等価な native ycc-ycpl は次の実装ステップ
 ```
 
-## 予約済みだが未実装
+## 追加済みの構文と制限
 
 ```text
 enum switch type
 ```
 
 ```text
-reserved token
-├─ 将来構文との衝突を防ぐ
-└─ parser/codegen support は未実装
+syntax support
+├─ bootstrap parser/codegen は enum、type alias、switch/case/default を扱う
+├─ docs/grammar と VSCode grammar は追加済み構文を追跡する
+└─ self-host checker/codegen の switch は i32 selector と integer literal case が先行
 ```
 
 `none` は optional type ではなく null literal です。import した関数の直接呼びは

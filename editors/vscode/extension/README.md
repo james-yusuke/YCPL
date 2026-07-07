@@ -35,9 +35,14 @@ testing a packaged or YCPL-native server.
 
 The language server provides YCPL-aware completion, hover, navigation,
 diagnostics, formatting, semantic tokens, inlay hints, code actions, and code
-lens. Standard-library member completion also supports import edits: typing
-`fmt.` and accepting `println` inserts `import "std/fmt" as fmt` when the alias
-is not already imported.
+lens. Standard-library completion includes module functions such as
+`bytes.from_string`, `hex.encode`, and `base64.decode`; accepting one inserts the
+missing `import "std/..." as ...` line when needed. Member completion also
+supports import edits: typing `fmt.` and accepting `println` inserts
+`import "std/fmt" as fmt` when the alias is not already imported.
+
+Syntax highlighting and snippets cover current control/type syntax including
+`switch`, `case`, `default`, `enum`, and `type`.
 
 ## Package
 
