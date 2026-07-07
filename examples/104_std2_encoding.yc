@@ -6,24 +6,28 @@ import "std2/hash" as hash
 import "std2/hex" as hex
 
 fn main() {
-    b := bytes.from_string("YCPL")
+    b: owned Bytes := bytes.from_string("YCPL")
     defer b.free()
 
-    b32 := base32.encode(b)
-    fmt.println(b32)
-    decoded32 := base32.decode(b32)
-    defer decoded32.free()
-    fmt.println(b.eq(decoded32))
+    encodedbase := base32.encode(b)
+    decodedbase := base32.decode(encodedbase)
+    defer decodedbase.free()
 
-    b64 := base64.encode_url(b)
-    fmt.println(b64)
-    decoded64 := base64.decode_url(b64)
-    defer decoded64.free()
-    fmt.println(b.eq(decoded64))
+    encodedurl := base64.encode_url(b)
+    decodedurl := base64.decode_url(encodedurl)
+    defer decodedurl.free()
 
-    hx := hex.encode_upper(b)
-    fmt.println(hx)
-    fmt.println(hex.is_valid(hx))
+    scope encoding {
+        fmt.println(encodedbase)
+        fmt.println(b.eq(decodedbase))
 
-    fmt.println(hash.adler32(b))
+        fmt.println(encodedurl)
+        fmt.println(b.eq(decodedurl))
+
+        hx := hex.encode_upper(b)
+        fmt.println(hx)
+        fmt.println(hex.is_valid(hx))
+
+        fmt.println(hash.adler32(b))
+    }
 }

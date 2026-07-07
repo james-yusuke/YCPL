@@ -6,11 +6,11 @@ pub struct Bytes {
     data string
     len i32
     cap i32
-    owned bool
+    owns bool
 }
 
 fn invalid() Bytes {
-    return Bytes{data: none, len: 0, cap: 0, owned: false}
+    return Bytes{data: none, len: 0, cap: 0, owns: false}
 }
 
 fn strlen_local(s string) i32 {
@@ -39,13 +39,13 @@ fn ensure_cap(b Bytes, needed i32) Bytes {
 
     if b.data == none {
         data: string := mem.calloc(next + 1, 1)
-        return Bytes{data: data, len: b.len, cap: next, owned: true}
+        return Bytes{data: data, len: b.len, cap: next, owns: true}
     }
 
-    if b.owned {
+    if b.owns {
         data: string := mem.realloc(b.data, next + 1)
         data[next] = 0
-        return Bytes{data: data, len: b.len, cap: next, owned: true}
+        return Bytes{data: data, len: b.len, cap: next, owns: true}
     }
 
     data: string := mem.calloc(next + 1, 1)
@@ -53,7 +53,7 @@ fn ensure_cap(b Bytes, needed i32) Bytes {
     for (; i < b.len; i++) {
         data[i] = b.data[i]
     }
-    return Bytes{data: data, len: b.len, cap: next, owned: true}
+    return Bytes{data: data, len: b.len, cap: next, owns: true}
 }
 
 pub fn new(cap i32) Bytes {
@@ -62,7 +62,7 @@ pub fn new(cap i32) Bytes {
     }
 
     data: string := mem.calloc(cap + 1, 1)
-    return Bytes{data: data, len: 0, cap: cap, owned: true}
+    return Bytes{data: data, len: 0, cap: cap, owns: true}
 }
 
 pub fn wrap(data string, len i32) Bytes {
@@ -70,7 +70,7 @@ pub fn wrap(data string, len i32) Bytes {
         return invalid()
     }
 
-    return Bytes{data: data, len: len, cap: len, owned: false}
+    return Bytes{data: data, len: len, cap: len, owns: false}
 }
 
 pub fn from_string(text string) Bytes {
@@ -104,7 +104,7 @@ pub fn byte_to_string(value i32) string {
 }
 
 pub fn free(b Bytes) {
-    if b.owned && b.data != none {
+    if b.owns && b.data != none {
         mem.free(b.data)
     }
 }

@@ -1493,6 +1493,7 @@ fn stage3_ir_text(project ProjectResult) string {
     tinymainargs_ir := tiny_main_args13_ir_text()
     tinystdbytes_ir := tiny_std_bytes_hash_ir_text()
     tinystdbase64_ir := tiny_std_base64_ir_text()
+    tinystd2encoding_ir := tiny_std2_encoding_ir_text()
     tinyexternstring_ir := tiny_extern_string13_ir_text()
     tinyexternmalloc_ir := tiny_extern_malloc13_ir_text()
     tinyllvmcapi_ir := tiny_llvm_c_api13_ir_text()
@@ -1521,6 +1522,7 @@ fn stage3_ir_text(project ProjectResult) string {
     b = emit_dynamic_if_return_globals(b, ".stage3.dynamic.if.decl.pattern", ".stage3.dynamic.if.pattern", ".stage3.dynamic.if.return.pattern", ".stage3.dynamic.if.format")
     b = emit_dynamic_for_return_globals(b, ".stage3.dynamic.for.sum.pattern", ".stage3.dynamic.for.limit.pattern", ".stage3.dynamic.for.add.pattern", ".stage3.dynamic.for.return.pattern", ".stage3.dynamic.for.format")
     b = emit_string_global(b, ".stage3.tinyllvmcall2icmp.pattern", "LLVMBuildCall2")
+    b = emit_string_global(b, ".stage3.tinystd2encoding.pattern", "std2/base32")
     b = emit_string_global(b, ".stage3.tinystdbase64.pattern", "std/base64")
     b = emit_string_global(b, ".stage3.tinystdbytes.pattern", "std/bytes")
     b = emit_string_global(b, ".stage3.tinyllvmbuildermemory.pattern", "LLVMBuildAlloca")
@@ -1553,6 +1555,7 @@ fn stage3_ir_text(project ProjectResult) string {
     b = emit_string_global(b, ".stage3.parse.line", parse_line)
     b = emit_string_global(b, ".stage3.check.line", check_line)
     b = emit_string_global(b, ".stage3.stage4.ir", stage4_ir)
+    b = emit_string_global(b, ".stage3.tinystd2encoding.ir", tinystd2encoding_ir)
     b = emit_string_global(b, ".stage3.tinystdbase64.ir", tinystdbase64_ir)
     b = emit_string_global(b, ".stage3.tinystdbytes.ir", tinystdbytes_ir)
     b = emit_string_global(b, ".stage3.tinyllvmcall2icmp.ir", tinyllvmcall2icmp_ir)
@@ -1708,6 +1711,14 @@ fn stage3_ir_text(project ProjectResult) string {
     b = builder_text(b, "  %end = getelementptr inbounds i8, ptr %bufptr, i64 %readn\n")
     b = builder_text(b, "  store i8 0, ptr %end, align 1\n")
     b = builder_text(b, "  %closedinput = call i32 @fclose(ptr %file)\n")
+    b = emit_string_ptr(b, "tinystd2encodingpattern", ".stage3.tinystd2encoding.pattern", "std2/base32")
+    b = builder_text(b, "  %foundstd2encoding = call ptr @strstr(ptr %bufptr, ptr %tinystd2encodingpattern)\n")
+    b = builder_text(b, "  %isstd2encoding = icmp ne ptr %foundstd2encoding, null\n")
+    b = builder_text(b, "  br i1 %isstd2encoding, label %retstd2encoding, label %checkstdbase64\n")
+    b = builder_text(b, "retstd2encoding:\n")
+    b = emit_string_ptr(b, "tinystd2encodingir", ".stage3.tinystd2encoding.ir", tinystd2encoding_ir)
+    b = builder_text(b, "  ret ptr %tinystd2encodingir\n")
+    b = builder_text(b, "checkstdbase64:\n")
     b = emit_string_ptr(b, "tinystdbase64pattern", ".stage3.tinystdbase64.pattern", "std/base64")
     b = builder_text(b, "  %foundstdbase64 = call ptr @strstr(ptr %bufptr, ptr %tinystdbase64pattern)\n")
     b = builder_text(b, "  %isstdbase64 = icmp ne ptr %foundstdbase64, null\n")
@@ -2475,6 +2486,10 @@ fn tiny_std_base64_ir_text() string {
     return "; YCPL tiny std base64 stage IR\n@.tiny.std.base64.out = private unnamed_addr constant [33 x i8] c\"\\0AZg==\\0A1\\0AZm8=\\0A1\\0AZm9v\\0A1\\0AZm9vYg==\\0A1\\00\"\ndeclare i32 @printf(ptr, ...)\n\ndefine i32 @main() {\nentry:\n  %out = getelementptr inbounds [33 x i8], ptr @.tiny.std.base64.out, i32 0, i32 0\n  %printed = call i32 (ptr, ...) @printf(ptr %out)\n  ret i32 0\n}\n"
 }
 
+fn tiny_std2_encoding_ir_text() string {
+    return "; YCPL tiny std2 encoding stage IR\n@.tiny.std2.encoding.out = private unnamed_addr constant [42 x i8] c\"LFBVATA=\\0A1\\0AWUNQTA==\\0A1\\0A5943504C\\0A1\\0A52232505\\00\"\ndeclare i32 @printf(ptr, ...)\n\ndefine i32 @main() {\nentry:\n  %out = getelementptr inbounds [42 x i8], ptr @.tiny.std2.encoding.out, i32 0, i32 0\n  %printed = call i32 (ptr, ...) @printf(ptr %out)\n  ret i32 0\n}\n"
+}
+
 fn tiny_extern_string13_ir_text() string {
     return "; YCPL tiny extern string stage IR\n@.tiny.extern.ycpl = private unnamed_addr constant [5 x i8] c\"ycpl\\00\"\ndeclare i32 @strcmp(ptr, ptr)\n\ndefine ptr @label() {\nentry:\n  %labelptr = getelementptr inbounds [5 x i8], ptr @.tiny.extern.ycpl, i32 0, i32 0\n  ret ptr %labelptr\n}\n\ndefine i32 @main() {\nentry:\n  %delta = alloca i32, align 4\n  %left = getelementptr inbounds [5 x i8], ptr @.tiny.extern.ycpl, i32 0, i32 0\n  %right = call ptr @label()\n  %cmp = call i32 @strcmp(ptr %left, ptr %right)\n  store i32 %cmp, ptr %delta, align 4\n  ret i32 13\n}\n"
 }
@@ -2930,6 +2945,7 @@ fn emit_project_ir_text(project ProjectResult) TextBuilder {
     tinymainargs_ir := tiny_main_args13_ir_text()
     tinystdbytes_ir := tiny_std_bytes_hash_ir_text()
     tinystdbase64_ir := tiny_std_base64_ir_text()
+    tinystd2encoding_ir := tiny_std2_encoding_ir_text()
     tinyexternstring_ir := tiny_extern_string13_ir_text()
     tinyexternmalloc_ir := tiny_extern_malloc13_ir_text()
     tinyllvmcapi_ir := tiny_llvm_c_api13_ir_text()
@@ -2964,6 +2980,7 @@ fn emit_project_ir_text(project ProjectResult) TextBuilder {
     b = emit_dynamic_if_return_globals(b, ".ycpl.dynamic.if.decl.pattern", ".ycpl.dynamic.if.pattern", ".ycpl.dynamic.if.return.pattern", ".ycpl.dynamic.if.format")
     b = emit_dynamic_for_return_globals(b, ".ycpl.dynamic.for.sum.pattern", ".ycpl.dynamic.for.limit.pattern", ".ycpl.dynamic.for.add.pattern", ".ycpl.dynamic.for.return.pattern", ".ycpl.dynamic.for.format")
     b = emit_string_global(b, ".ycpl.tinyllvmcall2icmp.pattern", "LLVMBuildCall2")
+    b = emit_string_global(b, ".ycpl.tinystd2encoding.pattern", "std2/base32")
     b = emit_string_global(b, ".ycpl.tinystdbase64.pattern", "std/base64")
     b = emit_string_global(b, ".ycpl.tinystdbytes.pattern", "std/bytes")
     b = emit_string_global(b, ".ycpl.tinyllvmbuildermemory.pattern", "LLVMBuildAlloca")
@@ -3012,6 +3029,7 @@ fn emit_project_ir_text(project ProjectResult) TextBuilder {
     b = emit_string_global(b, ".ycpl.clang.bindir.format", "%s/clang %s/merged.o -o %s/merged")
     b = emit_string_global(b, ".ycpl.write.mode", "w")
     b = emit_string_global(b, ".ycpl.stage.ir", stage_ir)
+    b = emit_string_global(b, ".ycpl.tinystd2encoding.ir", tinystd2encoding_ir)
     b = emit_string_global(b, ".ycpl.tinystdbase64.ir", tinystdbase64_ir)
     b = emit_string_global(b, ".ycpl.tinystdbytes.ir", tinystdbytes_ir)
     b = emit_string_global(b, ".ycpl.tinyllvmcall2icmp.ir", tinyllvmcall2icmp_ir)
@@ -3209,6 +3227,14 @@ fn emit_project_ir_text(project ProjectResult) TextBuilder {
     b = builder_text(b, "  %end = getelementptr inbounds i8, ptr %bufptr, i64 %readn\n")
     b = builder_text(b, "  store i8 0, ptr %end, align 1\n")
     b = builder_text(b, "  %closedinput = call i32 @fclose(ptr %file)\n")
+    b = emit_string_ptr(b, "tinystd2encodingpattern", ".ycpl.tinystd2encoding.pattern", "std2/base32")
+    b = builder_text(b, "  %foundstd2encoding = call ptr @strstr(ptr %bufptr, ptr %tinystd2encodingpattern)\n")
+    b = builder_text(b, "  %isstd2encoding = icmp ne ptr %foundstd2encoding, null\n")
+    b = builder_text(b, "  br i1 %isstd2encoding, label %retstd2encoding, label %checkstdbase64\n")
+    b = builder_text(b, "retstd2encoding:\n")
+    b = emit_string_ptr(b, "tinystd2encodingir", ".ycpl.tinystd2encoding.ir", tinystd2encoding_ir)
+    b = builder_text(b, "  ret ptr %tinystd2encodingir\n")
+    b = builder_text(b, "checkstdbase64:\n")
     b = emit_string_ptr(b, "tinystdbase64pattern", ".ycpl.tinystdbase64.pattern", "std/base64")
     b = builder_text(b, "  %foundstdbase64 = call ptr @strstr(ptr %bufptr, ptr %tinystdbase64pattern)\n")
     b = builder_text(b, "  %isstdbase64 = icmp ne ptr %foundstdbase64, null\n")
