@@ -81,7 +81,22 @@
         },
         {
           "name": "meta.type.declaration.ycpl",
-          "match": "\\b(?:(pub)\\s+)?(struct)\\s+([A-Za-z_][A-Za-z0-9_]*)",
+          "match": "\\b(?:(pub)\\s+)?(struct|enum)\\s+([A-Za-z_][A-Za-z0-9_]*)",
+          "captures": {
+            "1": {
+              "name": "storage.modifier.ycpl"
+            },
+            "2": {
+              "name": "keyword.declaration.ycpl"
+            },
+            "3": {
+              "name": "entity.name.type.ycpl"
+            }
+          }
+        },
+        {
+          "name": "meta.type.alias.ycpl",
+          "match": "\\b(?:(pub)\\s+)?(type)\\s+([A-Za-z_][A-Za-z0-9_]*)",
           "captures": {
             "1": {
               "name": "storage.modifier.ycpl"
@@ -118,11 +133,11 @@
       "patterns": [
         {
           "name": "keyword.control.ycpl",
-          "match": "\\b(module|package|import|if|else|for|in|return|break|continue|as)\\b"
+          "match": "\\b(module|package|import|if|else|for|in|switch|case|default|return|break|continue|as)\\b"
         },
         {
           "name": "keyword.declaration.ycpl",
-          "match": "\\b(pub|extern|intrinsic|fn|struct|const|mut)\\b"
+          "match": "\\b(pub|extern|intrinsic|fn|struct|enum|type|const|mut)\\b"
         },
         {
           "name": "constant.language.ycpl",

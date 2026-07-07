@@ -187,16 +187,17 @@ stage-2 self-host gate
 └─ compiler-equivalent native ycc-ycpl is still the next implementation step
 ```
 
-## Reserved But Not Implemented
+## Added Syntax And Limits
 
 ```text
 enum switch type
 ```
 
 ```text
-reserved token
-├─ prevents future syntax collision
-└─ has no parser/codegen support yet
+syntax support
+├─ bootstrap parser/codegen handles enum, type aliases, and switch/case/default
+├─ docs/grammar and VS Code grammar track the added syntax
+└─ self-host checker/codegen switch support currently leads with i32 selectors and integer literal cases
 ```
 
 Notes: `none` is a null literal, not an optional type; imported direct calls are

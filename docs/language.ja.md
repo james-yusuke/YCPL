@@ -6,7 +6,7 @@
 .yc ファイル
 ├─ 任意の module/package 宣言
 ├─ imports
-├─ functions, structs, externs, intrinsics
+├─ functions, structs, enums, type aliases, externs, intrinsics
 └─ fn main() entry
 ```
 
@@ -29,13 +29,12 @@ fn main() { ... }       -> 実行コードを置ける
 識別子は英字または `_` で始まり、英字、数字、`_` を続けられます。
 
 ```text
-module package import pub extern intrinsic fn struct const
-if else for in return break continue as
+module package import pub extern intrinsic fn struct enum type const
+if else for in switch case default return break continue as
 true false none byte
 ```
 
-`enum`、`switch`、`type` などの予約語は、まだ対応済みの構文ではありません。
-詳細は [実装状況](status.ja.md#予約済みだが未実装) にまとめています。
+`case` と `default` は `switch` 本体のラベルとして使います。
 
 ## モジュールと import
 
@@ -96,11 +95,23 @@ Types
 ├─ primitive: i32 i64 bool char byte string float double void size_t
 ├─ pointer:   *T
 ├─ slice:     []T
+├─ alias:     type Score = i32
+├─ enum:      enum Color { Red, Green }
 └─ nested:    [][]T
 ```
 
 runtime slice は `{ data, len, cap, elem_size }` です。`std/array` で作った
 slice は手動で管理します。
+
+```YCPL
+enum Color {
+    Red = 2,
+    Green,
+    Blue = 8,
+}
+
+type Score = i32
+```
 
 ## 変数とリテラル
 
@@ -145,4 +156,20 @@ for i := 0; i < 10; i++ {
 for value in xs {
     println(value)
 }
+
+switch color {
+    case Color.Red {
+        println("red")
+    }
+    case Green {
+        println("green")
+    }
+    default {
+        println("other")
+    }
+}
 ```
+
+`switch` は `switch expression { case expression { ... } default { ... } }` の形です。
+現在の self-host checker/codegen では i32 selector と integer literal case の対応が
+先行しています。
