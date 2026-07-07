@@ -988,6 +988,7 @@ grep -q '@.stage3.stage4.ir' "$strict_stage3_ir_dir/merged.ll"
 grep -q 'LLVM_CONFIG' "$strict_stage3_ir_dir/merged.ll"
 grep -q 'PATH=/opt/homebrew/opt/llvm/bin' "$strict_stage3_ir_dir/merged.ll"
 grep -q '/usr/lib/llvm-22/bin' "$strict_stage3_ir_dir/merged.ll"
+grep -q '@.stage3.tinystd2encoding.ir' "$strict_stage3_ir_dir/merged.ll"
 grep -q '@.stage3.tinystdbase64.ir' "$strict_stage3_ir_dir/merged.ll"
 grep -q '@.stage3.tinystdbytes.ir' "$strict_stage3_ir_dir/merged.ll"
 grep -q '@.stage3.tinyllvmcall2icmp.ir' "$strict_stage3_ir_dir/merged.ll"
@@ -1407,6 +1408,12 @@ if [ -n "$LLC_BIN" ]; then
   grep -q '@.tiny.std.base64.out' "$strict_stage3_std_base64_ir_dir/merged.ll"
   grep -q 'declare i32 @printf' "$strict_stage3_std_base64_ir_dir/merged.ll"
   grep -q 'Zm9vYg==' "$strict_stage3_std_base64_ir_dir/merged.ll"
+  strict_stage3_std2_encoding_ir_dir="$(mktemp -d "${TMPDIR:-/tmp}/ycpl-strict-stage3-std2-encoding-ir.XXXXXX")"
+  "$strict_stage3_native_dir/merged" build-ir examples/104_std2_encoding.yc -o "$strict_stage3_std2_encoding_ir_dir" >/tmp/ycpl-strict-stage3-std2-encoding-ir.out
+  grep -q 'YCPL tiny std2 encoding stage IR' "$strict_stage3_std2_encoding_ir_dir/merged.ll"
+  grep -q '@.tiny.std2.encoding.out' "$strict_stage3_std2_encoding_ir_dir/merged.ll"
+  grep -q 'LFBVATA=' "$strict_stage3_std2_encoding_ir_dir/merged.ll"
+  grep -q '52232505' "$strict_stage3_std2_encoding_ir_dir/merged.ll"
   strict_stage3_array_ir_dir="$(mktemp -d "${TMPDIR:-/tmp}/ycpl-strict-stage3-array-ir.XXXXXX")"
   "$strict_stage3_native_dir/merged" build-ir examples/81_self_codegen_array_index.yc -o "$strict_stage3_array_ir_dir" >/tmp/ycpl-strict-stage3-array-ir.out
   grep -q 'YCPL tiny array index stage IR' "$strict_stage3_array_ir_dir/merged.ll"
@@ -1786,6 +1793,16 @@ if [ -n "$LLC_BIN" ]; then
     printf 'Expected strict stage3 generated compiler std base64 output mismatch\n' >&2
     printf 'Expected:\n%s\n' "$strict_stage3_std_base64_expected" >&2
     printf 'Got:\n%s\n' "$strict_stage3_std_base64_output" >&2
+    exit 1
+  fi
+  strict_stage3_std2_encoding_native_dir="$(mktemp -d "${TMPDIR:-/tmp}/ycpl-strict-stage3-std2-encoding-native.XXXXXX")"
+  LLVM_BINDIR="$(dirname "$LLC_BIN")" "$strict_stage3_native_dir/merged" build examples/104_std2_encoding.yc -o "$strict_stage3_std2_encoding_native_dir" >/tmp/ycpl-strict-stage3-std2-encoding-native.out
+  strict_stage3_std2_encoding_output="$("$strict_stage3_std2_encoding_native_dir/merged")"
+  strict_stage3_std2_encoding_expected=$'LFBVATA=\n1\nWUNQTA==\n1\n5943504C\n1\n52232505'
+  if [ "$strict_stage3_std2_encoding_output" != "$strict_stage3_std2_encoding_expected" ]; then
+    printf 'Expected strict stage3 generated compiler std2 encoding output mismatch\n' >&2
+    printf 'Expected:\n%s\n' "$strict_stage3_std2_encoding_expected" >&2
+    printf 'Got:\n%s\n' "$strict_stage3_std2_encoding_output" >&2
     exit 1
   fi
 

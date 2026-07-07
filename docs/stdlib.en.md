@@ -87,7 +87,7 @@ json.parse(text)
     -> json.free(root)
 
 bytes.from_string(text)
-    -> Bytes { data, len, cap, owned }
+    -> Bytes { data, len, cap, owns }
     -> bytes.to_string / bytes.byte_to_string
     -> hex.encode / base64.encode / hash.crc32
     -> bytes.free

@@ -42,7 +42,6 @@ fn is_declare_assign(kind i32, lexeme string) bool {
 
 fn is_removed_keyword(lexeme string) bool {
     if str.eq(lexeme, "go") { return true }
-    if str.eq(lexeme, "defer") { return true }
     if str.eq(lexeme, "select") { return true }
     if str.eq(lexeme, "interface") { return true }
     if str.eq(lexeme, "is") { return true }
