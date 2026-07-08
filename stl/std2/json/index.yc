@@ -6,6 +6,7 @@ import "std2/text" as text
 
 pub struct JsonValue {
     kind i32
+    root *byte
     source string
     start i32
     end i32
@@ -14,7 +15,7 @@ pub struct JsonValue {
 }
 
 pub fn invalid_value(message string) JsonValue {
-    return JsonValue{kind: -1, source: none, start: 0, end: 0, owns: false, message: message}
+    return JsonValue{kind: -1, root: none, source: none, start: 0, end: 0, owns: false, message: message}
 }
 
 pub fn skip_ws(message string, i i32) i32 {
@@ -138,14 +139,14 @@ fn value_end(source string, start i32) i32 {
     return i
 }
 
-fn make_view(source string, start i32, end_pos i32, should_own bool) JsonValue {
+fn make_view(source string, root *byte, start i32, end_pos i32, should_own bool) JsonValue {
     real_start := skip_ws(source, start)
     k := value_kind_at(source, real_start)
     if k < 0 || end_pos < real_start {
         return invalid_value("invalid JSON value")
     }
 
-    return JsonValue{kind: k, source: source, start: real_start, end: end_pos, owns: should_own, message: ""}
+    return JsonValue{kind: k, root: root, source: source, start: real_start, end: end_pos, owns: should_own, message: ""}
 }
 
 pub fn parse(source string) JsonValue {
@@ -168,7 +169,9 @@ pub fn parse(source string) JsonValue {
         return invalid_value("unexpected trailing JSON text")
     }
 
-    return make_view(copy, start, end_pos, true)
+    root := mem.alloc(1)
+    mem.attach_child(root, cast(*byte, copy))
+    return make_view(copy, root, start, end_pos, true)
 }
 
 pub fn kind(value JsonValue) i32 {
@@ -254,7 +257,7 @@ pub fn get(obj JsonValue, key string) JsonValue {
         return invalid_value("invalid JSON object value")
     }
 
-    return make_view(obj.source, start, end_pos, false)
+    return make_view(obj.source, obj.root, start, end_pos, false)
 }
 
 fn decode_string_slice(source string, start i32, end_pos i32) string {
@@ -359,7 +362,7 @@ pub fn at(array JsonValue, index i32) JsonValue {
         }
 
         if current == index {
-            return make_view(array.source, i, end_pos, false)
+            return make_view(array.source, array.root, i, end_pos, false)
         }
 
         current += 1
@@ -430,8 +433,12 @@ pub fn len(value JsonValue) i32 {
 }
 
 pub fn free(value JsonValue) {
-    if value.owns && value.source != none {
-        mem.free(value.source)
+    if value.owns {
+        if value.root != none {
+            mem.free(value.root)
+        } else if value.source != none {
+            mem.free(value.source)
+        }
     }
 }
 

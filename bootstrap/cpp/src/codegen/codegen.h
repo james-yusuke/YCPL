@@ -47,7 +47,7 @@ namespace codegen
         std::vector<std::map<std::string, bool>> locals_stack_const;
         std::unordered_map<std::string, llvm::Type *> localPointedType;
         std::unordered_map<std::string, llvm::Type *> globalPointedType;
-        std::vector<const ast::Stmt *> deferred_stmts;
+        std::vector<std::vector<const ast::Stmt *>> deferred_scopes;
         bool emitting_deferred = false;
 
         // Function and loop state shared by expression/statement lowering.
@@ -55,6 +55,8 @@ namespace codegen
 
         std::vector<llvm::BasicBlock *> break_targets;
         std::vector<llvm::BasicBlock *> continue_targets;
+        std::vector<size_t> break_defer_depths;
+        std::vector<size_t> continue_defer_depths;
 
         // Struct registry prepared before function body generation.
         std::unordered_map<std::string, llvm::StructType *> struct_types;
@@ -110,6 +112,12 @@ namespace codegen
         std::pair<bool, bool> infer_array_literal_element_shape(const ast::Expr *collectionExpr);
 
         llvm::Value *create_entry_alloca(llvm::Function *func, llvm::Type *type, const std::string &name);
+        llvm::FunctionCallee get_runtime_void_fn(const std::string &name);
+        llvm::FunctionCallee get_runtime_ptr_fn(const std::string &name);
+        void emit_runtime_function_entry(bool is_main);
+        void emit_runtime_function_exit(bool is_main);
+        llvm::Value *emit_runtime_move_to_parent(llvm::Value *value);
+        void emit_runtime_move_frame_to_parent();
 
         // Expression lowering.
         llvm::Value *codegen_expr(const ast::Expr *e);
@@ -173,6 +181,8 @@ namespace codegen
         std::string infer_expr_type_name(const ast::Expr *expr);
         bool is_local_const(const std::string &name);
         void emit_deferred_statements();
+        void emit_current_deferred_statements();
+        void emit_deferred_scopes_to_depth(size_t keepDepth);
 
         void predeclare_functions(const std::vector<const ast::FuncDecl *> &funcs);
         llvm::Function *get_or_declare_c_function(const std::string &name);

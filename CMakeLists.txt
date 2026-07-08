@@ -100,6 +100,10 @@ add_library(ycclib
     bootstrap/cpp/src/module/resolver.cpp
 )
 
+add_library(yc_runtime STATIC
+    bootstrap/cpp/runtime/yc_runtime.c
+)
+
 target_include_directories(ycclib SYSTEM PUBLIC ${LLVM_INCLUDE_DIRS})
 separate_arguments(YCPL_LLVM_DEFINITIONS NATIVE_COMMAND "${LLVM_DEFINITIONS}")
 target_compile_options(ycclib PUBLIC ${YCPL_LLVM_DEFINITIONS})

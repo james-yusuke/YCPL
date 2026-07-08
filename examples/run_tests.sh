@@ -46,6 +46,7 @@ LLC="${LLC:-${LLVM_BIN:+${LLVM_BIN}/llc}}"
 CLANG="${CLANG:-${LLVM_BIN:+${LLVM_BIN}/clang}}"
 LLC="${LLC:-llc}"
 CLANG="${CLANG:-clang}"
+RUNTIME_SRC="${YCPL_RUNTIME_SRC:-$ROOT_DIR/bootstrap/cpp/runtime/yc_runtime.c}"
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -87,6 +88,22 @@ expect_exact() {
     local expected="$2"
 
     [ "$actual" = "$expected" ]
+}
+
+runtime_object_for() {
+    local out_dir="$1"
+    local runtime_obj="$out_dir/yc_runtime.o"
+
+    if [ ! -f "$RUNTIME_SRC" ]; then
+        return 2
+    fi
+
+    "$CLANG" -std=c11 -c "$RUNTIME_SRC" -o "$runtime_obj" 2>"$out_dir/runtime.log"
+    if [ $? -ne 0 ]; then
+        return 1
+    fi
+
+    printf "%s\n" "$runtime_obj"
 }
 
 compile_run_and_verify() {
@@ -139,7 +156,21 @@ compile_run_and_verify() {
         return 1
     fi
 
-    "$CLANG" $LINKFLAGS "$obj_file" -o "$exe_file" -lm 2>"$out_dir/link.log"
+    local runtime_obj
+    runtime_obj=$(runtime_object_for "$out_dir")
+    local runtime_status=$?
+    if [ $runtime_status -ne 0 ]; then
+        printf "${RED}FAIL${NC} (runtime object error)\n"
+        if [ $runtime_status -eq 2 ]; then
+            echo "  Missing runtime source: $RUNTIME_SRC"
+        else
+            cat "$out_dir/runtime.log"
+        fi
+        ((FAIL++))
+        return 1
+    fi
+
+    "$CLANG" $LINKFLAGS "$obj_file" "$runtime_obj" -o "$exe_file" -lm 2>"$out_dir/link.log"
     if [ $? -ne 0 ]; then
         printf "${RED}FAIL${NC} (link error)\n"
         cat "$out_dir/link.log"
@@ -214,7 +245,21 @@ compile_run_with_input_and_verify() {
         return 1
     fi
 
-    "$CLANG" $LINKFLAGS "$obj_file" -o "$exe_file" -lm 2>"$out_dir/link.log"
+    local runtime_obj
+    runtime_obj=$(runtime_object_for "$out_dir")
+    local runtime_status=$?
+    if [ $runtime_status -ne 0 ]; then
+        printf "${RED}FAIL${NC} (runtime object error)\n"
+        if [ $runtime_status -eq 2 ]; then
+            echo "  Missing runtime source: $RUNTIME_SRC"
+        else
+            cat "$out_dir/runtime.log"
+        fi
+        ((FAIL++))
+        return 1
+    fi
+
+    "$CLANG" $LINKFLAGS "$obj_file" "$runtime_obj" -o "$exe_file" -lm 2>"$out_dir/link.log"
     if [ $? -ne 0 ]; then
         printf "${RED}FAIL${NC} (link error)\n"
         cat "$out_dir/link.log"
@@ -281,7 +326,21 @@ test_project() {
         return 1
     fi
 
-    "$CLANG" $LINKFLAGS "$obj_file" -o "$exe_file" -lm 2>"$out_dir/link.log"
+    local runtime_obj
+    runtime_obj=$(runtime_object_for "$out_dir")
+    local runtime_status=$?
+    if [ $runtime_status -ne 0 ]; then
+        printf "${RED}FAIL${NC} (runtime object error)\n"
+        if [ $runtime_status -eq 2 ]; then
+            echo "  Missing runtime source: $RUNTIME_SRC"
+        else
+            cat "$out_dir/runtime.log"
+        fi
+        ((FAIL++))
+        return 1
+    fi
+
+    "$CLANG" $LINKFLAGS "$obj_file" "$runtime_obj" -o "$exe_file" -lm 2>"$out_dir/link.log"
     if [ $? -ne 0 ]; then
         printf "${RED}FAIL${NC} (link error)\n"
         cat "$out_dir/link.log"
@@ -428,7 +487,21 @@ compile_run_expect_failure() {
         return 1
     fi
 
-    "$CLANG" $LINKFLAGS "$obj_file" -o "$exe_file" -lm 2>"$out_dir/link.log"
+    local runtime_obj
+    runtime_obj=$(runtime_object_for "$out_dir")
+    local runtime_status=$?
+    if [ $runtime_status -ne 0 ]; then
+        printf "${RED}FAIL${NC} (runtime object error)\n"
+        if [ $runtime_status -eq 2 ]; then
+            echo "  Missing runtime source: $RUNTIME_SRC"
+        else
+            cat "$out_dir/runtime.log"
+        fi
+        ((FAIL++))
+        return 1
+    fi
+
+    "$CLANG" $LINKFLAGS "$obj_file" "$runtime_obj" -o "$exe_file" -lm 2>"$out_dir/link.log"
     if [ $? -ne 0 ]; then
         printf "${RED}FAIL${NC} (link error)\n"
         cat "$out_dir/link.log"
@@ -490,6 +563,15 @@ compile_run_and_verify "$SCRIPT_DIR/101_enum_switch_type_alias.yc" $'10\n20\n30'
 compile_run_and_verify "$SCRIPT_DIR/102_std_bytes_hex_hash.yc" $'4\n89\nYCPL\nY\n120\n1\n5943504c\n1\n1041946889\n541916226'
 compile_run_and_verify "$SCRIPT_DIR/103_std_base64.yc" $'\nZg==\n1\nZm8=\n1\nZm9v\n1\nZm9vYg==\n1'
 compile_run_and_verify "$SCRIPT_DIR/104_std2_encoding.yc" $'LFBVATA=\n1\nWUNQTA==\n1\n5943504C\n1\n52232505' "@std2__base32__encode" "@std2__base64__encode_url" "@std2__bytes__eq" "@std2__bytes__free"
+compile_run_and_verify "$SCRIPT_DIR/105_defer_scope_order.yc" $'body\nouter\nloop\nloop\nearly\nfunction'
+compile_run_and_verify "$SCRIPT_DIR/106_std2_selfhost_primitives.yc" $'tok:ens\n27\n1\n2' "@std2__text__append" "@std2__map__put_i32" "%YCPLArrayHeader"
+compile_run_and_verify "$SCRIPT_DIR/107_slice_pointer_extern_abi.yc" $'strap\nstr\n1\n5' "@std2__text__slice" "@std2__mem__copy" "@memcmp"
+compile_run_and_verify "$SCRIPT_DIR/108_map_type_syntax.yc" "13" "@std2__map__put_i32" "%SymbolTable"
+compile_run_and_verify "$SCRIPT_DIR/109_map_runtime_api.yc" $'12\n1\n-1\nYCPL' "@std2__map__new_i32" "@std2__map__put_i32_value" "@std2__map__free_i32"
+compile_run_and_verify "$SCRIPT_DIR/110_managed_runtime_memory.yc" $'9\nYCPL\n7\n21\n"YCPL"' "@yc_runtime_init" "@yc_alloc" "@yc_runtime_shutdown"
+compile_run_and_verify "$SCRIPT_DIR/111_managed_frame_cleanup.yc" $'12\n0\n6\n1' "@yc_runtime_live_allocations" "@yc_frame_pop" "@yc_move_to_parent"
+compile_run_and_verify "$SCRIPT_DIR/112_managed_child_destructors.yc" $'2\n2' "@yc_attach_child" "@yc_replace_child" "@yc_release"
+compile_run_and_verify "$SCRIPT_DIR/113_managed_value_roots.yc" $'2\n2\n2\n2\n2\n2' "@yc_attach_child" "@yc_replace_child" "@yc_release"
 
 echo ""
 echo "--- Project Tests ---"

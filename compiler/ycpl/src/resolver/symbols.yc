@@ -111,7 +111,7 @@ fn is_relative_import_path(path string) bool {
 }
 
 fn is_type_token(kind i32) bool {
-    return kind == tok.ident() || kind == tok.star() || kind == tok.lbrack() || kind == tok.rbrack() || kind == tok.kw_byte()
+    return kind == tok.ident() || kind == tok.star() || kind == tok.lbrack() || kind == tok.rbrack() || kind == tok.kw_byte() || kind == tok.kw_owned()
 }
 
 fn is_removed_keyword(lexeme string) bool {

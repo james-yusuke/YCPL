@@ -10,6 +10,9 @@ struct TypeShape
     std::string base;
     int array_rank = 0;
     int pointer_depth = 0;
+    bool is_map = false;
+    std::string map_key;
+    std::string map_value;
 
     bool is_array() const
     {
@@ -19,6 +22,11 @@ struct TypeShape
     bool is_pointer() const
     {
         return pointer_depth > 0;
+    }
+
+    bool is_map_type() const
+    {
+        return is_map;
     }
 
     bool is_pointer_only() const
@@ -78,6 +86,38 @@ struct TypeShape
     }
 };
 
+inline bool parse_map_inner_types(const std::string &base, std::string &key, std::string &value)
+{
+    if (base.rfind("Map<", 0) != 0 || base.size() < 6 || base.back() != '>')
+        return false;
+
+    std::string inner = base.substr(4, base.size() - 5);
+    int depth = 0;
+    for (size_t i = 0; i < inner.size(); ++i)
+    {
+        char ch = inner[i];
+        if (ch == '<')
+            ++depth;
+        else if (ch == '>')
+            --depth;
+        else if (ch == ',' && depth == 0)
+        {
+            key = inner.substr(0, i);
+            value = inner.substr(i + 1);
+            while (!key.empty() && key.front() == ' ')
+                key.erase(key.begin());
+            while (!key.empty() && key.back() == ' ')
+                key.pop_back();
+            while (!value.empty() && value.front() == ' ')
+                value.erase(value.begin());
+            while (!value.empty() && value.back() == ' ')
+                value.pop_back();
+            return !key.empty() && !value.empty();
+        }
+    }
+    return false;
+}
+
 inline TypeShape parse_type_shape(const std::string &name)
 {
     TypeShape shape;
@@ -102,6 +142,8 @@ inline TypeShape parse_type_shape(const std::string &name)
 
         break;
     }
+
+    shape.is_map = parse_map_inner_types(shape.base, shape.map_key, shape.map_value);
 
     return shape;
 }

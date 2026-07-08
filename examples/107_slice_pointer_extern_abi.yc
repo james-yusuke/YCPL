@@ -1,0 +1,27 @@
+import "std2/fmt" as fmt
+import "std2/mem" as mem
+import "std2/str" as str
+import "std2/text" as text
+
+extern fn c_memcmp(a *byte, b *byte, size i64) i32 as "memcmp"
+
+type BytePtr = *byte
+
+fn clone_prefix(src string, count i32) string {
+    dst: BytePtr := mem.calloc(count + 1, 1)
+    mem.copy(dst, src, count)
+    return dst
+}
+
+fn main() {
+    part := text.slice("bootstrap", 4, 99)
+    defer mem.free(part)
+
+    copy := clone_prefix(part, 3)
+    defer mem.free(copy)
+
+    fmt.println(part)
+    fmt.println(copy)
+    fmt.println(c_memcmp(copy, "str", 3) == 0)
+    fmt.println(str.len(part))
+}

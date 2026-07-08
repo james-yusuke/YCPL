@@ -66,6 +66,7 @@ namespace codegen
             Value *rv = nullptr;
             if (rs->expr)
                 rv = codegen_expr(rs->expr.get());
+            auto deferredSnapshot = deferred_scopes;
             emit_deferred_statements();
             Function *F = builder.GetInsertBlock()->getParent();
             Type *retTy = F ? F->getReturnType() : nullptr;
@@ -74,14 +75,19 @@ namespace codegen
                 if (retTy && !retTy->isVoidTy())
                 {
                     error("non-void function requires a return value");
+                    emit_runtime_function_exit(F && F->getName() == "main");
                     builder.CreateRet(Constant::getNullValue(retTy));
                 }
                 else
+                {
+                    emit_runtime_function_exit(F && F->getName() == "main");
                     builder.CreateRetVoid();
+                }
             }
             else if (retTy && retTy->isVoidTy())
             {
                 error("void function cannot return a value");
+                emit_runtime_function_exit(F && F->getName() == "main");
                 builder.CreateRetVoid();
             }
             else
@@ -112,8 +118,14 @@ namespace codegen
                         rv = Constant::getNullValue(retTy);
                     }
                 }
+                if (rv && rv->getType()->isPointerTy())
+                    rv = emit_runtime_move_to_parent(rv);
+                else if (retTy && retTy->isStructTy())
+                    emit_runtime_move_frame_to_parent();
+                emit_runtime_function_exit(F && F->getName() == "main");
                 builder.CreateRet(rv);
             }
+            deferred_scopes = std::move(deferredSnapshot);
             return nullptr;
         }
 
@@ -137,7 +149,11 @@ namespace codegen
                 error("break used outside of loop");
                 return nullptr;
             }
+            size_t keepDepth = break_defer_depths.empty() ? deferred_scopes.size() : break_defer_depths.back();
+            auto deferredSnapshot = deferred_scopes;
+            emit_deferred_scopes_to_depth(keepDepth);
             builder.CreateBr(break_targets.back());
+            deferred_scopes = std::move(deferredSnapshot);
 
             Function *F = builder.GetInsertBlock()->getParent();
             BasicBlock *cont = BasicBlock::Create(context, "after.break", F);
@@ -152,7 +168,11 @@ namespace codegen
                 error("continue used outside of loop");
                 return nullptr;
             }
+            size_t keepDepth = continue_defer_depths.empty() ? deferred_scopes.size() : continue_defer_depths.back();
+            auto deferredSnapshot = deferred_scopes;
+            emit_deferred_scopes_to_depth(keepDepth);
             builder.CreateBr(continue_targets.back());
+            deferred_scopes = std::move(deferredSnapshot);
             Function *F = builder.GetInsertBlock()->getParent();
             BasicBlock *cont = BasicBlock::Create(context, "after.continue", F);
             builder.SetInsertPoint(cont);
@@ -174,7 +194,9 @@ namespace codegen
     {
         if (!ds || !ds->stmt)
             return nullptr;
-        deferred_stmts.push_back(ds->stmt.get());
+        if (deferred_scopes.empty())
+            push_scope();
+        deferred_scopes.back().push_back(ds->stmt.get());
         return nullptr;
     }
 

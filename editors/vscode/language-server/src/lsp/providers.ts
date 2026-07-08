@@ -64,7 +64,7 @@ import {
   type YcplDocument,
   type YcplSymbol
 } from "../analysis/model.js";
-import { StandardLibraryIndex } from "../analysis/stdlib.js";
+import { StandardLibraryIndex, type StandardLibrarySymbol } from "../analysis/stdlib.js";
 import { lineText, offsetAt, rangeFromOffsets, wordAtPosition } from "../analysis/text.js";
 import type { WorkspaceIndex } from "../analysis/workspaceIndex.js";
 import type { CompilerBridge } from "../compiler/compilerBridge.js";
@@ -99,7 +99,7 @@ export class YcplProviders {
     }
     if (line.trimEnd().endsWith(".")) {
       const alias = line.trimEnd().match(/([A-Za-z_][A-Za-z0-9_]*)\.$/)?.[1];
-      return this.memberCompletions(document, alias, stdlibItems);
+      return this.memberCompletions(document, alias, params.position, stdlibItems);
     }
 
     const localItems = this.visibleSymbolsForPosition(document, params.position).map(symbolToCompletion);
@@ -120,6 +120,20 @@ export class YcplProviders {
         insertTextFormat: InsertTextFormat.Snippet,
         insertText: "switch ${1:value} {\n    case ${2:0} {\n        $0\n    }\n    default {\n    }\n}",
         detail: "YCPL switch statement"
+      },
+      {
+        label: "defer",
+        kind: CompletionItemKind.Snippet,
+        insertTextFormat: InsertTextFormat.Snippet,
+        insertText: "defer ${1:value}.free()",
+        detail: "YCPL defer cleanup"
+      },
+      {
+        label: "scope",
+        kind: CompletionItemKind.Snippet,
+        insertTextFormat: InsertTextFormat.Snippet,
+        insertText: "scope ${1:name} {\n    $0\n}",
+        detail: "YCPL named lexical scope"
       },
       ...localItems,
       ...stdItems
@@ -256,7 +270,7 @@ export class YcplProviders {
       }
     }
 
-    const pattern = /\b(module|package|import|pub|extern|intrinsic|fn|struct|enum|type|const|mut|if|else|for|in|switch|case|default|return|break|continue|as|true|false|none|i32|i64|bool|char|byte|string|float|double|void|size_t|Type|T|any)\b|\/\/.*$|\/\*[\s\S]*?\*\/|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])'|`[^`]*`|0x[0-9A-Fa-f]+|0b[01]+|[0-9]+(?:\.[0-9]+)?|(:=|==|!=|<=|>=|&&|\|\||[=+\-*/%<>!&|.])/gm;
+    const pattern = /\b(module|package|import|pub|extern|intrinsic|fn|struct|enum|type|const|owned|mut|if|else|for|in|switch|case|default|return|break|continue|defer|scope|as|true|false|none|i32|i64|bool|char|byte|string|float|double|void|size_t|Type|T|any)\b|\/\/.*$|\/\*[\s\S]*?\*\/|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])'|`[^`]*`|0x[0-9A-Fa-f]+|0b[01]+|[0-9]+(?:\.[0-9]+)?|(:=|==|!=|<=|>=|&&|\|\||[=+\-*/%<>!&|.])/gm;
     for (const match of document.text.matchAll(pattern)) {
       const start = match.index ?? 0;
       const value = match[0];
@@ -443,14 +457,14 @@ export class YcplProviders {
     return [...outgoing.values()];
   }
 
-  private memberCompletions(document: YcplDocument, alias: string | undefined, stdlibItems: Awaited<ReturnType<StandardLibraryIndex["completionItems"]>>): CompletionItem[] {
+  private memberCompletions(document: YcplDocument, alias: string | undefined, position: Position, stdlibItems: Awaited<ReturnType<StandardLibraryIndex["completionItems"]>>): CompletionItem[] {
     if (!alias) {
       return [];
     }
     const imported = document.imports.find((entry) => entry.alias === alias);
     const modulePath = imported?.modulePath ?? stdlibItems.find((item) => item.moduleAlias === alias)?.modulePath;
     if (!modulePath) {
-      return [];
+      return this.ufcsCompletions(document, alias, position, stdlibItems);
     }
 
     const importEdit = imported ? undefined : importEditFor(document, modulePath, alias);
@@ -460,6 +474,8 @@ export class YcplProviders {
         label: item.symbolName ?? item.label,
         kind: item.kind,
         detail: item.detail,
+        insertTextFormat: item.kind === CompletionItemKind.Function ? InsertTextFormat.Snippet : undefined,
+        insertText: item.kind === CompletionItemKind.Function ? `${item.symbolName}($0)` : undefined,
         additionalTextEdits: importEdit ? [importEdit] : undefined
       }));
     const workspaceMembers = this.index.workspaceSymbols("")
@@ -472,6 +488,26 @@ export class YcplProviders {
       }));
 
     return [...stdlibMembers, ...workspaceMembers];
+  }
+
+  private ufcsCompletions(document: YcplDocument, receiverName: string, position: Position, stdlibItems: StandardLibrarySymbol[]): CompletionItem[] {
+    const receiver = this.visibleSymbolsForPosition(document, position).find((symbol) => symbol.name === receiverName);
+    const receiverType = canonicalTypeName(receiver?.typeName);
+    if (!receiverType) {
+      return [];
+    }
+    const importedModulePaths = new Set(document.imports.map((entry) => entry.modulePath));
+    return stdlibItems
+      .filter((item) => item.kind === CompletionItemKind.Function && item.symbolName && importedModulePaths.has(item.modulePath))
+      .filter((item) => canonicalTypeName(item.parameters?.[0]?.typeName) === receiverType)
+      .map((item) => ({
+        label: item.symbolName ?? item.label,
+        kind: item.kind,
+        detail: `UFCS ${item.detail}`,
+        filterText: `${item.symbolName} ${item.modulePath}`,
+        insertTextFormat: InsertTextFormat.Snippet,
+        insertText: `${item.symbolName}($0)`
+      }));
   }
 
   private stdlibFunctionCompletions(document: YcplDocument, stdlibItems: Awaited<ReturnType<StandardLibraryIndex["completionItems"]>>): CompletionItem[] {
@@ -644,6 +680,10 @@ function importEditFor(document: YcplDocument, modulePath: string, alias: string
 
 function aliasForModule(document: YcplDocument, modulePath: string, fallbackAlias: string): string {
   return document.imports.find((entry) => entry.modulePath === modulePath)?.alias ?? fallbackAlias;
+}
+
+function canonicalTypeName(typeName: string | undefined): string | undefined {
+  return typeName?.replace(/^owned\s+/, "");
 }
 
 function importInsertionPosition(document: YcplDocument): Position {

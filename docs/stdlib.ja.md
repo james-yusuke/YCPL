@@ -16,8 +16,8 @@ stl/std/*.yc
 ```text
 std/
 ├─ fmt    print, println, printf
-├─ array  new, append, get, set, free
-├─ mem    alloc, copy, sizeof
+├─ array  new, append, get, set, free 互換
+├─ mem    managed alloc, copy, sizeof
 ├─ str    len, eq, cmp
 ├─ math   abs, sqrt, pow
 ├─ io     read/write, LSP frames
@@ -25,12 +25,13 @@ std/
 ├─ os     getenv, system
 ├─ text   find, offsets
 ├─ json   parse, get, stringify
-├─ map    caller-owned arrays
+├─ map    runtime-backed arrays and Map<string, T> interop helpers
 ├─ bytes  owned/wrapped binary buffers
 ├─ hex    bytes <-> hexadecimal text
 ├─ base64 bytes <-> base64 text
 ├─ hash   FNV-1a32, CRC32
-└─ llvm   LLVM C API bridge
+├─ llvm   LLVM C API bridge
+└─ unsafe/mem FFI 専用 raw C malloc/calloc/realloc/free
 ```
 
 ## std2 実験ライブラリ
@@ -39,14 +40,14 @@ std/
 library 候補を置いています。既存の `stl/std` とは分離されています。
 `std2/base32`、`std2/base64`、`std2/bytes`、`std2/hex`、`std2/hash` などを
 `import "std2/base32" as base32` の形で使えます。
+`std2/map` は `std/map` のフォルダ版 counterpart で、今後の
+`Map<string, T>` runtime helper を追加する場所です。
 
 ```YCPL
 b: owned Bytes := bytes.from_string("YCPL")
-defer b.free()
 
 encoded := base32.encode(b)
 decoded := base32.decode(encoded)
-defer decoded.free()
 
 fmt.println(b.eq(decoded))
 ```
@@ -64,6 +65,9 @@ fmt.println(b.eq(decoded))
 | `std/text` | `stl/std/text.yc` |
 | `std/json` | `stl/std/json.yc` |
 | `std/map` | `stl/std/map.yc` |
+| `std/unsafe/mem` | `stl/std/unsafe/mem.yc` |
+| `std2/map` | `stl/std2/map/index.yc` |
+| `std2/unsafe/mem` | `stl/std2/unsafe/mem/index.yc` |
 | `std/bytes` | `stl/std/bytes.yc` |
 | `std/hex` | `stl/std/hex.yc` |
 | `std/base64` | `stl/std/base64.yc` |
@@ -78,42 +82,71 @@ fmt.println(value) -> stdout
 array.new([]T, cap)
     -> { data, len, cap, elem_size }
     -> array.append / array.get / array.set
-    -> array.free
+    -> YCPL runtime 管理。array.free は互換 release として残す
 
 json.parse(text)
-    -> JsonValue root
+    -> JsonValue { root, source, range, owns }
     -> json.get / json.at views
-    -> json.free(root)
+    -> managed allocation foundation。json.free は互換として残す
 
 bytes.from_string(text)
-    -> Bytes { data, len, cap, owns }
+    -> Bytes { root, data, len, cap, owns }
     -> bytes.to_string / bytes.byte_to_string
     -> hex.encode / base64.encode / hash.crc32
-    -> bytes.free
+    -> YCPL runtime 管理。bytes.free は互換として残す
+
+map.new_i32(cap) / map.new_string(cap)
+    -> Map<string, i32> / Map<string, string> runtime handle
+    -> map.put_i32_value / map.get_i32_value / map.remove_i32_value
+    -> map.put_string_value / map.get_string_value / map.remove_string_value
+    -> YCPL runtime 管理。map.free_i32 / map.free_string は互換として残す
 ```
 
 ```YCPL
 import "std/fmt" as fmt
 import "std/array" as array
+import "std2/map" as map
 
 fn main() {
     xs := array.new([]i32, 1)
     xs = array.append(xs, 10)
     fmt.println(array.get(xs, 0))
-    array.free(xs)
+
+    counts := map.new_i32(4)
+    map.put_i32_value(counts, "parser", 12)
+    fmt.println(map.get_i32_value(counts, "parser", 0))
 }
 ```
 
 ## メモリ所有
 
 ```text
-array.new / mem.alloc / json.parse
-    -> caller owns root value
-    -> array.free / mem.free / json.free で解放
+array.new / mem.alloc / json.parse / bytes.from_string / map.new_*
+    -> static link される YCPL runtime 経由で確保
+    -> 所有している function frame の終了時に解放
+    -> return される managed root は caller frame へ移動
+    -> array header は backing data を、map handle は key/value arrays を解放
 
 json.get / json.at
     -> non-owning views
+
+array.free / mem.free / bytes.free / json.free / map.free_*
+    -> 旧コード移行用の yc_release compatibility wrapper
+
+std/unsafe/mem と std2/unsafe/mem
+    -> FFI 境界だけで使う raw C malloc/calloc/realloc/free
 ```
+
+`ycc build` は `bootstrap/cpp/runtime/yc_runtime.c` を各 native binary に
+static link します。runtime は `yc_runtime_init`、`yc_runtime_shutdown`、
+`yc_frame_push`、`yc_frame_pop`、`yc_alloc`、`yc_calloc`、`yc_realloc`、
+`yc_release`、`yc_move_to_parent` を提供します。この milestone では
+background tracing GC は入れず、frame ownership による deterministic cleanup
+へ寄せつつ、移行期間の manual-free 互換を残しています。managed root を返す場合は、
+slice/map などの backing storage が caller で生きるよう、その frame の allocation を
+保守的に caller frame へ移動します。
+array と map の root は child allocation を登録するため、root を release すると
+backing data / key-value arrays も release されます。
 
 `extern fn` は YCPL 名を C/LLVM symbol に対応させます。`intrinsic fn` は bundled
 `std` 専用で、user module では拒否されます。

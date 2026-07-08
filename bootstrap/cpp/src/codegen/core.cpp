@@ -64,6 +64,48 @@ namespace codegen
         return tmp.CreateAlloca(type, nullptr, name);
     }
 
+    FunctionCallee CodeGen::get_runtime_void_fn(const std::string &name)
+    {
+        FunctionType *fnType = FunctionType::get(get_void_type(), {}, false);
+        return module->getOrInsertFunction(name, fnType);
+    }
+
+    FunctionCallee CodeGen::get_runtime_ptr_fn(const std::string &name)
+    {
+        Type *ptrTy = detail::getPtrTy(context);
+        FunctionType *fnType = FunctionType::get(ptrTy, {ptrTy}, false);
+        return module->getOrInsertFunction(name, fnType);
+    }
+
+    void CodeGen::emit_runtime_function_entry(bool is_main)
+    {
+        if (is_main)
+            builder.CreateCall(get_runtime_void_fn("yc_runtime_init"));
+        builder.CreateCall(get_runtime_void_fn("yc_frame_push"));
+    }
+
+    void CodeGen::emit_runtime_function_exit(bool is_main)
+    {
+        builder.CreateCall(get_runtime_void_fn("yc_frame_pop"));
+        if (is_main)
+            builder.CreateCall(get_runtime_void_fn("yc_runtime_shutdown"));
+    }
+
+    Value *CodeGen::emit_runtime_move_to_parent(Value *value)
+    {
+        if (!value || !value->getType()->isPointerTy())
+            return value;
+        Value *moved = builder.CreateCall(get_runtime_ptr_fn("yc_move_to_parent"), {builder.CreatePointerCast(value, detail::getPtrTy(context), "runtime.move.ptr")}, "runtime.move");
+        if (moved->getType() != value->getType())
+            return builder.CreatePointerCast(moved, value->getType(), "runtime.move.cast");
+        return moved;
+    }
+
+    void CodeGen::emit_runtime_move_frame_to_parent()
+    {
+        builder.CreateCall(get_runtime_void_fn("yc_move_frame_to_parent"));
+    }
+
     void CodeGen::dump_llvm_ir()
     {
         llvm::verifyModule(*module.get());

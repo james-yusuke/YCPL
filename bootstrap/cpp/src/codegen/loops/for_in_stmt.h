@@ -70,6 +70,8 @@ Value *CodeGen::codegen_for_in_loop(const ast::ForInStmt *forInStmt)
 
                 break_targets.push_back(afterBB);
                 continue_targets.push_back(incrBB);
+                break_defer_depths.push_back(deferred_scopes.size());
+                continue_defer_depths.push_back(deferred_scopes.size());
 
                 builder.SetInsertPoint(bodyBB);
                 push_scope();
@@ -99,6 +101,8 @@ Value *CodeGen::codegen_for_in_loop(const ast::ForInStmt *forInStmt)
 
                 break_targets.pop_back();
                 continue_targets.pop_back();
+                break_defer_depths.pop_back();
+                continue_defer_depths.pop_back();
 
                 builder.SetInsertPoint(afterBB);
                 return nullptr;
@@ -138,6 +142,8 @@ Value *CodeGen::codegen_for_in_loop(const ast::ForInStmt *forInStmt)
 
         break_targets.push_back(afterBB);
         continue_targets.push_back(incrBB);
+        break_defer_depths.push_back(deferred_scopes.size());
+        continue_defer_depths.push_back(deferred_scopes.size());
 
         builder.SetInsertPoint(bodyBB);
         push_scope();
@@ -169,6 +175,8 @@ Value *CodeGen::codegen_for_in_loop(const ast::ForInStmt *forInStmt)
 
         break_targets.pop_back();
         continue_targets.pop_back();
+        break_defer_depths.pop_back();
+        continue_defer_depths.pop_back();
 
         builder.SetInsertPoint(afterBB);
 
@@ -208,6 +216,8 @@ Value *CodeGen::codegen_for_in_loop(const ast::ForInStmt *forInStmt)
 
         break_targets.push_back(afterBB);
         continue_targets.push_back(incrBB);
+        break_defer_depths.push_back(deferred_scopes.size());
+        continue_defer_depths.push_back(deferred_scopes.size());
 
         builder.SetInsertPoint(bodyBB);
         push_scope();
@@ -235,6 +245,8 @@ Value *CodeGen::codegen_for_in_loop(const ast::ForInStmt *forInStmt)
 
         break_targets.pop_back();
         continue_targets.pop_back();
+        break_defer_depths.pop_back();
+        continue_defer_depths.pop_back();
 
         builder.SetInsertPoint(afterBB);
         return nullptr;

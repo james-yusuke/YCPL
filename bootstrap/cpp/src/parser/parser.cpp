@@ -1052,6 +1052,12 @@ namespace path
 
         if (arg_index == 0)
         {
+            if ((path == "cast" || ends_with_for_parser(path, ".cast")) &&
+                (check(TokenType::IDENT) || check(TokenType::LBRACK) || check(TokenType::DEREF) || check(TokenType::ADDRESS_OF) || check(TokenType::KW_BYTE)))
+            {
+                return std::make_unique<ast::TypeExpr>(parse_type());
+            }
+
             if ((path == "array.new" || ends_with_for_parser(path, ".new")) && check(TokenType::LBRACK) && lexer.peek(1).type == TokenType::RBRACK)
             {
                 return std::make_unique<ast::TypeExpr>(parse_type());
@@ -1394,17 +1400,9 @@ namespace path
                 ++array_depth;
             }
 
-            std::unique_ptr<ast::Type> base;
-            if (check(TokenType::KW_BYTE) || (check(TokenType::IDENT) && cur.lexeme == "byte"))
-            {
-                advance();
-                base = std::make_unique<ast::NamedType>("byte");
-            }
-            else
-            {
-                Token elemTk = expect(TokenType::IDENT, "expected element type after '[]'");
-                base = std::make_unique<ast::NamedType>(elemTk.lexeme);
-            }
+            std::unique_ptr<ast::Type> base = parse_type();
+            if (!base)
+                emit_error(cur, "expected element type after '[]'");
 
             for (int i = 0; i < array_depth; ++i)
             {
@@ -1422,7 +1420,17 @@ namespace path
         }
 
         std::unique_ptr<ast::Type> base;
-        if (check(TokenType::KW_BYTE) || (check(TokenType::IDENT) && cur.lexeme == "byte"))
+        if (check(TokenType::IDENT) && cur.lexeme == "Map" && lexer.peek(1).type == TokenType::LT)
+        {
+            advance();
+            expect(TokenType::LT, "expected '<' after Map");
+            auto keyType = parse_type();
+            expect(TokenType::COMMA, "expected ',' between Map key and value types");
+            auto valueType = parse_type();
+            expect(TokenType::GT, "expected '>' after Map value type");
+            base = std::make_unique<ast::MapType>(std::move(keyType), std::move(valueType));
+        }
+        else if (check(TokenType::KW_BYTE) || (check(TokenType::IDENT) && cur.lexeme == "byte"))
         {
             advance();
             base = std::make_unique<ast::NamedType>("byte");

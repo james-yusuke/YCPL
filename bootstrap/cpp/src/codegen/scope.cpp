@@ -9,10 +9,14 @@ namespace codegen
         locals_stack_const.emplace_back();
         locals_stack_type.emplace_back();
         locals_stack.emplace_back();
+        deferred_scopes.emplace_back();
     }
 
     void CodeGen::pop_scope()
     {
+        emit_current_deferred_statements();
+        if (!deferred_scopes.empty())
+            deferred_scopes.pop_back();
         if (!locals_stack.empty())
             locals_stack.pop_back();
         if (!locals_stack_type.empty())
@@ -21,7 +25,7 @@ namespace codegen
             locals_stack_const.pop_back();
     }
 
-    void CodeGen::emit_deferred_statements()
+    void CodeGen::emit_deferred_scopes_to_depth(size_t keepDepth)
     {
         if (emitting_deferred)
             return;
@@ -29,13 +33,33 @@ namespace codegen
             return;
 
         emitting_deferred = true;
-        for (int i = static_cast<int>(deferred_stmts.size()) - 1; i >= 0; --i)
+        if (keepDepth > deferred_scopes.size())
+            keepDepth = deferred_scopes.size();
+
+        for (int scopeIndex = static_cast<int>(deferred_scopes.size()) - 1; scopeIndex >= static_cast<int>(keepDepth); --scopeIndex)
         {
-            const ast::Stmt *stmt = deferred_stmts[static_cast<size_t>(i)];
-            if (stmt && !builder.GetInsertBlock()->getTerminator())
-                codegen_stmt(stmt);
+            auto &scopeDefers = deferred_scopes[static_cast<size_t>(scopeIndex)];
+            for (int stmtIndex = static_cast<int>(scopeDefers.size()) - 1; stmtIndex >= 0; --stmtIndex)
+            {
+                const ast::Stmt *stmt = scopeDefers[static_cast<size_t>(stmtIndex)];
+                if (stmt && !builder.GetInsertBlock()->getTerminator())
+                    codegen_stmt(stmt);
+            }
+            scopeDefers.clear();
         }
         emitting_deferred = false;
+    }
+
+    void CodeGen::emit_current_deferred_statements()
+    {
+        if (deferred_scopes.empty())
+            return;
+        emit_deferred_scopes_to_depth(deferred_scopes.size() - 1);
+    }
+
+    void CodeGen::emit_deferred_statements()
+    {
+        emit_deferred_scopes_to_depth(0);
     }
 
     void CodeGen::bind_local(const std::string &name, const std::string type, llvm::Value *v)

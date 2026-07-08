@@ -85,14 +85,19 @@ namespace codegen
             return B.CreateGEP(Ty, Ptr, idxs, Name);
         }
 
-        inline llvm::FunctionCallee getMalloc(llvm::Module *M)
+        inline llvm::FunctionCallee getRuntimeAlloc(llvm::Module *M)
         {
             llvm::LLVMContext &context = M->getContext();
-            auto *mallocTy = llvm::FunctionType::get(
+            auto *allocTy = llvm::FunctionType::get(
                 getI8PtrTy(context),
                 {getI64Ty(context)},
                 false);
-            return M->getOrInsertFunction("malloc", mallocTy);
+            return M->getOrInsertFunction("yc_alloc", allocTy);
+        }
+
+        inline llvm::FunctionCallee getMalloc(llvm::Module *M)
+        {
+            return getRuntimeAlloc(M);
         }
     }
 }

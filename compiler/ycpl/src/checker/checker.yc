@@ -2154,6 +2154,17 @@ fn skip_to_block_end(p TinyParser) TinyParser {
     return p
 }
 
+fn is_type_start(kind i32) bool {
+    return kind == tok.ident() || kind == tok.star() || kind == tok.kw_owned()
+}
+
+fn skip_owned_type_markers(p TinyParser) TinyParser {
+    for (; p.ok && p.lx.kind == tok.kw_owned(); ) {
+        p = advance_sig(p)
+    }
+    return p
+}
+
 fn skip_function_body(p TinyParser) TinyParser {
     if p.lx.kind != tok.kw_fn() {
         return unsupported_parser(p, "self checker currently supports fn declarations")
@@ -2183,6 +2194,7 @@ fn skip_function_body(p TinyParser) TinyParser {
     if p.lx.kind == tok.lbrace() {
         return skip_block(p)
     }
+    p = skip_owned_type_markers(p)
     if p.lx.kind != tok.ident() {
         return fail_parser(p, "expected function return type")
     }
@@ -2195,6 +2207,8 @@ fn skip_function_body(p TinyParser) TinyParser {
 }
 
 fn parse_type_name(p TinyParser, message string) TinyParser {
+    p = skip_owned_type_markers(p)
+    if !p.ok { return p }
     if p.lx.kind == tok.star() {
         p = advance_sig(p)
         if p.lx.kind == tok.kw_byte() || (p.lx.kind == tok.ident() && str.eq(p.lx.lexeme, "string")) {
@@ -2454,7 +2468,7 @@ fn scan_extern_value(p TinyParser) TinyParser {
     }
     p = advance_sig(p)
     return_type := tiny_void_type_kind()
-    if p.lx.kind == tok.ident() || p.lx.kind == tok.star() {
+    if is_type_start(p.lx.kind) {
         p = parse_type_name(p, "expected extern return type")
         if !p.ok { return p }
         return_type = p.value_type
@@ -2735,6 +2749,8 @@ fn parse_var_or_assign(p TinyParser) TinyParser {
             }
             return set_var(p, name, p.value, p.value_type)
         }
+        p = skip_owned_type_markers(p)
+        if !p.ok { return p }
         if p.lx.kind != tok.ident() {
             return fail_parser(p, "expected local type")
         }
@@ -3179,6 +3195,24 @@ fn parse_statement(p TinyParser) TinyParser {
         return parse_switch_statement(p)
     }
 
+    if p.lx.kind == tok.kw_defer() {
+        p = advance_sig(p)
+        if p.lx.kind == tok.lbrace() {
+            return skip_block(p)
+        }
+        p = parse_expr_or_comparison(p)
+        if !p.ok { return p }
+        return p
+    }
+
+    if p.lx.kind == tok.kw_scope() {
+        p = advance_sig(p)
+        if p.lx.kind == tok.ident() {
+            p = advance_sig(p)
+        }
+        return parse_block_body(p)
+    }
+
     if p.lx.kind == tok.ident() {
         probe := p
         probe = advance_sig(probe)
@@ -3334,7 +3368,7 @@ fn parse_function(p TinyParser) TinyParser {
 
     p = advance_sig(p)
     return_type := tiny_void_type_kind()
-    if p.lx.kind == tok.ident() || p.lx.kind == tok.star() {
+    if is_type_start(p.lx.kind) {
         p = parse_type_name(p, "expected function return type")
         if !p.ok { return p }
         return_type = p.value_type

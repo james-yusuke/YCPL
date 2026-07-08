@@ -11,12 +11,17 @@ File mode:
       |
       v
   modules 解決 -> .ll 出力 -> llc -> clang -> binary
+  bazel run //:ycc -- run examples/01_hello.yc
+      |
+      v
+  native binary を作成 -> 実行
 
 Project mode:
-  YCPL.json -> source dirs から .yc を走査
+  YCPL.json -> source dirs を再帰的かつ deterministic な path order で走査
       |
       v
   ycc build     -> .ll 出力 -> llc -> clang -> binary
+  ycc run       -> native binary を作成 -> 実行
   ycc build-ir  -> .ll だけ出力
 ```
 
@@ -24,6 +29,7 @@ Project mode:
 
 ```sh
 bazel run //:ycc -- build examples/01_hello.yc -o /tmp/ycpl_hello
+bazel run //:ycc -- run examples/01_hello.yc -o /tmp/ycpl_hello
 bazel run //:ycc -- build-ir examples/01_hello.yc -o /tmp/ycpl_hello
 ```
 

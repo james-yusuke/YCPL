@@ -16,13 +16,13 @@ Value *CodeGen::codegen_memory_intrinsic_call(const std::string &name, const ast
     {
         std::string cName;
         if (name == "__YCPL_std__mem_alloc")
-            cName = "malloc";
+            cName = "yc_alloc";
         else if (name == "__YCPL_std__mem_calloc")
-            cName = "calloc";
+            cName = "yc_calloc";
         else if (name == "__YCPL_std__mem_realloc")
-            cName = "realloc";
+            cName = "yc_realloc";
         else if (name == "__YCPL_std__mem_free")
-            cName = "free";
+            cName = "yc_release";
         else if (name == "__YCPL_std__mem_copy")
             cName = "memcpy";
         else
@@ -42,13 +42,13 @@ Value *CodeGen::codegen_memory_intrinsic_call(const std::string &name, const ast
             if (!arg)
                 return nullptr;
 
-            if (cName == "malloc")
+            if (cName == "yc_alloc")
                 args.push_back(coerce_to_i64(arg, "mem.alloc.size"));
-            else if (cName == "calloc")
+            else if (cName == "yc_calloc")
                 args.push_back(coerce_to_i64(arg, i == 0 ? "mem.calloc.count" : "mem.calloc.size"));
-            else if (cName == "realloc")
+            else if (cName == "yc_realloc")
                 args.push_back(i == 0 ? coerce_to_i8ptr(arg, "mem.realloc.ptr") : coerce_to_i64(arg, "mem.realloc.size"));
-            else if (cName == "free")
+            else if (cName == "yc_release")
                 args.push_back(coerce_to_i8ptr(arg, "mem.free.ptr"));
             else if (cName == "memcpy")
                 args.push_back(i < 2 ? coerce_to_i8ptr(arg, "mem.copy.ptr") : coerce_to_i64(arg, "mem.copy.size"));
