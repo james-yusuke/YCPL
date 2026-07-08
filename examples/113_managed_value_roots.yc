@@ -1,0 +1,94 @@
+import "std/fmt" as fmt
+import "std/mem" as mem
+import "std/bytes" as bytes
+import "std/text" as text
+import "std/json" as json
+import "std2/bytes" as bytes2
+import "std2/text" as text2
+import "std2/json" as json2
+
+extern fn runtime_live_allocations() i64 as "yc_runtime_live_allocations"
+
+fn score(before i64, allocated i64, released i64) i64 {
+    out: i64 := 0
+    if allocated > before {
+        out += 1
+    }
+    if released == before {
+        out += 1
+    }
+    return out
+}
+
+fn check_bytes() i64 {
+    before := runtime_live_allocations()
+    b := bytes.from_string("YC")
+    b = bytes.append(b, 'P')
+    allocated := runtime_live_allocations()
+    bytes.free(b)
+    released := runtime_live_allocations()
+    return score(before, allocated, released)
+}
+
+fn check_bytes2() i64 {
+    before := runtime_live_allocations()
+    b := bytes2.from_string("YC")
+    b = bytes2.append(b, 'P')
+    allocated := runtime_live_allocations()
+    bytes2.free(b)
+    released := runtime_live_allocations()
+    return score(before, allocated, released)
+}
+
+fn check_builder() i64 {
+    before := runtime_live_allocations()
+    b := text.new_builder(1)
+    b = text.append(b, "YCPL")
+    allocated := runtime_live_allocations()
+    text.free_builder(b)
+    released := runtime_live_allocations()
+    return score(before, allocated, released)
+}
+
+fn check_builder2() i64 {
+    before := runtime_live_allocations()
+    b := text2.new_builder(1)
+    b = text2.append(b, "YCPL")
+    allocated := runtime_live_allocations()
+    text2.free_builder(b)
+    released := runtime_live_allocations()
+    return score(before, allocated, released)
+}
+
+fn check_json() i64 {
+    before := runtime_live_allocations()
+    root := json.parse("{\"name\":\"YCPL\"}")
+    name := json.get(root, "name")
+    text_value := json.stringify(name)
+    mem.free(text_value)
+    allocated := runtime_live_allocations()
+    json.free(root)
+    released := runtime_live_allocations()
+    return score(before, allocated, released)
+}
+
+fn check_json2() i64 {
+    before := runtime_live_allocations()
+    root := json2.parse("{\"name\":\"YCPL\"}")
+    name := json2.get(root, "name")
+    text_value := json2.stringify(name)
+    mem.free(text_value)
+    allocated := runtime_live_allocations()
+    json2.free(root)
+    released := runtime_live_allocations()
+    return score(before, allocated, released)
+}
+
+fn main() {
+    fmt.println(check_bytes())
+    fmt.println(check_bytes2())
+    fmt.println(check_builder())
+    fmt.println(check_builder2())
+    fmt.println(check_json())
+    fmt.println(check_json2())
+}

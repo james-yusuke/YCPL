@@ -571,6 +571,7 @@ compile_run_and_verify "$SCRIPT_DIR/109_map_runtime_api.yc" $'12\n1\n-1\nYCPL' "
 compile_run_and_verify "$SCRIPT_DIR/110_managed_runtime_memory.yc" $'9\nYCPL\n7\n21\n"YCPL"' "@yc_runtime_init" "@yc_alloc" "@yc_runtime_shutdown"
 compile_run_and_verify "$SCRIPT_DIR/111_managed_frame_cleanup.yc" $'12\n0\n6\n1' "@yc_runtime_live_allocations" "@yc_frame_pop" "@yc_move_to_parent"
 compile_run_and_verify "$SCRIPT_DIR/112_managed_child_destructors.yc" $'2\n2' "@yc_attach_child" "@yc_replace_child" "@yc_release"
+compile_run_and_verify "$SCRIPT_DIR/113_managed_value_roots.yc" $'2\n2\n2\n2\n2\n2' "@yc_attach_child" "@yc_replace_child" "@yc_release"
 
 echo ""
 echo "--- Project Tests ---"
