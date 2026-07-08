@@ -20,6 +20,7 @@ stable
 ├─ flow: if/else, for, for-in, break/continue
 ├─ lifetime sugar: defer, scope, owned type marker, UFCS method calls
 ├─ std: fmt, array, mem, str, math, io, fs, os, text, json, map
+├─ runtime: static managed allocation object with function-frame cleanup and array/map child destructors
 └─ tooling: examples, YCPL LSP v0.4, C++ bootstrap ycc
 ```
 
@@ -38,6 +39,7 @@ experimental
 ├─ pointer-heavy expressions
 ├─ nested/inline structs
 ├─ runtime slice returns
+├─ precise destructors for arbitrary composite managed values beyond array/map roots
 └─ broad C/Unix FFI
 ```
 
@@ -196,7 +198,7 @@ enum switch type defer scope owned UFCS std2/base32
 
 ```text
 syntax support
-├─ bootstrap parser/codegen handles enum, type aliases, switch/case/default, defer, scope, and the owned type marker
+├─ bootstrap parser/codegen handles enum, type aliases, switch/case/default, defer, scope, Map<string, T>, and the owned type marker
 ├─ bootstrap module resolver handles UFCS method sugar when an imported public function match is unique
 ├─ std2 provides a folder-based module layout plus base32/base64/bytes/hex/hash extensions
 ├─ docs/grammar and VS Code grammar track the added syntax

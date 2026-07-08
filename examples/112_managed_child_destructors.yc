@@ -1,0 +1,48 @@
+import "std/fmt" as fmt
+import "std/array" as array
+import "std/map" as map
+import "std/mem" as mem
+
+extern fn runtime_live_allocations() i64 as "yc_runtime_live_allocations"
+
+fn make_and_release_array() i64 {
+    before := runtime_live_allocations()
+    xs := array.new([]i32, 1)
+    xs = array.append(xs, 1)
+    xs = array.append(xs, 2)
+    xs = array.append(xs, 3)
+    after_alloc := runtime_live_allocations()
+    mem.free(cast(*byte, xs))
+    after_free := runtime_live_allocations()
+    score: i64 := 0
+    if after_alloc > before {
+        score += 1
+    }
+    if after_free == before {
+        score += 1
+    }
+    return score
+}
+
+fn make_and_release_map() i64 {
+    before := runtime_live_allocations()
+    counts := map.new_i32(1)
+    map.put_i32_value(counts, "a", 1)
+    map.put_i32_value(counts, "b", 2)
+    after_alloc := runtime_live_allocations()
+    map.free_i32(counts)
+    after_free := runtime_live_allocations()
+    score: i64 := 0
+    if after_alloc > before {
+        score += 1
+    }
+    if after_free == before {
+        score += 1
+    }
+    return score
+}
+
+fn main() {
+    fmt.println(make_and_release_array())
+    fmt.println(make_and_release_map())
+}

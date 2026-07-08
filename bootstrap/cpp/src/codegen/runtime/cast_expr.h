@@ -28,8 +28,8 @@ Value *CodeGen::codegen_cast_call(const ast::CallExpr *ce)
     }
 
     llvm::Type *dstType = nullptr;
-    if (auto astType = dynamic_cast<const ast::Type *>(ce->args[0].get()))
-        dstType = resolve_type_from_ast_local(astType);
+    if (auto typeExpr = dynamic_cast<const ast::TypeExpr *>(ce->args[0].get()))
+        dstType = resolve_type_from_ast_local(typeExpr->type.get());
     else if (auto typeIdent = dynamic_cast<const ast::Ident *>(ce->args[0].get()))
         dstType = resolve_type_by_name(typeIdent->name);
     else

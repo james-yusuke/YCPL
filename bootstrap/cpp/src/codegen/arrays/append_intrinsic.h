@@ -44,6 +44,13 @@ Value *CodeGen::codegen_append_call(const ast::CallExpr *ce)
     {
         idxExpr = ie;
     }
+    else if (auto me = dynamic_cast<const ast::MemberExpr *>(e))
+    {
+        Value *fieldAddr = codegen_member_addr(me);
+        if (!fieldAddr)
+            return nullptr;
+        array_target_value = fieldAddr;
+    }
     else if (auto ue = dynamic_cast<const ast::UnaryExpr *>(e))
     {
 
@@ -81,7 +88,7 @@ Value *CodeGen::codegen_append_call(const ast::CallExpr *ce)
     }
     else
     {
-        error("append: first argument must be ident, index expr, or unary(* )");
+        error("append: first argument must be an array variable, member field, index expression, or pointer dereference");
         return nullptr;
     }
 
@@ -321,6 +328,10 @@ Value *CodeGen::codegen_append_call(const ast::CallExpr *ce)
         builder.SetInsertPoint(bbNoCopy);
         builder.CreateStore(newRawData, dataPtrPtr);
         builder.CreateStore(newCap, capPtr);
+        if (Function *replaceFn = get_or_declare_c_function("yc_replace_child"))
+            builder.CreateCall(replaceFn, {builder.CreatePointerCast(array_header_ptr, i8ptrTy, "append.attach.parent"), rawDataPtr, newRawData});
+        if (Function *releaseFn = get_or_declare_c_function("yc_release"))
+            builder.CreateCall(releaseFn, {rawDataPtr});
 
         Value *offsetBytes2 = builder.CreateMul(lenVal, elemSizeValFinal, "offset_bytes_new");
         SmallVector<Value *, 1> idxs_offset2;

@@ -1,0 +1,23 @@
+import "std2/fmt" as fmt
+import "std2/map" as map
+
+fn main() {
+    counts := map.new_i32(2)
+    defer map.free_i32(counts)
+
+    map.put_i32_value(counts, "parser", 10)
+    map.put_i32_value(counts, "parser", 12)
+    map.put_i32_value(counts, "codegen", 30)
+
+    fmt.println(map.get_i32_value(counts, "parser", 0))
+    fmt.println(map.has_i32(counts, "codegen"))
+
+    map.remove_i32_value(counts, "codegen")
+    fmt.println(map.get_i32_value(counts, "codegen", -1))
+
+    names := map.new_string(1)
+    defer map.free_string(names)
+
+    map.put_string_value(names, "lang", "YCPL")
+    fmt.println(map.get_string_value(names, "lang"))
+}

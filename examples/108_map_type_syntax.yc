@@ -1,0 +1,30 @@
+import "std2/array" as array
+import "std2/fmt" as fmt
+import "std2/map" as map
+
+type SymbolValues = Map<string, i32>
+type SymbolBuckets = []Map<string, i32>
+
+struct SymbolTable {
+    keys []string
+    values []i32
+    view SymbolValues
+}
+
+fn main() {
+    table := SymbolTable{
+        keys: array.new([]string, 2),
+        values: array.new([]i32, 2),
+        view: none,
+    }
+    defer array.free(table.keys)
+    defer array.free(table.values)
+
+    table.keys = array.append(table.keys, none)
+    table.values = array.append(table.values, 0)
+    table.keys = array.append(table.keys, none)
+    table.values = array.append(table.values, 0)
+
+    map.put_i32(table.keys, table.values, "main", 13)
+    fmt.println(map.get_i32(table.keys, table.values, "main", 0))
+}

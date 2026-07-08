@@ -10,12 +10,17 @@ File mode:
       |
       v
   resolve modules -> write .ll -> llc -> clang -> binary
+  bazel run //:ycc -- run examples/01_hello.yc
+      |
+      v
+  build native binary -> execute it
 
 Project mode:
-  YCPL.json -> scan source dirs for .yc
+  YCPL.json -> scan source dirs recursively in deterministic path order
       |
       v
   ycc build     -> write .ll -> llc -> clang -> binary
+  ycc run       -> build native binary -> execute it
   ycc build-ir  -> write .ll only
 ```
 
@@ -23,6 +28,7 @@ Project mode:
 
 ```sh
 bazel run //:ycc -- build examples/01_hello.yc -o /tmp/ycpl_hello
+bazel run //:ycc -- run examples/01_hello.yc -o /tmp/ycpl_hello
 bazel run //:ycc -- build-ir examples/01_hello.yc -o /tmp/ycpl_hello
 ```
 

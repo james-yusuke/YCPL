@@ -3,10 +3,11 @@ module std.text
 import "std/mem" as mem
 import "std/str" as str
 
-struct StringBuilder {
+pub struct StringBuilder {
     data string
     len i32
     cap i32
+    owns bool
 }
 
 extern fn c_strstr(haystack string, needle string) string as "strstr"
@@ -82,6 +83,18 @@ pub fn find_from(s string, needle string, start i32) i32 {
 }
 
 pub fn slice(s string, start i32, count i32) string {
+    if s == none || start < 0 || count < 0 {
+        return none
+    }
+
+    n: i32 := str.len(s)
+    if start > n {
+        return none
+    }
+    if start + count > n {
+        count = n - start
+    }
+
     out: string := mem.calloc(count + 1, 1)
     i: i32 := 0
     for (; i < count; i++) {
@@ -133,6 +146,87 @@ pub fn column_of_offset(s string, offset i32) i32 {
 
 pub fn utf16_col(s string, offset i32) i32 {
     return column_of_offset(s, offset)
+}
+
+fn invalid_builder() StringBuilder {
+    return StringBuilder{data: none, len: 0, cap: 0, owns: false}
+}
+
+fn ensure_builder_cap(b StringBuilder, needed i32) StringBuilder {
+    if needed <= b.cap {
+        return b
+    }
+
+    next := b.cap
+    if next < 1 {
+        next = 1
+    }
+    for (; next < needed; ) {
+        next = next * 2
+    }
+
+    if b.data == none {
+        data: string := mem.calloc(next + 1, 1)
+        return StringBuilder{data: data, len: b.len, cap: next, owns: true}
+    }
+
+    if b.owns {
+        data: string := mem.realloc(b.data, next + 1)
+        data[next] = 0
+        return StringBuilder{data: data, len: b.len, cap: next, owns: true}
+    }
+
+    data: string := mem.calloc(next + 1, 1)
+    i: i32 := 0
+    for (; i < b.len; i++) {
+        data[i] = b.data[i]
+    }
+    data[b.len] = 0
+    return StringBuilder{data: data, len: b.len, cap: next, owns: true}
+}
+
+pub fn new_builder(cap i32) StringBuilder {
+    if cap < 0 {
+        return invalid_builder()
+    }
+
+    data: string := mem.calloc(cap + 1, 1)
+    return StringBuilder{data: data, len: 0, cap: cap, owns: true}
+}
+
+pub fn builder_len(b StringBuilder) i32 {
+    return b.len
+}
+
+pub fn builder_cap(b StringBuilder) i32 {
+    return b.cap
+}
+
+pub fn append(b StringBuilder, src string) StringBuilder {
+    n := str.len(src)
+    out := ensure_builder_cap(b, b.len + n)
+    c_memcpy(out.data + out.len, src, n)
+    out.len += n
+    out.data[out.len] = 0
+    return out
+}
+
+pub fn append_char(b StringBuilder, ch i32) StringBuilder {
+    out := ensure_builder_cap(b, b.len + 1)
+    out.data[out.len] = ch
+    out.len += 1
+    out.data[out.len] = 0
+    return out
+}
+
+pub fn to_string(b StringBuilder) string {
+    return b.data
+}
+
+pub fn free_builder(b StringBuilder) {
+    if b.owns && b.data != none {
+        mem.free(b.data)
+    }
 }
 
 pub fn builder_new(cap i32) string {

@@ -39,6 +39,12 @@ llvm::Type *CodeGen::resolve_type_from_ast_local(const ast::Type *astType)
         return codegen::detail::getPtrTy(context);
     }
 
+    if (auto mapType = dynamic_cast<const ast::MapType *>(astType))
+    {
+        (void)mapType;
+        return codegen::detail::getPtrTy(context);
+    }
+
     if (auto funcTypeAst = dynamic_cast<const ast::FuncType *>(astType))
     {
         std::vector<llvm::Type *> paramTypes;
@@ -166,7 +172,7 @@ Function *CodeGen::codegen_function_decl(const ast::FuncDecl *funcDecl)
 {
     if (!funcDecl)
         return nullptr;
-    deferred_stmts.clear();
+    deferred_scopes.clear();
 
     if (funcDecl->is_intrinsic)
     {
@@ -265,6 +271,7 @@ Function *CodeGen::codegen_function_decl(const ast::FuncDecl *funcDecl)
 
     BasicBlock *entryBlock = BasicBlock::Create(context, "entry", functionValue);
     builder.SetInsertPoint(entryBlock);
+    emit_runtime_function_entry(is_main);
 
     unsigned argIndex = 0;
     IRBuilder<> entryBuilder(entryBlock, entryBlock->begin());
@@ -291,16 +298,10 @@ Function *CodeGen::codegen_function_decl(const ast::FuncDecl *funcDecl)
         std::string paramTypeName = resolve_type_name(paramAstType);
         auto pt = parse_type_shape(paramTypeName);
 
-        if (arg.getType()->isPointerTy())
-        {
-            bind_local(argName, paramTypeName == "string" ? "string_params" : paramTypeName, &arg);
-        }
-        else
-        {
-            Value *localAlloca = entryBuilder.CreateAlloca(arg.getType(), nullptr, argName);
-            entryBuilder.CreateStore(&arg, localAlloca);
-            bind_local(argName, paramTypeName.empty() ? pt.base + "_params" : paramTypeName, localAlloca);
-        }
+        Value *localAlloca = entryBuilder.CreateAlloca(arg.getType(), nullptr, argName);
+        entryBuilder.CreateStore(&arg, localAlloca);
+        std::string localTypeName = paramTypeName.empty() ? pt.base + "_params" : paramTypeName;
+        bind_local(argName, localTypeName, localAlloca);
         ++argIndex;
     }
 
@@ -330,6 +331,7 @@ Function *CodeGen::codegen_function_decl(const ast::FuncDecl *funcDecl)
         if (!currentBB->getTerminator())
         {
             emit_deferred_statements();
+            emit_runtime_function_exit(is_main);
             if (returnType->isVoidTy())
                 builder.CreateRetVoid();
             else if (main_implicit_i32)
@@ -347,12 +349,12 @@ Function *CodeGen::codegen_function_decl(const ast::FuncDecl *funcDecl)
         error("function verification failed: " + llvmName);
         functionValue->eraseFromParent();
         pop_scope();
-        deferred_stmts.clear();
+        deferred_scopes.clear();
         return nullptr;
     }
 
     pop_scope();
-    deferred_stmts.clear();
+    deferred_scopes.clear();
     return functionValue;
 }
 

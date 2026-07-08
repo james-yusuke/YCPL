@@ -15,6 +15,7 @@
 #include <cstdlib>
 #include <cstdio>
 #include <array>
+#include <algorithm>
 
 namespace fs = std::filesystem;
 
@@ -24,7 +25,8 @@ enum class OutputMode
 {
     BuildNative,
     EmitIR,
-    Debug
+    Debug,
+    RunNative
 };
 
 static void print_help(const char *exec)
@@ -33,10 +35,13 @@ static void print_help(const char *exec)
                  "  "
               << exec << " build [options] <file.yc | dir>\n"
                          "  "
+              << exec << " run [options] <file.yc | dir> [-- args]\n"
+                         "  "
               << exec << " build-ir [options] <file1.yc file2.yc ...>\n"
                          "\n"
                          "Modes:\n"
                          "  build             Build a native executable (default)\n"
+                         "  run               Build and immediately run the executable\n"
                          "  build-ir          Emit LLVM IR only\n"
                          "  ll                Alias for build-ir\n"
                          "  debug             Show tokens, AST, and LLVM IR\n"
@@ -50,6 +55,8 @@ static void print_help(const char *exec)
                          "Examples:\n"
                          "  "
               << exec << " build main.yc -o build\n"
+                         "  "
+              << exec << " run main.yc\n"
                          "  "
               << exec << " build-ir src/ -o build\n"
                          "  "
@@ -82,6 +89,7 @@ static std::vector<fs::path> collect_sources(const std::vector<std::string> &inp
             std::cerr << "No such file/dir: " << p << "\n";
         }
     }
+    std::sort(result.begin(), result.end());
     return result;
 }
 
@@ -133,6 +141,23 @@ static fs::path find_ycpl_json()
         search = parent;
     }
     
+    return {};
+}
+
+static fs::path find_runtime_source()
+{
+    fs::path search = fs::current_path();
+    for (int i = 0; i < 16; i++)
+    {
+        fs::path candidate = search / "bootstrap" / "cpp" / "runtime" / "yc_runtime.c";
+        if (fs::exists(candidate))
+            return candidate;
+
+        fs::path parent = search.parent_path();
+        if (parent == search)
+            break;
+        search = parent;
+    }
     return {};
 }
 
@@ -286,6 +311,14 @@ static bool run_shell_command(const std::string &command)
     return rc == 0;
 }
 
+static int run_shell_command_status(const std::string &command)
+{
+    int rc = std::system(command.c_str());
+    if (rc == 0)
+        return 0;
+    return 1;
+}
+
 static std::vector<std::string> split_flags(const char *flags)
 {
     std::vector<std::string> result;
@@ -345,11 +378,26 @@ static bool build_native_executable(const fs::path &ll_file, const fs::path &bin
 {
     std::string llc = command_from_env_or_path("LLC", "llc");
     std::string clang = command_from_env_or_path("CLANG", "clang");
+    fs::path runtime_source = find_runtime_source();
+    fs::path runtime_object = object_file.parent_path() / "yc_runtime.o";
+
+    if (runtime_source.empty())
+    {
+        std::cerr << "YCPL runtime source not found: bootstrap/cpp/runtime/yc_runtime.c\n";
+        return false;
+    }
 
     std::string llc_cmd = shell_quote(llc) + " -filetype=obj " + shell_quote(ll_file) + " -o " + shell_quote(object_file);
     if (!run_shell_command(llc_cmd))
     {
         std::cerr << "llc failed: " << llc_cmd << "\n";
+        return false;
+    }
+
+    std::string runtime_cmd = shell_quote(clang) + " -std=c11 -c " + shell_quote(runtime_source) + " -o " + shell_quote(runtime_object);
+    if (!run_shell_command(runtime_cmd))
+    {
+        std::cerr << "YCPL runtime compile failed: " << runtime_cmd << "\n";
         return false;
     }
 
@@ -370,7 +418,7 @@ static bool build_native_executable(const fs::path &ll_file, const fs::path &bin
             link_cmd += " " + shell_quote(flag);
     }
 
-    link_cmd += " " + shell_quote(object_file) + " -o " + shell_quote(binary_file);
+    link_cmd += " " + shell_quote(object_file) + " " + shell_quote(runtime_object) + " -o " + shell_quote(binary_file);
 
     if (link_llvm)
     {
@@ -390,6 +438,7 @@ static bool build_native_executable(const fs::path &ll_file, const fs::path &bin
     {
         std::error_code ec;
         fs::remove(object_file, ec);
+        fs::remove(runtime_object, ec);
     }
 
     return true;
@@ -415,10 +464,18 @@ int run_ycc(int argc, char *argv[])
     fs::path output_dir = ".";
 
     std::vector<std::string> inputs;
+    std::vector<std::string> run_args;
 
     for (int i = 1; i < argc; ++i)
     {
         std::string arg = argv[i];
+        if (arg == "--")
+        {
+            for (int j = i + 1; j < argc; ++j)
+                run_args.push_back(argv[j]);
+            break;
+        }
+
         if (arg == "-o" || arg == "--output")
         {
             if (i + 1 >= argc)
@@ -448,6 +505,10 @@ int run_ycc(int argc, char *argv[])
         {
             output_mode = OutputMode::BuildNative;
         }
+        else if (arg == "run")
+        {
+            output_mode = OutputMode::RunNative;
+        }
         else if (arg == "--keep-obj")
         {
             keep_obj = true;
@@ -462,7 +523,7 @@ int run_ycc(int argc, char *argv[])
         }
     }
 
-    if (inputs.empty() && output_mode == OutputMode::BuildNative)
+    if (inputs.empty() && (output_mode == OutputMode::BuildNative || output_mode == OutputMode::RunNative))
         use_project_mode = true;
     if (inputs.empty() && output_mode == OutputMode::EmitIR)
         use_project_mode = true;
@@ -521,6 +582,7 @@ int run_ycc(int argc, char *argv[])
                 }
             }
         }
+        std::sort(sources.begin(), sources.end());
 
         if (sources.empty())
         {
@@ -590,16 +652,24 @@ int run_ycc(int argc, char *argv[])
         std::cerr << "failed to write IR: " << out_file << "\n";
         return 1;
     }
-    std::cout << "Wrote IR to " << out_file << "\n";
+    std::cout << "Wrote IR to " << out_file << std::endl;
 
-    if (output_mode == OutputMode::BuildNative)
+    if (output_mode == OutputMode::BuildNative || output_mode == OutputMode::RunNative)
     {
         fs::path object_file = output_dir / (output_base + ".o");
         fs::path binary_file = output_dir / output_base;
         bool should_link_llvm = link_llvm || module_references_llvm_c_api(cg.get_module());
         if (!build_native_executable(out_file, binary_file, object_file, keep_obj, should_link_llvm))
             return 1;
-        std::cout << "Wrote binary to " << binary_file << "\n";
+        std::cout << "Wrote binary to " << binary_file << std::endl;
+
+        if (output_mode == OutputMode::RunNative)
+        {
+            std::string run_cmd = shell_quote(binary_file);
+            for (const auto &arg : run_args)
+                run_cmd += " " + shell_quote(arg);
+            return run_shell_command_status(run_cmd);
+        }
     }
 
     return 0;
