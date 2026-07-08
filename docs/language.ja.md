@@ -95,16 +95,23 @@ Types
 ├─ primitive: i32 i64 bool char byte string float double void size_t
 ├─ pointer:   *T
 ├─ slice:     []T
+├─ map slice: []Map<string, T>
 ├─ owned:     owned T
+├─ map:       Map<string, T>
 ├─ alias:     type Score = i32
 ├─ enum:      enum Color { Red, Green }
 └─ nested:    [][]T
 ```
 
-runtime slice は `{ data, len, cap, elem_size }` です。`std/array` で作った
-slice は手動で管理します。
+runtime slice は `{ data, len, cap, elem_size }` です。`std/array`、
+`std/mem`、`std/bytes`、`std/json`、`std2/map` で作った値は static link される
+YCPL runtime 経由で確保します。古い free helper は deterministic frame cleanup
+後に残る precise destructor 完成までの互換 release として残します。
 `owned T` は bootstrap C++ compiler では所有値の意図を示す型修飾子として受け付け、
 現時点では ABI 上は `T` と同じです。
+`Map<string, T>` は map handle 型として受け付けます。現在の bootstrap ABI では
+opaque pointer に lower され、実ストレージは `std/map` と `std2/map` の
+runtime-backed key/value arrays API を使います。
 
 ```YCPL
 enum Color {
@@ -114,6 +121,7 @@ enum Color {
 }
 
 type Score = i32
+type Symbols = Map<string, i32>
 ```
 
 ## 変数とリテラル

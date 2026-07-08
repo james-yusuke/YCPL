@@ -16,6 +16,7 @@ export const keywords = [
   "enum",
   "type",
   "const",
+  "owned",
   "mut",
   "if",
   "else",
@@ -27,6 +28,8 @@ export const keywords = [
   "return",
   "break",
   "continue",
+  "defer",
+  "scope",
   "as",
   "true",
   "false",
@@ -94,6 +97,7 @@ export type ScopeKind =
   | "switch"
   | "case"
   | "default"
+  | "scope"
   | "block"
   | "if"
   | "else"

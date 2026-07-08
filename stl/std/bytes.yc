@@ -3,6 +3,7 @@ module std.bytes
 import "std/mem" as mem
 
 pub struct Bytes {
+    root *byte
     data string
     len i32
     cap i32
@@ -10,7 +11,7 @@ pub struct Bytes {
 }
 
 fn invalid() Bytes {
-    return Bytes{data: none, len: 0, cap: 0, owns: false}
+    return Bytes{root: none, data: none, len: 0, cap: 0, owns: false}
 }
 
 fn strlen_local(s string) i32 {
@@ -38,22 +39,33 @@ fn ensure_cap(b Bytes, needed i32) Bytes {
     }
 
     if b.data == none {
+        root := mem.alloc(1)
         data: string := mem.calloc(next + 1, 1)
-        return Bytes{data: data, len: b.len, cap: next, owns: true}
+        mem.attach_child(root, cast(*byte, data))
+        return Bytes{root: root, data: data, len: b.len, cap: next, owns: true}
     }
 
     if b.owns {
         data: string := mem.realloc(b.data, next + 1)
         data[next] = 0
-        return Bytes{data: data, len: b.len, cap: next, owns: true}
+        root := b.root
+        if root == none {
+            root = mem.alloc(1)
+            mem.attach_child(root, cast(*byte, data))
+        } else {
+            mem.replace_child(root, cast(*byte, b.data), cast(*byte, data))
+        }
+        return Bytes{root: root, data: data, len: b.len, cap: next, owns: true}
     }
 
+    root := mem.alloc(1)
     data: string := mem.calloc(next + 1, 1)
     i: i32 := 0
     for (; i < b.len; i++) {
         data[i] = b.data[i]
     }
-    return Bytes{data: data, len: b.len, cap: next, owns: true}
+    mem.attach_child(root, cast(*byte, data))
+    return Bytes{root: root, data: data, len: b.len, cap: next, owns: true}
 }
 
 pub fn new(cap i32) Bytes {
@@ -61,8 +73,10 @@ pub fn new(cap i32) Bytes {
         return invalid()
     }
 
+    root := mem.alloc(1)
     data: string := mem.calloc(cap + 1, 1)
-    return Bytes{data: data, len: 0, cap: cap, owns: true}
+    mem.attach_child(root, cast(*byte, data))
+    return Bytes{root: root, data: data, len: 0, cap: cap, owns: true}
 }
 
 pub fn wrap(data string, len i32) Bytes {
@@ -70,7 +84,7 @@ pub fn wrap(data string, len i32) Bytes {
         return invalid()
     }
 
-    return Bytes{data: data, len: len, cap: len, owns: false}
+    return Bytes{root: none, data: data, len: len, cap: len, owns: false}
 }
 
 pub fn from_string(text string) Bytes {
@@ -104,8 +118,12 @@ pub fn byte_to_string(value i32) string {
 }
 
 pub fn free(b Bytes) {
-    if b.owns && b.data != none {
-        mem.free(b.data)
+    if b.owns {
+        if b.root != none {
+            mem.free(b.root)
+        } else if b.data != none {
+            mem.free(b.data)
+        }
     }
 }
 

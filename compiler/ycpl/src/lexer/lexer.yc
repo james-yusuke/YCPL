@@ -83,9 +83,12 @@ fn keyword_kind(word string) i32 {
     if str.eq(word, "fn") { return tok.kw_fn() }
     if str.eq(word, "struct") { return tok.kw_struct() }
     if str.eq(word, "enum") { return tok.kw_enum() }
+    if str.eq(word, "defer") { return tok.kw_defer() }
     if str.eq(word, "const") { return tok.kw_const() }
+    if str.eq(word, "scope") { return tok.kw_scope() }
     if str.eq(word, "if") { return tok.kw_if() }
     if str.eq(word, "else") { return tok.kw_else() }
+    if str.eq(word, "owned") { return tok.kw_owned() }
     if str.eq(word, "for") { return tok.kw_for() }
     if str.eq(word, "in") { return tok.kw_in() }
     if str.eq(word, "return") { return tok.kw_return() }

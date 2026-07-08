@@ -214,6 +214,9 @@ pub fn parse(path string, source string) ParseResult {
             branches += 1
             statements += 1
         }
+        if lx.kind == tok.kw_defer() || lx.kind == tok.kw_scope() {
+            statements += 1
+        }
         if lx.kind == tok.kw_for() {
             loops += 1
             statements += 1
@@ -267,7 +270,7 @@ pub fn parse(path string, source string) ParseResult {
                 call_expr_digest = call_expr_digest * 31 + prev_kind
                 call_expr_digest = hash_name(call_expr_digest, lx.lexeme)
             }
-            if lx.kind == tok.kw_if() || lx.kind == tok.kw_switch() || lx.kind == tok.kw_for() || lx.kind == tok.kw_return() || lx.kind == tok.kw_break() || lx.kind == tok.kw_continue() {
+            if lx.kind == tok.kw_if() || lx.kind == tok.kw_switch() || lx.kind == tok.kw_for() || lx.kind == tok.kw_return() || lx.kind == tok.kw_break() || lx.kind == tok.kw_continue() || lx.kind == tok.kw_defer() || lx.kind == tok.kw_scope() {
                 control_flow_digest = control_flow_digest * 31 + lx.kind
             }
             if lx.kind == tok.rbrace() && brace < function_body_depth {

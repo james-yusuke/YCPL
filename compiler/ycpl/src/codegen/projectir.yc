@@ -343,6 +343,9 @@ fn expr_type_kind_from_token(kind i32, text string, pointer_pending bool) i32 {
     if kind == tok.kw_byte() {
         return astexpr.i32_type_kind()
     }
+    if kind == tok.kw_owned() {
+        return astexpr.unknown_type_kind()
+    }
     if kind == tok.ident() {
         return expr_type_kind_from_name(text)
     }

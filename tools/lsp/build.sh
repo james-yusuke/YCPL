@@ -58,6 +58,7 @@ LLC="${LLC:-${LLVM_BIN:+${LLVM_BIN}/llc}}"
 CLANG="${CLANG:-${LLVM_BIN:+${LLVM_BIN}/clang}}"
 LLC="${LLC:-llc}"
 CLANG="${CLANG:-clang}"
+RUNTIME_SRC="${YCPL_RUNTIME_SRC:-$ROOT_DIR/bootstrap/cpp/runtime/yc_runtime.c}"
 
 mkdir -p "$OUT_DIR"
 (cd "$PROJECT_DIR" && "$YCC" build-ir)
@@ -69,6 +70,11 @@ if [ -z "$LL_FILE" ]; then
 fi
 
 "$LLC" -filetype=obj "$LL_FILE" -o "$OUT_DIR/YCPL-lsp.o"
-"$CLANG" $LINKFLAGS "$OUT_DIR/YCPL-lsp.o" -o "$OUT_DIR/YCPL-lsp" -lm
+if [ ! -f "$RUNTIME_SRC" ]; then
+  printf 'Missing YCPL runtime source: %s\n' "$RUNTIME_SRC" >&2
+  exit 1
+fi
+"$CLANG" -std=c11 -c "$RUNTIME_SRC" -o "$OUT_DIR/yc_runtime.o"
+"$CLANG" $LINKFLAGS "$OUT_DIR/YCPL-lsp.o" "$OUT_DIR/yc_runtime.o" -o "$OUT_DIR/YCPL-lsp" -lm
 
 printf '%s\n' "$OUT_DIR/YCPL-lsp"

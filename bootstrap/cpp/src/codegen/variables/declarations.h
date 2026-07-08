@@ -30,6 +30,14 @@ std::string CodeGen::resolve_type_name(ast::Type *tp)
             continue;
         }
 
+        if (auto *mt = dynamic_cast<ast::MapType *>(tp))
+        {
+            std::string keyName = resolve_type_name(mt->key.get());
+            std::string valueName = resolve_type_name(mt->value.get());
+            shape.base = "Map<" + keyName + "," + valueName + ">";
+            return shape.full_name();
+        }
+
         if (auto *pt = dynamic_cast<ast::PointerType *>(tp))
         {
             shape.pointer_depth++;
