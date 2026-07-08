@@ -86,12 +86,12 @@ array.new([]T, cap)
     -> managed by YCPL runtime; array.free remains a compatibility release
 
 json.parse(text)
-    -> JsonValue root
+    -> JsonValue { root, source, range, owns }
     -> json.get / json.at views
     -> managed allocation foundation; json.free remains compatibility
 
 bytes.from_string(text)
-    -> Bytes { data, len, cap, owns }
+    -> Bytes { root, data, len, cap, owns }
     -> bytes.to_string / bytes.byte_to_string
     -> hex.encode / base64.encode / hash.crc32
     -> managed by YCPL runtime; bytes.free remains compatibility

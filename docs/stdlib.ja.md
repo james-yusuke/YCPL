@@ -85,12 +85,12 @@ array.new([]T, cap)
     -> YCPL runtime 管理。array.free は互換 release として残す
 
 json.parse(text)
-    -> JsonValue root
+    -> JsonValue { root, source, range, owns }
     -> json.get / json.at views
     -> managed allocation foundation。json.free は互換として残す
 
 bytes.from_string(text)
-    -> Bytes { data, len, cap, owns }
+    -> Bytes { root, data, len, cap, owns }
     -> bytes.to_string / bytes.byte_to_string
     -> hex.encode / base64.encode / hash.crc32
     -> YCPL runtime 管理。bytes.free は互換として残す

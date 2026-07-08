@@ -20,7 +20,7 @@ stable
 ├─ flow: if/else, for, for-in, break/continue
 ├─ lifetime sugar: defer, scope, owned type marker, UFCS method calls
 ├─ std: fmt, array, mem, str, math, io, fs, os, text, json, map
-├─ runtime: ycc build が static link する function-frame cleanup と array/map child destructor 付き managed allocation object
+├─ runtime: ycc build が static link する function-frame cleanup と array/map/bytes/text/json child destructor 付き managed allocation object
 └─ tooling: examples, YCPL LSP v0.4, C++ bootstrap ycc
 ```
 
@@ -39,7 +39,7 @@ experimental
 ├─ pointer-heavy expressions
 ├─ nested/inline structs
 ├─ runtime slice returns
-├─ array/map root 以外の任意 composite managed value 向け precise destructor
+├─ array/map/bytes/text/json root 以外の任意 composite managed value 向け precise destructor
 └─ broad C/Unix FFI
 ```
 

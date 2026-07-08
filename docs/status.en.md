@@ -20,7 +20,7 @@ stable
 ├─ flow: if/else, for, for-in, break/continue
 ├─ lifetime sugar: defer, scope, owned type marker, UFCS method calls
 ├─ std: fmt, array, mem, str, math, io, fs, os, text, json, map
-├─ runtime: static managed allocation object with function-frame cleanup and array/map child destructors
+├─ runtime: static managed allocation object with function-frame cleanup and array/map/bytes/text/json child destructors
 └─ tooling: examples, YCPL LSP v0.4, C++ bootstrap ycc
 ```
 
@@ -39,7 +39,7 @@ experimental
 ├─ pointer-heavy expressions
 ├─ nested/inline structs
 ├─ runtime slice returns
-├─ precise destructors for arbitrary composite managed values beyond array/map roots
+├─ precise destructors for arbitrary composite managed values beyond array/map/bytes/text/json roots
 └─ broad C/Unix FFI
 ```
 
