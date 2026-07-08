@@ -46,7 +46,7 @@ YCPL
 ├─ Runtime
 │  ├─ static yc_runtime object
 │  ├─ function-frame cleanup
-│  └─ array/map child destructors
+│  └─ array/map/bytes/text/json child destructors
 └─ ツール
    ├─ VSCode
    ├─ ネイティブ LSP
