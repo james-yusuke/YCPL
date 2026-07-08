@@ -1,0 +1,50 @@
+name: Feature request
+description: Suggest a language, compiler, runtime, tooling, or documentation improvement.
+title: "feature: "
+body:
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      description: Which part of YCPL would this improve?
+      options:
+        - Language design
+        - Bootstrap C++ compiler
+        - YCPL compiler
+        - Runtime or standard library
+        - Build, CI, or packaging
+        - VS Code extension or language server
+        - Documentation
+        - Not sure
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What limitation or workflow problem does this address?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposal
+      description: Describe the change you would like to see.
+    validations:
+      required: true
+  - type: textarea
+    id: example
+    attributes:
+      label: Example
+      description: Add sample `.yc`, command-line usage, API shape, or UI behavior if helpful.
+      render: text
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives
+      description: Mention other approaches considered, if any.
+  - type: textarea
+    id: notes
+    attributes:
+      label: Additional context
+      description: Links, related issues, or implementation notes.
