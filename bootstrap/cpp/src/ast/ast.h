@@ -59,6 +59,17 @@ namespace ast
         void print(std::ostream &os, int indent = 0) const override;
     };
 
+    struct MapType : Type
+    {
+        std::unique_ptr<Type> key;
+        std::unique_ptr<Type> value;
+
+        MapType(std::unique_ptr<Type> k, std::unique_ptr<Type> v)
+            : key(std::move(k)), value(std::move(v)) {}
+
+        void print(std::ostream &os, int indent = 0) const override;
+    };
+
     struct FuncType : Type
     {
         std::vector<std::unique_ptr<Type>> params;

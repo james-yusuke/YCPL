@@ -43,6 +43,22 @@ namespace ast
         }
     }
 
+    void MapType::print(std::ostream &os, int indent) const
+    {
+        print_indent(os, indent);
+        os << "MapType[\n";
+        print_indent(os, indent + 2);
+        os << "key:\n";
+        if (key)
+            key->print(os, indent + 4);
+        print_indent(os, indent + 2);
+        os << "value:\n";
+        if (value)
+            value->print(os, indent + 4);
+        print_indent(os, indent);
+        os << "]\n";
+    }
+
     void FuncType::print(std::ostream &os, int indent) const
     {
         print_indent(os, indent);

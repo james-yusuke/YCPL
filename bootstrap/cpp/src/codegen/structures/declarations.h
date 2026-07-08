@@ -1,6 +1,7 @@
 #pragma once
 #include "../codegen.h"
 #include "../common.h"
+#include "../types/type_shape.h"
 #include <llvm/IR/Constants.h>
 #include <llvm/IR/DerivedTypes.h>
 #include <llvm/IR/Intrinsics.h>
@@ -37,6 +38,12 @@ Type *CodeGen::resolve_type_from_ast(const ast::Type *at)
         if (!elem)
             elem = get_int_type();
 
+        return codegen::detail::getPtrTy(context);
+    }
+
+    if (auto map = dynamic_cast<const ast::MapType *>(at))
+    {
+        (void)map;
         return codegen::detail::getPtrTy(context);
     }
 
@@ -78,6 +85,10 @@ static std::string namedTypeName(const ast::Type *at)
     if (auto arr = dynamic_cast<const ast::ArrayType *>(at))
     {
         return namedTypeName(arr->elem.get());
+    }
+    if (auto map = dynamic_cast<const ast::MapType *>(at))
+    {
+        return "Map<" + namedTypeName(map->key.get()) + "," + namedTypeName(map->value.get()) + ">";
     }
     if (auto ft = dynamic_cast<const ast::FuncType *>(at))
     {
@@ -173,6 +184,10 @@ llvm::Type *CodeGen::resolve_type_by_name(const std::string &typeName)
     std::string resolvedTypeName = resolve_type_alias_name(typeName);
     if (resolvedTypeName != typeName)
         return resolve_type_by_name(resolvedTypeName);
+
+    TypeShape shape = parse_type_shape(typeName);
+    if (shape.is_map_type())
+        return codegen::detail::getPtrTy(context);
 
     if (typeName == "string")
         return codegen::detail::getPtrTy(context);

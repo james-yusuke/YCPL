@@ -20,6 +20,7 @@ stable
 ├─ flow: if/else, for, for-in, break/continue
 ├─ lifetime sugar: defer, scope, owned type marker, UFCS method calls
 ├─ std: fmt, array, mem, str, math, io, fs, os, text, json, map
+├─ runtime: ycc build が static link する function-frame cleanup と array/map child destructor 付き managed allocation object
 └─ tooling: examples, YCPL LSP v0.4, C++ bootstrap ycc
 ```
 
@@ -38,6 +39,7 @@ experimental
 ├─ pointer-heavy expressions
 ├─ nested/inline structs
 ├─ runtime slice returns
+├─ array/map root 以外の任意 composite managed value 向け precise destructor
 └─ broad C/Unix FFI
 ```
 
@@ -196,7 +198,7 @@ enum switch type defer scope owned UFCS std2/base32
 
 ```text
 syntax support
-├─ bootstrap parser/codegen は enum、type alias、switch/case/default、defer、scope、owned type marker を扱う
+├─ bootstrap parser/codegen は enum、type alias、switch/case/default、defer、scope、Map<string, T>、owned type marker を扱う
 ├─ bootstrap module resolver は一意な imported public function への UFCS method sugar を扱う
 ├─ std2 は folder-based module layout と base32/base64/bytes/hex/hash 拡張を持つ
 ├─ docs/grammar と VSCode grammar は追加済み構文を追跡する

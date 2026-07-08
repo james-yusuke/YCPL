@@ -1,6 +1,7 @@
 #pragma once
 #include "../codegen.h"
 #include "../common.h"
+#include "../types/type_shape.h"
 #include <llvm/IR/Constants.h>
 #include <llvm/IR/DerivedTypes.h>
 #include <llvm/IR/Intrinsics.h>
@@ -125,6 +126,19 @@ std::pair<llvm::StructType *, llvm::Value *> CodeGen::resolve_struct_and_ptr(llv
     if (!v)
         return {nullptr, nullptr};
 
+    auto struct_from_local_type_hint = [&]() -> llvm::StructType *
+    {
+        if (hintVarName.empty())
+            return nullptr;
+        std::string *hintType = lookup_local_type(hintVarName);
+        if (!hintType)
+            return nullptr;
+        TypeShape shape = parse_type_shape(resolve_type_alias_name(*hintType));
+        if (shape.base.empty())
+            return nullptr;
+        return lookup_struct_type(shape.base);
+    };
+
     if (auto *ai = dyn_cast<AllocaInst>(v))
     {
         Type *allocTy = ai->getAllocatedType();
@@ -143,6 +157,13 @@ std::pair<llvm::StructType *, llvm::Value *> CodeGen::resolve_struct_and_ptr(llv
                 auto *st = cast<StructType>(elem);
                 Value *loaded = builder.CreateLoad(pt, ai, ai->getName() + ".loaded");
                 return {st, loaded};
+            }
+
+            if (StructType *st = struct_from_local_type_hint())
+            {
+                Value *loadedOpaque = builder.CreateLoad(pt, ai, ai->getName() + ".loaded_hint");
+                Value *casted = builder.CreateBitCast(loadedOpaque, detail::getPtrTy(context), ai->getName() + ".hint_structptr");
+                return {st, casted};
             }
 
             if (!hintVarName.empty())
@@ -179,6 +200,13 @@ std::pair<llvm::StructType *, llvm::Value *> CodeGen::resolve_struct_and_ptr(llv
                 auto *st = cast<StructType>(elem);
                 Value *loaded = builder.CreateLoad(pt, gv, gv->getName() + ".loaded");
                 return {st, loaded};
+            }
+
+            if (StructType *st = struct_from_local_type_hint())
+            {
+                Value *loadedOpaque = builder.CreateLoad(pt, gv, gv->getName() + ".loaded_hint");
+                Value *casted = builder.CreateBitCast(loadedOpaque, detail::getPtrTy(context), gv->getName() + ".hint_structptr");
+                return {st, casted};
             }
 
             if (!hintVarName.empty())
@@ -250,6 +278,12 @@ std::pair<llvm::StructType *, llvm::Value *> CodeGen::resolve_struct_and_ptr(llv
 
         if (!hintVarName.empty())
         {
+            if (StructType *st = struct_from_local_type_hint())
+            {
+                Value *casted = builder.CreateBitCast(v, detail::getPtrTy(context), "opaque_hint_structptr");
+                return {st, casted};
+            }
+
             auto it = struct_types.find(hintVarName);
             if (it != struct_types.end())
             {

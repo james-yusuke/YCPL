@@ -30,6 +30,13 @@ cc_library(
     ],
 )
 
+filegroup(
+    name = "yc_runtime_src",
+    srcs = glob([
+        "bootstrap/cpp/runtime/**",
+    ]),
+)
+
 cc_binary(
     name = "ycc",
     srcs = [
@@ -65,7 +72,7 @@ genrule(
     srcs = glob([
         "compiler/ycpl/**",
         "stl/**",
-    ]),
+    ]) + [":yc_runtime_src"],
     outs = ["ycc-ycpl"],
     cmd = "YCC=$$(pwd)/$(location :ycc) && OUT_FILE=$$(pwd)/$@ && OUT_DIR=$$(pwd)/$(@D)/ycpl-selfhost && mkdir -p $$OUT_DIR && cd compiler/ycpl && $$YCC build -o $$OUT_DIR >/tmp/ycc-ycpl-build.log 2>&1 && cp $$OUT_DIR/ycc-ycpl $$OUT_FILE",
     executable = True,
@@ -78,6 +85,7 @@ sh_test(
     data = [
         ":ycc",
         ":ycc-ycpl",
+        ":yc_runtime_src",
     ] + glob([
         "compiler/ycpl/**",
         "examples/**",
@@ -92,6 +100,7 @@ sh_test(
     data = [
         ":ycc",
         ":ycc-ycpl",
+        ":yc_runtime_src",
     ] + glob([
         "compiler/ycpl/**",
         "examples/**",
@@ -105,6 +114,7 @@ sh_test(
     srcs = ["//tools/bazel:run_examples_test.sh"],
     data = [
         ":ycc",
+        ":yc_runtime_src",
     ] + glob([
         "examples/**",
         "stl/**",
@@ -116,6 +126,7 @@ sh_test(
     srcs = ["//tools/bazel:run_lsp_protocol_test.sh"],
     data = [
         ":ycc",
+        ":yc_runtime_src",
     ] + glob([
         "stl/**",
         "tools/lsp/**",

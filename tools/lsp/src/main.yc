@@ -1617,28 +1617,31 @@ fn store_document(uris []string, texts []string, uri string, source string) {
         return
     }
 
-    existing := map.find(uris, uri)
+    stored_uri := mem.keep_string(uri)
+    stored_source := mem.keep_string(source)
+
+    existing := map.find(uris, stored_uri)
     if existing >= 0 {
         old_source := array.get(texts, existing)
         if old_source != none {
             mem.free(old_source)
         }
-        array.set(texts, existing, source)
-        publish_diagnostics(array.get(uris, existing), source)
-        mem.free(uri)
+        array.set(texts, existing, stored_source)
+        publish_diagnostics(array.get(uris, existing), stored_source)
+        mem.free(stored_uri)
         return
     }
 
-    inserted := map.put(uris, texts, uri, source)
+    inserted := map.put(uris, texts, stored_uri, stored_source)
     if inserted < 0 {
         io.write_str(2, "YCPL-lsp: document store is full\n")
-        publish_diagnostics(uri, source)
-        mem.free(uri)
-        mem.free(source)
+        publish_diagnostics(stored_uri, stored_source)
+        mem.free(stored_uri)
+        mem.free(stored_source)
         return
     }
 
-    publish_diagnostics(uri, source)
+    publish_diagnostics(stored_uri, stored_source)
 }
 
 fn handle_document_change(message string, uris []string, texts []string) {

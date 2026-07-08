@@ -1,0 +1,22 @@
+module std2.unsafe.mem
+
+extern fn c_malloc(size i64) *byte as "malloc"
+extern fn c_calloc(count i64, size i64) *byte as "calloc"
+extern fn c_realloc(ptr *byte, size i64) *byte as "realloc"
+extern fn c_free(ptr *byte) as "free"
+
+pub fn alloc(size i64) *byte {
+    return c_malloc(size)
+}
+
+pub fn calloc(count i64, size i64) *byte {
+    return c_calloc(count, size)
+}
+
+pub fn realloc(ptr *byte, size i64) *byte {
+    return c_realloc(ptr, size)
+}
+
+pub fn free(ptr *byte) {
+    c_free(ptr)
+}

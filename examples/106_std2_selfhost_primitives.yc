@@ -1,0 +1,54 @@
+import "std2/array" as array
+import "std2/fmt" as fmt
+import "std2/map" as map
+import "std2/text" as text
+
+enum Section {
+    Lexer = 7,
+    Parser = 20,
+}
+
+type Count = i32
+
+fn classify(section Count) Count {
+    switch section {
+        case Section.Lexer {
+            return 7
+        }
+        case Parser {
+            return 20
+        }
+        default {
+            return 0
+        }
+    }
+    return 0
+}
+
+fn main() {
+    keys := array.new([]string, 2)
+    values := array.new([]i32, 2)
+    defer array.free(keys)
+    defer array.free(values)
+
+    keys = array.append(keys, none)
+    values = array.append(values, 0)
+    keys = array.append(keys, none)
+    values = array.append(values, 0)
+
+    map.put_i32(keys, values, "tokens", 7)
+    map.put_i32(keys, values, "parser", classify(Parser))
+
+    b := text.new_builder(2)
+    defer text.free_builder(b)
+    b = text.append(b, "tok")
+    b = text.append_char(b, ':')
+    b = text.append(b, "ens")
+
+    scope report {
+        fmt.println(text.to_string(b))
+        fmt.println(map.get_i32(keys, values, "tokens", 0) + map.get_i32(keys, values, "parser", 0))
+        fmt.println(map.has(keys, "parser"))
+        fmt.println(array.len(keys))
+    }
+}

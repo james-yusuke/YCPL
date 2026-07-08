@@ -1,0 +1,26 @@
+import "std/fmt" as fmt
+
+fn main() i32 {
+    defer fmt.println("function")
+
+    scope outer {
+        defer fmt.println("outer")
+        fmt.println("body")
+    }
+
+    i := 0
+    for (; i < 2; i++) {
+        defer fmt.println("loop")
+        if i == 0 {
+            continue
+        }
+        break
+    }
+
+    scope early {
+        defer fmt.println("early")
+        return 0
+    }
+
+    return 1
+}

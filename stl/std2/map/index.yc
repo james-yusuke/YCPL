@@ -1,7 +1,127 @@
 module std2.map
 
 import "std2/array" as array
+import "std2/mem" as mem
 import "std2/str" as str
+
+pub struct Std2MapString {
+    keys []string
+    values []string
+}
+
+pub struct Std2MapStringI32 {
+    keys []string
+    values []i32
+}
+
+fn normalized_capacity(capacity i32) i32 {
+    if capacity <= 0 {
+        return 4
+    }
+    return capacity
+}
+
+pub fn new_string(capacity i32) Map<string, string> {
+    raw := mem.alloc(mem.sizeof(Std2MapString))
+    map: *Std2MapString := cast(*Std2MapString, raw)
+    cap := normalized_capacity(capacity)
+    map.keys = array.new([]string, cap)
+    map.values = array.new([]string, cap)
+    i: i32 := 0
+    for (; i < cap; i++) {
+        map.keys = array.append(map.keys, none)
+        map.values = array.append(map.values, none)
+    }
+    mem.attach_child(cast(*byte, map), cast(*byte, map.keys))
+    mem.attach_child(cast(*byte, map), cast(*byte, map.values))
+    return cast(Map<string, string>, map)
+}
+
+pub fn new_i32(capacity i32) Map<string, i32> {
+    raw := mem.alloc(mem.sizeof(Std2MapStringI32))
+    map: *Std2MapStringI32 := cast(*Std2MapStringI32, raw)
+    cap := normalized_capacity(capacity)
+    map.keys = array.new([]string, cap)
+    map.values = array.new([]i32, cap)
+    i: i32 := 0
+    for (; i < cap; i++) {
+        map.keys = array.append(map.keys, none)
+        map.values = array.append(map.values, 0)
+    }
+    mem.attach_child(cast(*byte, map), cast(*byte, map.keys))
+    mem.attach_child(cast(*byte, map), cast(*byte, map.values))
+    return cast(Map<string, i32>, map)
+}
+
+pub fn keys_string(handle Map<string, string>) []string {
+    map: *Std2MapString := cast(*Std2MapString, handle)
+    return map.keys
+}
+
+pub fn keys_i32(handle Map<string, i32>) []string {
+    map: *Std2MapStringI32 := cast(*Std2MapStringI32, handle)
+    return map.keys
+}
+
+pub fn has_string(handle Map<string, string>, key string) bool {
+    map: *Std2MapString := cast(*Std2MapString, handle)
+    return has(map.keys, key)
+}
+
+pub fn has_i32(handle Map<string, i32>, key string) bool {
+    map: *Std2MapStringI32 := cast(*Std2MapStringI32, handle)
+    return has(map.keys, key)
+}
+
+pub fn get_string_value(handle Map<string, string>, key string) string {
+    map: *Std2MapString := cast(*Std2MapString, handle)
+    return get(map.keys, map.values, key)
+}
+
+pub fn get_i32_value(handle Map<string, i32>, key string, missing i32) i32 {
+    map: *Std2MapStringI32 := cast(*Std2MapStringI32, handle)
+    return get_i32(map.keys, map.values, key, missing)
+}
+
+pub fn put_string_value(handle Map<string, string>, key string, value string) i32 {
+    map: *Std2MapString := cast(*Std2MapString, handle)
+    return put(map.keys, map.values, key, value)
+}
+
+pub fn put_i32_value(handle Map<string, i32>, key string, value i32) i32 {
+    map: *Std2MapStringI32 := cast(*Std2MapStringI32, handle)
+    return put_i32(map.keys, map.values, key, value)
+}
+
+pub fn remove_string_value(handle Map<string, string>, key string) {
+    map: *Std2MapString := cast(*Std2MapString, handle)
+    remove(map.keys, map.values, key)
+}
+
+pub fn remove_i32_value(handle Map<string, i32>, key string) {
+    map: *Std2MapStringI32 := cast(*Std2MapStringI32, handle)
+    i := find(map.keys, key)
+    if i >= 0 {
+        array.set(map.keys, i, none)
+        array.set(map.values, i, 0)
+    }
+}
+
+pub fn free_string(handle Map<string, string>) {
+    if handle == none {
+        return
+    }
+    map: *Std2MapString := cast(*Std2MapString, handle)
+    mem.free(cast(*byte, map))
+}
+
+pub fn free_i32(handle Map<string, i32>) {
+    if handle == none {
+        return
+    }
+    map: *Std2MapStringI32 := cast(*Std2MapStringI32, handle)
+    mem.free(cast(*byte, map))
+}
 
 pub fn find(keys []string, key string) i32 {
     if key == none {

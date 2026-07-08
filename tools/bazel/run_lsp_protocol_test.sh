@@ -48,6 +48,7 @@ LINKFLAGS="${LINKFLAGS:--no-pie}"
 WORK_DIR="$(mktemp -d "${TMPDIR:-/tmp}/ycpl-lsp.XXXXXX")"
 export YCPL_LSP_PROJECT_DIR="${WORK_DIR}/tools-lsp"
 export YCPL_LSP_OUT_DIR="${YCPL_LSP_PROJECT_DIR}/build"
+export YCPL_RUNTIME_SRC="${RUNFILES_ROOT}/bootstrap/cpp/runtime/yc_runtime.c"
 
 if [ ! -x "$YCC" ]; then
   printf 'Missing Bazel-built ycc: %s\n' "$YCC" >&2
@@ -82,6 +83,11 @@ fi
 
 cd "$WORK_DIR"
 "$LLC" -filetype=obj "$LL_FILE" -o "$YCPL_LSP_OUT_DIR/YCPL-lsp.o"
-"$CLANG" $LINKFLAGS "$YCPL_LSP_OUT_DIR/YCPL-lsp.o" -o "$YCPL_LSP_OUT_DIR/YCPL-lsp" -lm
+if [ ! -f "$YCPL_RUNTIME_SRC" ]; then
+  printf 'Missing YCPL runtime source: %s\n' "$YCPL_RUNTIME_SRC" >&2
+  exit 1
+fi
+"$CLANG" -std=c11 -c "$YCPL_RUNTIME_SRC" -o "$YCPL_LSP_OUT_DIR/yc_runtime.o"
+"$CLANG" $LINKFLAGS "$YCPL_LSP_OUT_DIR/YCPL-lsp.o" "$YCPL_LSP_OUT_DIR/yc_runtime.o" -o "$YCPL_LSP_OUT_DIR/YCPL-lsp" -lm
 
 exec python3 "$RUNFILES_ROOT/tools/lsp/check_protocol.py" "$YCPL_LSP_OUT_DIR/YCPL-lsp"

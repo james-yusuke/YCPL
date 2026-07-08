@@ -48,6 +48,10 @@ llvm::Type *codegen::CodeGen::resolve_llvm_type_name(const std::string &typeName
     {
         ty = Type::getInt8Ty(context);
     }
+    else if (pt.is_map_type())
+    {
+        ty = codegen::detail::getPtrTy(context);
+    }
     else
     {
         ty = lookup_struct_type(pt.base);

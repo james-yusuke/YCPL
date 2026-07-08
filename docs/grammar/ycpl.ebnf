@@ -30,6 +30,11 @@ enum_decl          = [ visibility ] "enum" identifier "{" { enum_variant [ "," ]
 enum_variant       = identifier [ "=" integer_literal ] ;
 
 type_alias_decl    = [ visibility ] "type" identifier [ "=" ] type ;
+type               = pointer_type | slice_type | map_type | named_type ;
+pointer_type       = ( "*" | "&" ) type ;
+slice_type         = "[]" type ;
+map_type           = "Map" "<" type "," type ">" ;
+named_type         = identifier | "byte" ;
 
 const_decl         = "const" identifier [ ":" type ] ":=" expression ;
 

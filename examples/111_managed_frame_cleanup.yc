@@ -1,0 +1,31 @@
+import "std/fmt" as fmt
+import "std/array" as array
+
+extern fn runtime_live_allocations() i64 as "yc_runtime_live_allocations"
+
+fn local_array_sum() i32 {
+    xs := array.new([]i32, 1)
+    xs = array.append(xs, 4)
+    xs = array.append(xs, 8)
+    return array.get(xs, 0) + array.get(xs, 1)
+}
+
+fn make_array() []i32 {
+    xs := array.new([]i32, 1)
+    xs = array.append(xs, 5)
+    xs = array.append(xs, 6)
+    return xs
+}
+
+fn main() {
+    before := runtime_live_allocations()
+    total := local_array_sum()
+    after_local := runtime_live_allocations()
+    fmt.println(total)
+    fmt.println(after_local - before)
+
+    returned := make_array()
+    after_return := runtime_live_allocations()
+    fmt.println(array.get(returned, 1))
+    fmt.println(after_return > after_local)
+}

@@ -3,7 +3,8 @@
 [日本語](README-JA.md) | [English docs](docs/README.en.md) | [日本語 docs](docs/README.ja.md)
 
 YCPL is an experimental systems-programming language with a C++ compiler,
-LLVM backend, bundled YCPL standard library, examples, and a YCPL-written LSP.
+LLVM backend, statically linked managed runtime, bundled YCPL standard library,
+examples, and a YCPL-written LSP.
 Source files use the `.yc` extension.
 
 ```text
@@ -21,7 +22,7 @@ Source files use the `.yc` extension.
                                                           llc + clang
                                                                |
                                                                v
-                                                        native binary
+                                           native binary + YCPL runtime
 ```
 
 ```text
@@ -39,9 +40,13 @@ YCPL
 ├─ Standard library
 │  ├─ std/fmt
 │  ├─ std/array
-│  ├─ std/mem
+│  ├─ std/mem managed allocator
 │  ├─ std/json
 │  └─ std2 folder modules
+├─ Runtime
+│  ├─ static yc_runtime object
+│  ├─ function-frame cleanup
+│  └─ array/map child destructors
 └─ Tooling
    ├─ VSCode
    ├─ native LSP
@@ -54,6 +59,7 @@ YCPL
 Repository
 ├─ bootstrap/cpp/   C++ bootstrap compiler, with src/cli and split codegen subsystems
 ├─ compiler/ycpl/   YCPL-written compiler, lex/parse milestone
+├─ bootstrap/cpp/runtime/ static managed allocation runtime linked into native outputs
 ├─ stl/std/         YCPL standard library modules
 ├─ examples/        .yc smoke/regression programs
 ├─ tools/lsp/       LSP written in YCPL
@@ -65,7 +71,7 @@ Repository
 |---|---|
 | Stability | Very early alpha, not production-ready |
 | Source extension | `.yc` |
-| Build output | Native binary via `ycc build`; LLVM IR via `ycc build-ir` |
+| Build output | Native binary via `ycc build`; LLVM IR via `ycc build-ir`; build-and-run via `ycc run` |
 | Project config | `YCPL.json` |
 | Compiler binaries | `ycc` bootstrap, `ycc-ycpl` self-hosting compiler in progress |
 
@@ -119,15 +125,17 @@ LLVM_DIR=/opt/homebrew/opt/llvm@22/lib/cmake/llvm cmake -S . -B build
 ```text
 Single file:
   examples/01_hello.yc -> ycc build -> native binary
+  examples/01_hello.yc -> ycc run -> native binary, then execute it
   examples/01_hello.yc -> ycc build-ir -> LLVM IR
 
 Project:
-  YCPL.json -> scan src/*.yc -> ycc build -> native binary
-  YCPL.json -> scan src/*.yc -> ycc build-ir -> LLVM IR
+  YCPL.json -> scan src/**/*.yc deterministically -> ycc build -> native binary
+  YCPL.json -> scan src/**/*.yc deterministically -> ycc build-ir -> LLVM IR
 ```
 
 ```sh
 bazel run //:ycc -- build examples/01_hello.yc -o /tmp/ycpl_hello
+bazel run //:ycc -- run examples/01_hello.yc -o /tmp/ycpl_hello
 bazel run //:ycc -- build-ir examples/01_hello.yc -o /tmp/ycpl_hello
 cd examples/04_module_project && ../../bazel-bin/ycc build
 ```

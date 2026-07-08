@@ -67,6 +67,17 @@ Function *CodeGen::get_or_declare_c_function(const std::string &name)
         {"calloc", i8ptr, {i64Ty, i64Ty}},
         {"realloc", i8ptr, {i8ptr, i64Ty}},
         {"free", voidTy, {i8ptr}},
+        {"yc_alloc", i8ptr, {i64Ty}},
+        {"yc_calloc", i8ptr, {i64Ty, i64Ty}},
+        {"yc_realloc", i8ptr, {i8ptr, i64Ty}},
+        {"yc_release", voidTy, {i8ptr}},
+        {"yc_attach_child", voidTy, {i8ptr, i8ptr}},
+        {"yc_replace_child", voidTy, {i8ptr, i8ptr, i8ptr}},
+        {"yc_move_to_parent", i8ptr, {i8ptr}},
+        {"yc_move_frame_to_parent", voidTy, {}},
+        {"yc_move_to_root", i8ptr, {i8ptr}},
+        {"yc_keep_string", i8ptr, {i8ptr}},
+        {"yc_runtime_live_allocations", i64Ty, {}},
 
         // Basic terminal and file I/O.
         {"puts", iTy, {i8ptr}},

@@ -80,6 +80,8 @@ Value *CodeGen::codegen_array_intrinsic_call(const std::string &name, const ast:
         builder.CreateStore(zero, array_header_field_ptr(arrPtr, detail::RuntimeArrayField::Length, "array.new.len.ptr"));
         builder.CreateStore(cap, array_header_field_ptr(arrPtr, detail::RuntimeArrayField::Capacity, "array.new.cap.ptr"));
         builder.CreateStore(elemSizeVal, array_header_field_ptr(arrPtr, detail::RuntimeArrayField::ElementSize, "array.new.elem_size.ptr"));
+        if (Function *attachFn = get_or_declare_c_function("yc_attach_child"))
+            builder.CreateCall(attachFn, {builder.CreatePointerCast(arrPtr, i8ptrTy, "array.attach.parent"), dataPtr});
         return arrPtr;
     }
 
@@ -212,14 +214,14 @@ Value *CodeGen::codegen_array_intrinsic_call(const std::string &name, const ast:
             return nullptr;
         Value *dataPtrPtr = array_header_field_ptr(arrPtr, detail::RuntimeArrayField::Data, "array.free.data.ptr.ptr");
         Value *dataPtr = builder.CreateLoad(get_i8ptr_type(), dataPtrPtr, "array.free.data.ptr");
-        Function *freeFn = get_or_declare_c_function("free");
-        if (!freeFn)
+        Function *releaseFn = get_or_declare_c_function("yc_release");
+        if (!releaseFn)
         {
-            error("free is not available");
+            error("yc_release is not available");
             return nullptr;
         }
-        builder.CreateCall(freeFn, {dataPtr});
-        builder.CreateCall(freeFn, {builder.CreatePointerCast(arrPtr, get_i8ptr_type(), "array.free.struct.i8")});
+        builder.CreateCall(releaseFn, {dataPtr});
+        builder.CreateCall(releaseFn, {builder.CreatePointerCast(arrPtr, get_i8ptr_type(), "array.free.struct.i8")});
         return nullptr;
     }
 
