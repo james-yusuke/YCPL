@@ -237,6 +237,51 @@ pub fn to_string(b StringBuilder) string {
     return b.data
 }
 
+pub fn concat(left string, right string) string {
+    left_len := len(left)
+    right_len := len(right)
+    b := new_builder(left_len + right_len)
+    b = append(b, left)
+    b = append(b, right)
+    return to_string(b)
+}
+
+pub fn concat3(a string, b string, c string) string {
+    a_len := len(a)
+    b_len := len(b)
+    c_len := len(c)
+    builder := new_builder(a_len + b_len + c_len)
+    builder = append(builder, a)
+    builder = append(builder, b)
+    builder = append(builder, c)
+    return to_string(builder)
+}
+
+pub fn join(left string, sep string, right string) string {
+    left_len := len(left)
+    sep_len := len(sep)
+    right_len := len(right)
+    b := new_builder(left_len + sep_len + right_len)
+    b = append(b, left)
+    b = append(b, sep)
+    b = append(b, right)
+    return to_string(b)
+}
+
+pub fn repeat(s string, count i32) string {
+    if count <= 0 {
+        return ""
+    }
+
+    unit := len(s)
+    b := new_builder(unit * count)
+    i: i32 := 0
+    for (; i < count; i++) {
+        b = append(b, s)
+    }
+    return to_string(b)
+}
+
 pub fn free_builder(b StringBuilder) {
     if b.owns {
         if b.root != none {

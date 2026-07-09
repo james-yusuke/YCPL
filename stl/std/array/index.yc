@@ -1,9 +1,11 @@
 module std.array
 
 pub intrinsic fn new(typ Type, cap i64) []T
+pub intrinsic fn make(typ Type) []T
 pub intrinsic fn len(xs []T) i32
 pub intrinsic fn cap(xs []T) i32
 pub intrinsic fn append(xs []T, value T) []T
+pub intrinsic fn push(xs []T, value T) []T
 pub intrinsic fn get(xs []T, index i64) T
 pub intrinsic fn set(xs []T, index i64, value T)
 pub intrinsic fn free(xs []T)

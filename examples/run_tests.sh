@@ -572,6 +572,7 @@ compile_run_and_verify "$SCRIPT_DIR/110_managed_runtime_memory.yc" $'9\nYCPL\n7\
 compile_run_and_verify "$SCRIPT_DIR/111_managed_frame_cleanup.yc" $'12\n0\n6\n1' "@yc_runtime_live_allocations" "@yc_frame_pop" "@yc_move_to_parent"
 compile_run_and_verify "$SCRIPT_DIR/112_managed_child_destructors.yc" $'2\n2' "@yc_attach_child" "@yc_replace_child" "@yc_release"
 compile_run_and_verify "$SCRIPT_DIR/113_managed_value_roots.yc" $'2\n2\n2' "@yc_attach_child" "@yc_replace_child" "@yc_release"
+compile_run_and_verify "$SCRIPT_DIR/114_go_style_runtime_api.yc" $'3\n16\nYCPL gogo\n3\n8\n1\n0' "%YCPLArrayHeader" "@yc_attach_child" "@yc_replace_child" "@yc_move_to_parent" "@std__text__concat" "@std__map__make_i32"
 
 echo ""
 echo "--- Project Tests ---"
