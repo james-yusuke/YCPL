@@ -59,11 +59,11 @@ test("stdlib function completion adds missing import edits", async () => {
   assert.equal(fromString.insertText, "bytes.from_string($0)");
 });
 
-test("stdlib completion supports std2 modules and UFCS methods", async () => {
+test("stdlib completion supports std modules and UFCS methods", async () => {
   const parser = new YcplParser();
   const index = new WorkspaceIndex();
-  const document = parser.parse("file:///std2-ufcs.yc", 1, [
-    "import \"std2/bytes\" as bytes",
+  const document = parser.parse("file:///std-ufcs.yc", 1, [
+    "import \"std/bytes\" as bytes",
     "",
     "fn main() {",
     "    b: owned Bytes := bytes.from_string(\"YCPL\")",
@@ -83,9 +83,9 @@ test("stdlib completion supports std2 modules and UFCS methods", async () => {
   const normalItems = await providers.completion({ textDocument: { uri: document.uri }, position: Position.create(2, 4) });
   const base32 = normalItems.find((item) => item.label === "base32.encode");
   if (!base32) {
-    assert.fail("Expected std2 base32.encode completion");
+    assert.fail("Expected std base32.encode completion");
   }
-  assert.equal(base32.additionalTextEdits?.[0].newText, "import \"std2/base32\" as base32\n");
+  assert.equal(base32.additionalTextEdits?.[0].newText, "import \"std/base32\" as base32\n");
 });
 
 test("hover, definition, rename, symbols, and semantic tokens work", () => {

@@ -32,9 +32,9 @@ require_project_file_count() {
 }
 
 "$YCC_YCPL" lex examples/01_hello.yc >/dev/null
-"$YCC_YCPL" parse examples/104_std2_encoding.yc >/tmp/ycc-ycpl-std2-syntax-parse.out
-grep -q 'parse ok:' /tmp/ycc-ycpl-std2-syntax-parse.out
-grep -q 'imports=6' /tmp/ycc-ycpl-std2-syntax-parse.out
+"$YCC_YCPL" parse examples/104_std_encoding.yc >/tmp/ycc-ycpl-std-syntax-parse.out
+grep -q 'parse ok:' /tmp/ycc-ycpl-std-syntax-parse.out
+grep -q 'imports=6' /tmp/ycc-ycpl-std-syntax-parse.out
 if ! "$YCC_YCPL" parse compiler/ycpl >/tmp/ycc-ycpl-project-parse.out 2>/tmp/ycc-ycpl-project-parse.err; then
   cat /tmp/ycc-ycpl-project-parse.out >&2
   cat /tmp/ycc-ycpl-project-parse.err >&2
@@ -475,7 +475,7 @@ grep -q '@.stage3.stage4.ir' "$work_dir/merged.ll"
 grep -q 'LLVM_CONFIG' "$work_dir/merged.ll"
 grep -q 'PATH=/opt/homebrew/opt/llvm/bin' "$work_dir/merged.ll"
 grep -q '/usr/lib/llvm-22/bin' "$work_dir/merged.ll"
-grep -q '@.stage3.tinystd2encoding.ir' "$work_dir/merged.ll"
+grep -q '@.stage3.tinystdencoding.ir' "$work_dir/merged.ll"
 grep -q '@.stage3.tinystdbase64.ir' "$work_dir/merged.ll"
 grep -q '@.stage3.tinystdbytes.ir' "$work_dir/merged.ll"
 grep -q '@.stage3.tinyllvmcall2icmp.ir' "$work_dir/merged.ll"
@@ -515,7 +515,7 @@ grep -q '@ycpl_ast_stmt_expr_links' "$work_dir/merged.ll"
 grep -q '@ycpl_ast_stmt_expr_tail_nodes' "$work_dir/merged.ll"
 grep -q '@ycpl_ast_stmt_expr_digest' "$work_dir/merged.ll"
 grep -q '@ycpl_ast_symbol_digest' "$work_dir/merged.ll"
-grep -q '@.ycpl.tinystd2encoding.ir' "$work_dir/merged.ll"
+grep -q '@.ycpl.tinystdencoding.ir' "$work_dir/merged.ll"
 grep -q '@.ycpl.tinystdbase64.ir' "$work_dir/merged.ll"
 grep -q '@.ycpl.tinystdbytes.ir' "$work_dir/merged.ll"
 grep -q '@.ycpl.tinyllvmcall2icmp.ir' "$work_dir/merged.ll"

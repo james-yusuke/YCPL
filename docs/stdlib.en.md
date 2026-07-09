@@ -7,9 +7,10 @@ APIs are declared as `intrinsic fn` and implemented by compiler/runtime bridge
 code.
 
 ```text
-stl/std/*.yc
-├─ YCPL source wrappers  -> normal module codegen
-└─ intrinsic declarations -> compiler/runtime bridge
+stl/std/<module>/index.yc
+├─ YCPL source wrappers   -> normal module codegen
+├─ intrinsic declarations -> compiler/runtime bridge
+└─ unsafe/mem             -> raw C allocation for FFI boundaries
 ```
 
 ## Module Map
@@ -35,14 +36,13 @@ std/
 └─ unsafe/mem raw C malloc/calloc/realloc/free for FFI-only use
 ```
 
-## std2 Experimental Library
+## Folder Layout
 
-`stl/std2/<module>/index.yc` contains a folder-based standard-library candidate,
-similar to Go's `src/fmt` layout. It is separate from the existing `stl/std`.
-Modules such as `std2/base32`, `std2/base64`, `std2/bytes`, `std2/hex`, and
-`std2/hash` can be imported with paths like `import "std2/base32" as base32`.
-`std2/map` is the folder-based counterpart to `std/map` and is the preferred
-place for new `Map<string, T>` runtime helpers.
+`stl/std/<module>/index.yc` is the primary standard-library layout, similar to
+Go's `src/fmt` shape. Modules such as `std/base32`, `std/base64`, `std/bytes`,
+`std/hex`, and `std/hash` can be imported with paths like
+`import "std/base32" as base32`. Raw C allocation lives only in
+`std/unsafe/mem`; normal containers and buffers use the YCPL runtime allocator.
 
 ```YCPL
 b: owned Bytes := bytes.from_string("YCPL")
@@ -55,25 +55,24 @@ fmt.println(b.eq(decoded))
 
 | Module | Source |
 |---|---|
-| `std/fmt` | `stl/std/fmt.yc` |
-| `std/array` | `stl/std/array.yc` |
-| `std/mem` | `stl/std/mem.yc` |
-| `std/str` | `stl/std/str.yc` |
-| `std/math` | `stl/std/math.yc` |
-| `std/io` | `stl/std/io.yc` |
-| `std/fs` | `stl/std/fs.yc` |
-| `std/os` | `stl/std/os.yc` |
-| `std/text` | `stl/std/text.yc` |
-| `std/json` | `stl/std/json.yc` |
-| `std/map` | `stl/std/map.yc` |
-| `std/unsafe/mem` | `stl/std/unsafe/mem.yc` |
-| `std2/map` | `stl/std2/map/index.yc` |
-| `std2/unsafe/mem` | `stl/std2/unsafe/mem/index.yc` |
-| `std/bytes` | `stl/std/bytes.yc` |
-| `std/hex` | `stl/std/hex.yc` |
-| `std/base64` | `stl/std/base64.yc` |
-| `std/hash` | `stl/std/hash.yc` |
-| `std/llvm` | `stl/std/llvm.yc` |
+| `std/map` | `stl/std/map/index.yc` |
+| `std/unsafe/mem` | `stl/std/unsafe/mem/index.yc` |
+| `std/fmt` | `stl/std/fmt/index.yc` |
+| `std/array` | `stl/std/array/index.yc` |
+| `std/mem` | `stl/std/mem/index.yc` |
+| `std/str` | `stl/std/str/index.yc` |
+| `std/math` | `stl/std/math/index.yc` |
+| `std/io` | `stl/std/io/index.yc` |
+| `std/fs` | `stl/std/fs/index.yc` |
+| `std/os` | `stl/std/os/index.yc` |
+| `std/text` | `stl/std/text/index.yc` |
+| `std/json` | `stl/std/json/index.yc` |
+| `std/bytes` | `stl/std/bytes/index.yc` |
+| `std/hex` | `stl/std/hex/index.yc` |
+| `std/base32` | `stl/std/base32/index.yc` |
+| `std/base64` | `stl/std/base64/index.yc` |
+| `std/hash` | `stl/std/hash/index.yc` |
+| `std/llvm` | `stl/std/llvm/index.yc` |
 
 ## Common Flows
 
@@ -106,7 +105,7 @@ map.new_i32(cap) / map.new_string(cap)
 ```YCPL
 import "std/fmt" as fmt
 import "std/array" as array
-import "std2/map" as map
+import "std/map" as map
 
 fn main() {
     xs := array.new([]i32, 1)
@@ -134,7 +133,7 @@ json.get / json.at
 array.free / mem.free / bytes.free / json.free / map.free_*
     -> compatibility wrappers over yc_release while old code migrates
 
-std/unsafe/mem and std2/unsafe/mem
+std/unsafe/mem and std/unsafe/mem
     -> raw C malloc/calloc/realloc/free for FFI boundaries only
 ```
 

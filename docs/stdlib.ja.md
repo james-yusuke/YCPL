@@ -6,9 +6,10 @@
 `intrinsic fn` として宣言され、compiler/runtime bridge で実装されます。
 
 ```text
-stl/std/*.yc
+stl/std/<module>/index.yc
 ├─ YCPL source wrappers   -> 通常の module codegen
-└─ intrinsic declarations -> compiler/runtime bridge
+├─ intrinsic declarations -> compiler/runtime bridge
+└─ unsafe/mem             -> FFI 境界用 raw C allocation
 ```
 
 ## モジュール地図
@@ -34,14 +35,13 @@ std/
 └─ unsafe/mem FFI 専用 raw C malloc/calloc/realloc/free
 ```
 
-## std2 実験ライブラリ
+## フォルダ構成
 
-`stl/std2/<module>/index.yc` には、Go の `src/fmt` のようなフォルダ版 standard
-library 候補を置いています。既存の `stl/std` とは分離されています。
-`std2/base32`、`std2/base64`、`std2/bytes`、`std2/hex`、`std2/hash` などを
-`import "std2/base32" as base32` の形で使えます。
-`std2/map` は `std/map` のフォルダ版 counterpart で、今後の
-`Map<string, T>` runtime helper を追加する場所です。
+`stl/std/<module>/index.yc` が標準ライブラリの本線です。Go の `src/fmt`
+のような形で、`std/base32`、`std/base64`、`std/bytes`、`std/hex`、
+`std/hash` などを `import "std/base32" as base32` の形で使えます。
+raw C allocation は `std/unsafe/mem` だけに置き、通常の container/buffer は
+YCPL runtime allocator を使います。
 
 ```YCPL
 b: owned Bytes := bytes.from_string("YCPL")
@@ -54,25 +54,24 @@ fmt.println(b.eq(decoded))
 
 | Module | Source |
 |---|---|
-| `std/fmt` | `stl/std/fmt.yc` |
-| `std/array` | `stl/std/array.yc` |
-| `std/mem` | `stl/std/mem.yc` |
-| `std/str` | `stl/std/str.yc` |
-| `std/math` | `stl/std/math.yc` |
-| `std/io` | `stl/std/io.yc` |
-| `std/fs` | `stl/std/fs.yc` |
-| `std/os` | `stl/std/os.yc` |
-| `std/text` | `stl/std/text.yc` |
-| `std/json` | `stl/std/json.yc` |
-| `std/map` | `stl/std/map.yc` |
-| `std/unsafe/mem` | `stl/std/unsafe/mem.yc` |
-| `std2/map` | `stl/std2/map/index.yc` |
-| `std2/unsafe/mem` | `stl/std2/unsafe/mem/index.yc` |
-| `std/bytes` | `stl/std/bytes.yc` |
-| `std/hex` | `stl/std/hex.yc` |
-| `std/base64` | `stl/std/base64.yc` |
-| `std/hash` | `stl/std/hash.yc` |
-| `std/llvm` | `stl/std/llvm.yc` |
+| `std/map` | `stl/std/map/index.yc` |
+| `std/unsafe/mem` | `stl/std/unsafe/mem/index.yc` |
+| `std/fmt` | `stl/std/fmt/index.yc` |
+| `std/array` | `stl/std/array/index.yc` |
+| `std/mem` | `stl/std/mem/index.yc` |
+| `std/str` | `stl/std/str/index.yc` |
+| `std/math` | `stl/std/math/index.yc` |
+| `std/io` | `stl/std/io/index.yc` |
+| `std/fs` | `stl/std/fs/index.yc` |
+| `std/os` | `stl/std/os/index.yc` |
+| `std/text` | `stl/std/text/index.yc` |
+| `std/json` | `stl/std/json/index.yc` |
+| `std/bytes` | `stl/std/bytes/index.yc` |
+| `std/hex` | `stl/std/hex/index.yc` |
+| `std/base32` | `stl/std/base32/index.yc` |
+| `std/base64` | `stl/std/base64/index.yc` |
+| `std/hash` | `stl/std/hash/index.yc` |
+| `std/llvm` | `stl/std/llvm/index.yc` |
 
 ## よく使う流れ
 
@@ -105,7 +104,7 @@ map.new_i32(cap) / map.new_string(cap)
 ```YCPL
 import "std/fmt" as fmt
 import "std/array" as array
-import "std2/map" as map
+import "std/map" as map
 
 fn main() {
     xs := array.new([]i32, 1)
@@ -133,7 +132,7 @@ json.get / json.at
 array.free / mem.free / bytes.free / json.free / map.free_*
     -> 旧コード移行用の yc_release compatibility wrapper
 
-std/unsafe/mem と std2/unsafe/mem
+std/unsafe/mem と std/unsafe/mem
     -> FFI 境界だけで使う raw C malloc/calloc/realloc/free
 ```
 

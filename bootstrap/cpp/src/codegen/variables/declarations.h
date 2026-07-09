@@ -135,7 +135,7 @@ Value *CodeGen::codegen_vardecl(const ast::VarDecl *vd)
                 {
                     if (auto callee = dynamic_cast<const ast::Ident *>(call->callee.get()))
                     {
-                        if ((callee->name == "__YCPL_std__array_new" || callee->name == "__YCPL_std2__array_new") && !call->args.empty())
+                        if (callee->name == "__YCPL_std__array_new" && !call->args.empty())
                         {
                             if (auto typeExpr = dynamic_cast<const ast::TypeExpr *>(call->args[0].get()))
                                 t = resolve_type_name(typeExpr->type.get());

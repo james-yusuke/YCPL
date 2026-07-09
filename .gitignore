@@ -81,6 +81,10 @@ coverage/
 # executables
 *.out
 *.exe
+# ycc run writes root-level LLVM IR and binaries named after examples.
+/*.ll
+/[0-9][0-9]_*
+/[0-9][0-9][0-9]_*
 
 # ------------------------
 # Package / distribution
