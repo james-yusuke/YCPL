@@ -17,7 +17,7 @@ stl/std/<module>/index.yc
 ```text
 std/
 ├─ fmt    print, println, printf
-├─ array  new, append, get, set, free 互換
+├─ array  make, push, get, set, free 互換
 ├─ mem    managed alloc, copy, sizeof
 ├─ str    len, eq, cmp
 ├─ math   abs, sqrt, pow
@@ -78,10 +78,13 @@ fmt.println(b.eq(decoded))
 ```text
 fmt.println(value) -> stdout
 
-array.new([]T, cap)
+array.make([]T)
     -> { data, len, cap, elem_size }
-    -> array.append / array.get / array.set
+    -> array.push / array.get / array.set
     -> YCPL runtime 管理。array.free は互換 release として残す
+
+text.concat / text.join / text.repeat
+    -> managed StringBuilder を隠した high-level string construction
 
 json.parse(text)
     -> JsonValue { root, source, range, owns }
@@ -94,10 +97,10 @@ bytes.from_string(text)
     -> hex.encode / base64.encode / hash.crc32
     -> YCPL runtime 管理。bytes.free は互換として残す
 
-map.new_i32(cap) / map.new_string(cap)
+map.make_i32(cap) / map.make_string(cap)
     -> Map<string, i32> / Map<string, string> runtime handle
-    -> map.put_i32_value / map.get_i32_value / map.remove_i32_value
-    -> map.put_string_value / map.get_string_value / map.remove_string_value
+    -> map.set_i32 / map.get_i32_or / map.delete_i32
+    -> map.set_string / map.get_string / map.delete_string
     -> YCPL runtime 管理。map.free_i32 / map.free_string は互換として残す
 ```
 
@@ -105,22 +108,26 @@ map.new_i32(cap) / map.new_string(cap)
 import "std/fmt" as fmt
 import "std/array" as array
 import "std/map" as map
+import "std/text" as text
 
 fn main() {
-    xs := array.new([]i32, 1)
-    xs = array.append(xs, 10)
+    xs := array.make([]i32)
+    xs = array.push(xs, 10)
     fmt.println(array.get(xs, 0))
 
-    counts := map.new_i32(4)
-    map.put_i32_value(counts, "parser", 12)
-    fmt.println(map.get_i32_value(counts, "parser", 0))
+    message := text.join("YCPL", " ", "runtime")
+    fmt.println(message)
+
+    counts := map.make_i32(4)
+    map.set_i32(counts, "parser", 12)
+    fmt.println(map.get_i32_or(counts, "parser", 0))
 }
 ```
 
 ## メモリ所有
 
 ```text
-array.new / mem.alloc / json.parse / bytes.from_string / map.new_*
+array.make / mem.alloc / json.parse / bytes.from_string / map.make_*
     -> static link される YCPL runtime 経由で確保
     -> 所有している function frame の終了時に解放
     -> return される managed root は caller frame へ移動

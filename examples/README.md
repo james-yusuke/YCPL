@@ -38,6 +38,7 @@ This directory contains example programs written in YCPL.
 | `112_managed_child_destructors.yc` | Runtime child destructors for array backing data and map internals |
 | `36_std_json_ast.yc` | `std/json` tagged value parse/get/at/stringify/free |
 | `40_short_circuit_and_string_field.yc` | Short-circuit logic and struct string field indexing |
+| `114_go_style_runtime_api.yc` | Go-style `array.make/push`, string helpers, map aliases, and frame cleanup |
 
 ## Project Examples
 

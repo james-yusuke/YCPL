@@ -37,6 +37,10 @@ pub fn new_string(capacity i32) Map<string, string> {
     return cast(Map<string, string>, map)
 }
 
+pub fn make_string(capacity i32) Map<string, string> {
+    return new_string(capacity)
+}
+
 pub fn new_i32(capacity i32) Map<string, i32> {
     raw := mem.alloc(mem.sizeof(Std2MapStringI32))
     map: *Std2MapStringI32 := cast(*Std2MapStringI32, raw)
@@ -51,6 +55,10 @@ pub fn new_i32(capacity i32) Map<string, i32> {
     mem.attach_child(cast(*byte, map), cast(*byte, map.keys))
     mem.attach_child(cast(*byte, map), cast(*byte, map.values))
     return cast(Map<string, i32>, map)
+}
+
+pub fn make_i32(capacity i32) Map<string, i32> {
+    return new_i32(capacity)
 }
 
 pub fn keys_string(handle Map<string, string>) []string {
@@ -78,9 +86,17 @@ pub fn get_string_value(handle Map<string, string>, key string) string {
     return get(map.keys, map.values, key)
 }
 
+pub fn get_string(handle Map<string, string>, key string) string {
+    return get_string_value(handle, key)
+}
+
 pub fn get_i32_value(handle Map<string, i32>, key string, missing i32) i32 {
     map: *Std2MapStringI32 := cast(*Std2MapStringI32, handle)
     return get_i32(map.keys, map.values, key, missing)
+}
+
+pub fn get_i32_or(handle Map<string, i32>, key string, missing i32) i32 {
+    return get_i32_value(handle, key, missing)
 }
 
 pub fn put_string_value(handle Map<string, string>, key string, value string) i32 {
@@ -88,14 +104,26 @@ pub fn put_string_value(handle Map<string, string>, key string, value string) i3
     return put(map.keys, map.values, key, value)
 }
 
+pub fn set_string(handle Map<string, string>, key string, value string) i32 {
+    return put_string_value(handle, key, value)
+}
+
 pub fn put_i32_value(handle Map<string, i32>, key string, value i32) i32 {
     map: *Std2MapStringI32 := cast(*Std2MapStringI32, handle)
     return put_i32(map.keys, map.values, key, value)
 }
 
+pub fn set_i32(handle Map<string, i32>, key string, value i32) i32 {
+    return put_i32_value(handle, key, value)
+}
+
 pub fn remove_string_value(handle Map<string, string>, key string) {
     map: *Std2MapString := cast(*Std2MapString, handle)
     remove(map.keys, map.values, key)
+}
+
+pub fn delete_string(handle Map<string, string>, key string) {
+    remove_string_value(handle, key)
 }
 
 pub fn remove_i32_value(handle Map<string, i32>, key string) {
@@ -105,6 +133,10 @@ pub fn remove_i32_value(handle Map<string, i32>, key string) {
         array.set(map.keys, i, none)
         array.set(map.values, i, 0)
     }
+}
+
+pub fn delete_i32(handle Map<string, i32>, key string) {
+    remove_i32_value(handle, key)
 }
 
 pub fn free_string(handle Map<string, string>) {
