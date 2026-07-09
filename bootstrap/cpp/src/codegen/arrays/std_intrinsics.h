@@ -15,14 +15,17 @@ Value *CodeGen::codegen_array_intrinsic_call(const std::string &name, const ast:
     if (name == "__YCPL_std__array_len")
         return codegen_len_call(ce);
 
-    if (name == "__YCPL_std__array_append")
+    if (name == "__YCPL_std__array_append" || name == "__YCPL_std__array_push")
         return codegen_append_call(ce);
 
-    if (name == "__YCPL_std__array_new")
+    if (name == "__YCPL_std__array_new" || name == "__YCPL_std__array_make")
     {
-        if (ce->args.size() != 2)
+        const bool is_make = name == "__YCPL_std__array_make";
+        const size_t expected_args = is_make ? 1 : 2;
+        if (ce->args.size() != expected_args)
         {
-            error("array.new expects 2 arguments: array.new([]T, cap)");
+            error(is_make ? "array.make expects 1 argument: array.make([]T)"
+                          : "array.new expects 2 arguments: array.new([]T, cap)");
             return nullptr;
         }
 
@@ -56,7 +59,9 @@ Value *CodeGen::codegen_array_intrinsic_call(const std::string &name, const ast:
         Type *i64Ty = get_i64_type();
         Type *i8ptrTy = get_i8ptr_type();
 
-        Value *cap = coerce_to_i64(codegen_expr(ce->args[1].get()), "array.cap.i64");
+        Value *cap = is_make
+                         ? ConstantInt::get(get_i64_type(), 0)
+                         : coerce_to_i64(codegen_expr(ce->args[1].get()), "array.cap.i64");
         if (!cap)
             return nullptr;
 

@@ -7,13 +7,11 @@ namespace codegen
 
 static bool is_YCPL_std_intrinsic(const std::string &name)
 {
-    return name.rfind("__YCPL_std__", 0) == 0 || name.rfind("__YCPL_std2__", 0) == 0;
+    return name.rfind("__YCPL_std__", 0) == 0;
 }
 
 static std::string canonical_YCPL_std_intrinsic(const std::string &name)
 {
-    if (name.rfind("__YCPL_std2__", 0) == 0)
-        return "__YCPL_std__" + name.substr(std::string("__YCPL_std2__").size());
     return name;
 }
 

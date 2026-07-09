@@ -104,13 +104,13 @@ Types
 ```
 
 runtime slice は `{ data, len, cap, elem_size }` です。`std/array`、
-`std/mem`、`std/bytes`、`std/json`、`std2/map` で作った値は static link される
+`std/mem`、`std/bytes`、`std/json`、`std/map` で作った値は static link される
 YCPL runtime 経由で確保します。古い free helper は deterministic frame cleanup
 後に残る precise destructor 完成までの互換 release として残します。
 `owned T` は bootstrap C++ compiler では所有値の意図を示す型修飾子として受け付け、
 現時点では ABI 上は `T` と同じです。
 `Map<string, T>` は map handle 型として受け付けます。現在の bootstrap ABI では
-opaque pointer に lower され、実ストレージは `std/map` と `std2/map` の
+opaque pointer に lower され、実ストレージは `std/map` と `std/map` の
 runtime-backed key/value arrays API を使います。
 
 ```YCPL

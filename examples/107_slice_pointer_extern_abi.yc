@@ -1,7 +1,7 @@
-import "std2/fmt" as fmt
-import "std2/mem" as mem
-import "std2/str" as str
-import "std2/text" as text
+import "std/fmt" as fmt
+import "std/mem" as mem
+import "std/str" as str
+import "std/text" as text
 
 extern fn c_memcmp(a *byte, b *byte, size i64) i32 as "memcmp"
 

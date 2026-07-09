@@ -1,0 +1,53 @@
+import "std/array" as array
+import "std/fmt" as fmt
+import "std/map" as map
+import "std/text" as text
+
+extern fn runtime_live_allocations() i64 as "yc_runtime_live_allocations"
+
+fn build_numbers() []i32 {
+    xs := array.make([]i32)
+    xs = array.push(xs, 3)
+    xs = array.push(xs, 5)
+    xs = array.push(xs, 8)
+    return xs
+}
+
+fn build_message() string {
+    left := text.concat("YC", "PL")
+    right := text.repeat("go", 2)
+    return text.join(left, " ", right)
+}
+
+fn use_go_style_api() i64 {
+    before := runtime_live_allocations()
+
+    xs := build_numbers()
+    labels := map.make_i32(2)
+    map.set_i32(labels, "first", array.get(xs, 0))
+    map.set_i32(labels, "last", array.get(xs, 2))
+    message := build_message()
+
+    fmt.println(array.len(xs))
+    fmt.println(array.get(xs, 0) + array.get(xs, 1) + array.get(xs, 2))
+    fmt.println(message)
+    fmt.println(map.get_i32_or(labels, "first", 0))
+    fmt.println(map.get_i32_or(labels, "last", 0))
+
+    during := runtime_live_allocations()
+    return during - before
+}
+
+fn main() {
+    before := runtime_live_allocations()
+    delta := use_go_style_api()
+    after := runtime_live_allocations()
+
+    grew := 0
+    if delta > 0 {
+        grew = 1
+    }
+
+    fmt.println(grew)
+    fmt.println(after - before)
+}

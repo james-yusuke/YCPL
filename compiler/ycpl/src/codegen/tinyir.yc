@@ -1998,6 +1998,34 @@ fn parse_factor(p TinyIrParser) TinyIrParser {
             return advance_sig(p)
         }
 
+        if p.lx.kind == tok.dot() && str.eq(name, "c_malloc") {
+            p = advance_sig(p)
+            if p.lx.kind != tok.ident() || !str.eq(p.lx.lexeme, "alloc") {
+                return fail_parser(p, "expected unsafe allocator function")
+            }
+            p = advance_sig(p)
+            if p.lx.kind != tok.lparen() {
+                return fail_parser(p, "expected '(' after unsafe allocator function")
+            }
+            p = advance_sig(p)
+            p = parse_expr_or_comparison(p)
+            if !p.ok { return p }
+            p = ensure_i64_value(p, "unsafe allocator size must be i64")
+            if !p.ok { return p }
+            size_value := p.value
+            if p.lx.kind != tok.rparen() {
+                return fail_parser(p, "expected ')' after unsafe allocator call")
+            }
+            if sign < 0 {
+                return unsupported_parser(p, "self codegen unary minus requires i32")
+            }
+            malloc_type := llvm.function_type1(p.ptr_type, p.i64_type, 0)
+            malloc_fn := llvm.add_function(p.mod, "malloc", malloc_type)
+            p.value = llvm.build_call1(p.builder, malloc_type, malloc_fn, size_value, "malloctmp")
+            p.value_type = tiny_ptr_type_kind()
+            return advance_sig(p)
+        }
+
         if p.lx.kind == tok.lbrack() {
             p = lookup_slot(p, name)
             if !p.ok { return p }

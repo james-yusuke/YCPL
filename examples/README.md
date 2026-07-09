@@ -27,17 +27,18 @@ This directory contains example programs written in YCPL.
 | `34_std_lsp_foundation.yc` | `std/fs`, `std/text`, `std/json`, and `std/map` LSP foundation APIs |
 | `35_std_io_echo.yc` | `std/io` fd read/write using stdin input |
 | `100_retired_keywords_as_identifiers.yc` | Retired keywords accepted as ordinary identifiers |
-| `104_std2_encoding.yc` | `std2` base32/base64/hex/hash with `owned`, `defer`, `scope`, and UFCS method calls |
+| `104_std_encoding.yc` | `std` base32/base64/hex/hash with `owned`, `defer`, `scope`, and UFCS method calls |
 | `105_defer_scope_order.yc` | `defer` cleanup order across lexical scopes, loop exits, and early return |
-| `106_std2_selfhost_primitives.yc` | `std2` dynamic arrays, string-to-i32 map, safe string builder, enum switch, and scoped cleanup |
+| `106_std_selfhost_primitives.yc` | `std` dynamic arrays, string-to-i32 map, safe string builder, enum switch, and scoped cleanup |
 | `107_slice_pointer_extern_abi.yc` | Safe text slicing, pointer type aliases, runtime memory, and extern C ABI calls |
-| `108_map_type_syntax.yc` | `Map<string, i32>` type syntax through alias, struct field, and `std2/map` calls |
+| `108_map_type_syntax.yc` | `Map<string, i32>` type syntax through alias, struct field, and `std/map` calls |
 | `109_map_runtime_api.yc` | Runtime `Map<string, i32>` and `Map<string, string>` handle APIs |
 | `110_managed_runtime_memory.yc` | Managed runtime allocation smoke without manual free calls |
 | `111_managed_frame_cleanup.yc` | Function-frame cleanup plus managed return ownership transfer |
 | `112_managed_child_destructors.yc` | Runtime child destructors for array backing data and map internals |
 | `36_std_json_ast.yc` | `std/json` tagged value parse/get/at/stringify/free |
 | `40_short_circuit_and_string_field.yc` | Short-circuit logic and struct string field indexing |
+| `114_go_style_runtime_api.yc` | Go-style `array.make/push`, string helpers, map aliases, and frame cleanup |
 
 ## Project Examples
 
