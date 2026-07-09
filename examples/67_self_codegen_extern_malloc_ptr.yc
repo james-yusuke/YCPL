@@ -1,7 +1,7 @@
-extern fn c_malloc(size i64) *byte as "malloc"
+import "std/unsafe/mem" as c_malloc
 
 fn main() i32 {
     size: i64 = 8
-    ptr := c_malloc(size)
+    ptr := c_malloc.alloc(size)
     return 13
 }

@@ -42,7 +42,7 @@ YCPL
 │  ├─ std/array
 │  ├─ std/mem managed allocator
 │  ├─ std/json
-│  └─ std2 folder modules
+│  └─ std folder modules
 ├─ Runtime
 │  ├─ static yc_runtime object
 │  ├─ function-frame cleanup

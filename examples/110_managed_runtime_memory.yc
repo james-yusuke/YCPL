@@ -1,9 +1,9 @@
-import "std2/array" as array
-import "std2/bytes" as bytes
-import "std2/fmt" as fmt
-import "std2/json" as json
-import "std2/map" as map
-import "std2/text" as text
+import "std/array" as array
+import "std/bytes" as bytes
+import "std/fmt" as fmt
+import "std/json" as json
+import "std/map" as map
+import "std/text" as text
 
 fn make_counts() Map<string, i32> {
     counts := map.new_i32(2)

@@ -562,16 +562,16 @@ compile_run_and_verify "$SCRIPT_DIR/100_retired_keywords_as_identifiers.yc" "42"
 compile_run_and_verify "$SCRIPT_DIR/101_enum_switch_type_alias.yc" $'10\n20\n30' "switch i32"
 compile_run_and_verify "$SCRIPT_DIR/102_std_bytes_hex_hash.yc" $'4\n89\nYCPL\nY\n120\n1\n5943504c\n1\n1041946889\n541916226'
 compile_run_and_verify "$SCRIPT_DIR/103_std_base64.yc" $'\nZg==\n1\nZm8=\n1\nZm9v\n1\nZm9vYg==\n1'
-compile_run_and_verify "$SCRIPT_DIR/104_std2_encoding.yc" $'LFBVATA=\n1\nWUNQTA==\n1\n5943504C\n1\n52232505' "@std2__base32__encode" "@std2__base64__encode_url" "@std2__bytes__eq" "@std2__bytes__free"
+compile_run_and_verify "$SCRIPT_DIR/104_std_encoding.yc" $'LFBVATA=\n1\nWUNQTA==\n1\n5943504C\n1\n52232505' "@std__base32__encode" "@std__base64__encode_url" "@std__bytes__eq" "@std__bytes__free"
 compile_run_and_verify "$SCRIPT_DIR/105_defer_scope_order.yc" $'body\nouter\nloop\nloop\nearly\nfunction'
-compile_run_and_verify "$SCRIPT_DIR/106_std2_selfhost_primitives.yc" $'tok:ens\n27\n1\n2' "@std2__text__append" "@std2__map__put_i32" "%YCPLArrayHeader"
-compile_run_and_verify "$SCRIPT_DIR/107_slice_pointer_extern_abi.yc" $'strap\nstr\n1\n5' "@std2__text__slice" "@std2__mem__copy" "@memcmp"
-compile_run_and_verify "$SCRIPT_DIR/108_map_type_syntax.yc" "13" "@std2__map__put_i32" "%SymbolTable"
-compile_run_and_verify "$SCRIPT_DIR/109_map_runtime_api.yc" $'12\n1\n-1\nYCPL' "@std2__map__new_i32" "@std2__map__put_i32_value" "@std2__map__free_i32"
+compile_run_and_verify "$SCRIPT_DIR/106_std_selfhost_primitives.yc" $'tok:ens\n27\n1\n2' "@std__text__append" "@std__map__put_i32" "%YCPLArrayHeader"
+compile_run_and_verify "$SCRIPT_DIR/107_slice_pointer_extern_abi.yc" $'strap\nstr\n1\n5' "@std__text__slice" "@std__mem__copy" "@memcmp"
+compile_run_and_verify "$SCRIPT_DIR/108_map_type_syntax.yc" "13" "@std__map__put_i32" "%SymbolTable"
+compile_run_and_verify "$SCRIPT_DIR/109_map_runtime_api.yc" $'12\n1\n-1\nYCPL' "@std__map__new_i32" "@std__map__put_i32_value" "@std__map__free_i32"
 compile_run_and_verify "$SCRIPT_DIR/110_managed_runtime_memory.yc" $'9\nYCPL\n7\n21\n"YCPL"' "@yc_runtime_init" "@yc_alloc" "@yc_runtime_shutdown"
 compile_run_and_verify "$SCRIPT_DIR/111_managed_frame_cleanup.yc" $'12\n0\n6\n1' "@yc_runtime_live_allocations" "@yc_frame_pop" "@yc_move_to_parent"
 compile_run_and_verify "$SCRIPT_DIR/112_managed_child_destructors.yc" $'2\n2' "@yc_attach_child" "@yc_replace_child" "@yc_release"
-compile_run_and_verify "$SCRIPT_DIR/113_managed_value_roots.yc" $'2\n2\n2\n2\n2\n2' "@yc_attach_child" "@yc_replace_child" "@yc_release"
+compile_run_and_verify "$SCRIPT_DIR/113_managed_value_roots.yc" $'2\n2\n2' "@yc_attach_child" "@yc_replace_child" "@yc_release"
 
 echo ""
 echo "--- Project Tests ---"

@@ -193,14 +193,14 @@ stage-2 self-host gate
 ## 追加済みの構文と制限
 
 ```text
-enum switch type defer scope owned UFCS std2/base32
+enum switch type defer scope owned UFCS std/base32
 ```
 
 ```text
 syntax support
 ├─ bootstrap parser/codegen は enum、type alias、switch/case/default、defer、scope、Map<string, T>、owned type marker を扱う
 ├─ bootstrap module resolver は一意な imported public function への UFCS method sugar を扱う
-├─ std2 は folder-based module layout と base32/base64/bytes/hex/hash 拡張を持つ
+├─ std は folder-based module layout と base32/base64/bytes/hex/hash 拡張を持つ
 ├─ docs/grammar と VSCode grammar は追加済み構文を追跡する
 └─ self-host checker/codegen の switch は i32 selector と integer literal case が先行
 ```

@@ -43,7 +43,7 @@ supports import edits: typing `fmt.` and accepting `println` inserts
 
 Syntax highlighting and snippets cover current control/type syntax including
 `switch`, `case`, `default`, `enum`, `type`, `defer`, `scope`, and `owned`.
-The language server also indexes `std2/.../index.yc` modules and offers UFCS
+The language server also indexes `std/.../index.yc` modules and offers UFCS
 method-style completions such as `b.free()` when an imported module has a
 matching first-parameter type.
 

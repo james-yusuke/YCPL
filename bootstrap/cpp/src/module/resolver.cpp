@@ -70,9 +70,8 @@ namespace module
 
     static bool is_std_module_name(const std::string &module_name)
     {
-        return module_name == "std" || module_name == "std2" ||
-               module_name.rfind("std.", 0) == 0 || module_name.rfind("std/", 0) == 0 ||
-               module_name.rfind("std2.", 0) == 0 || module_name.rfind("std2/", 0) == 0;
+        return module_name == "std" ||
+               module_name.rfind("std.", 0) == 0 || module_name.rfind("std/", 0) == 0;
     }
 
     static std::vector<std::string> member_path(const ast::Expr *expr)

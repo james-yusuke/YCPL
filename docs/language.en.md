@@ -106,14 +106,14 @@ Types
 ```
 
 Runtime slices use `{ data, len, cap, elem_size }`. Values created by
-`std/array`, `std/mem`, `std/bytes`, `std/json`, and `std2/map` are allocated
+`std/array`, `std/mem`, `std/bytes`, `std/json`, and `std/map` are allocated
 through the statically linked YCPL runtime. The old free helpers remain as
 compatibility releases while precise destructors for arbitrary composite values
 are completed.
 In the bootstrap C++ compiler, `owned T` is accepted as an ownership-intent type
 qualifier and currently has the same ABI as `T`.
 `Map<string, T>` is accepted as a map-handle type. In the current bootstrap
-ABI it lowers as an opaque pointer, while `std/map` and `std2/map` still expose
+ABI it lowers as an opaque pointer, while `std/map` and `std/map` still expose
 runtime-backed key/value arrays for storage.
 
 ```YCPL
