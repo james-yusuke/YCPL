@@ -1058,7 +1058,8 @@ namespace path
                 return std::make_unique<ast::TypeExpr>(parse_type());
             }
 
-            if ((path == "array.new" || ends_with_for_parser(path, ".new")) && check(TokenType::LBRACK) && lexer.peek(1).type == TokenType::RBRACK)
+            if ((path == "array.new" || path == "array.make" || ends_with_for_parser(path, ".new") || ends_with_for_parser(path, ".make")) &&
+                check(TokenType::LBRACK) && lexer.peek(1).type == TokenType::RBRACK)
             {
                 return std::make_unique<ast::TypeExpr>(parse_type());
             }

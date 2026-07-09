@@ -132,7 +132,7 @@ test("parser indexes enum and type alias syntax", () => {
 
 test("parser handles defer owned scope syntax", () => {
   const document = parser.parse("file:///lifetime.yc", 1, [
-    "import \"std2/bytes\" as bytes",
+    "import \"std/bytes\" as bytes",
     "",
     "fn main() {",
     "    b: owned Bytes := bytes.from_string(\"YCPL\")",

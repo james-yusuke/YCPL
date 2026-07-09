@@ -1805,6 +1805,31 @@ fn parse_factor(p TinyParser) TinyParser {
             return advance_sig(p)
         }
 
+        if p.lx.kind == tok.dot() && str.eq(name, "c_malloc") {
+            p = advance_sig(p)
+            if p.lx.kind != tok.ident() || !str.eq(p.lx.lexeme, "alloc") {
+                return fail_parser(p, "expected unsafe allocator function")
+            }
+            p = advance_sig(p)
+            if p.lx.kind != tok.lparen() {
+                return fail_parser(p, "expected '(' after unsafe allocator function")
+            }
+            p = advance_sig(p)
+            p = parse_expr_or_comparison(p)
+            if !p.ok { return p }
+            p = ensure_i64_value(p, "unsafe allocator size must be i64")
+            if !p.ok { return p }
+            if p.lx.kind != tok.rparen() {
+                return fail_parser(p, "expected ')' after unsafe allocator call")
+            }
+            if sign < 0 {
+                return unsupported_parser(p, "self checker unary minus requires i32")
+            }
+            p.value = 1
+            p.value_type = tiny_ptr_type_kind()
+            return advance_sig(p)
+        }
+
         if p.lx.kind == tok.lbrack() {
             p = lookup_var(p, name)
             if !p.ok { return p }

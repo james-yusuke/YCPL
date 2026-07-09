@@ -193,14 +193,14 @@ stage-2 self-host gate
 ## Added Syntax And Limits
 
 ```text
-enum switch type defer scope owned UFCS std2/base32
+enum switch type defer scope owned UFCS std/base32
 ```
 
 ```text
 syntax support
 ├─ bootstrap parser/codegen handles enum, type aliases, switch/case/default, defer, scope, Map<string, T>, and the owned type marker
 ├─ bootstrap module resolver handles UFCS method sugar when an imported public function match is unique
-├─ std2 provides a folder-based module layout plus base32/base64/bytes/hex/hash extensions
+├─ std provides a folder-based module layout plus base32/base64/bytes/hex/hash extensions
 ├─ docs/grammar and VS Code grammar track the added syntax
 └─ self-host checker/codegen switch support currently leads with i32 selectors and integer literal cases
 ```

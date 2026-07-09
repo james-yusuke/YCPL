@@ -89,9 +89,9 @@
     ],
     "description": "Create a named YCPL scope"
   },
-  "Import std2 base32": {
+  "Import std base32": {
     "prefix": "import-base32",
-    "body": "import \"std2/base32\" as base32",
-    "description": "Import the std2/base32 module"
+    "body": "import \"std/base32\" as base32",
+    "description": "Import the std/base32 module"
   }
 }

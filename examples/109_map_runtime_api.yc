@@ -1,5 +1,5 @@
-import "std2/fmt" as fmt
-import "std2/map" as map
+import "std/fmt" as fmt
+import "std/map" as map
 
 fn main() {
     counts := map.new_i32(2)
