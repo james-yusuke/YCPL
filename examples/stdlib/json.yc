@@ -1,6 +1,5 @@
 import "std/fmt" as fmt
 import "std/json" as json
-import "std/mem" as mem
 
 struct Point {
     x i32
@@ -26,8 +25,4 @@ fn main() {
     fmt.println(json.get_i32(point_json, "x") + json.get_i32(point_json, "y") + point.x + point.y)
     fmt.println(roundtrip)
 
-    mem.free(name)
-    mem.free(nested)
-    mem.free(roundtrip)
-    json.free(value)
 }

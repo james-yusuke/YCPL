@@ -79,6 +79,7 @@ namespace codegen
 
     void CodeGen::emit_runtime_function_entry(bool is_main)
     {
+        runtime_scope_depth = 0;
         if (is_main)
             builder.CreateCall(get_runtime_void_fn("yc_runtime_init"));
         builder.CreateCall(get_runtime_void_fn("yc_frame_push"));
@@ -86,6 +87,7 @@ namespace codegen
 
     void CodeGen::emit_runtime_function_exit(bool is_main)
     {
+        emit_runtime_scope_unwind(0);
         builder.CreateCall(get_runtime_void_fn("yc_frame_pop"));
         if (is_main)
             builder.CreateCall(get_runtime_void_fn("yc_runtime_shutdown"));
@@ -93,12 +95,55 @@ namespace codegen
 
     Value *CodeGen::emit_runtime_move_to_parent(Value *value)
     {
-        if (!value || !value->getType()->isPointerTy())
+        return emit_runtime_move_to_ancestor(value, 1);
+    }
+
+    Value *CodeGen::emit_runtime_move_to_ancestor(Value *value, size_t levels)
+    {
+        if (!value || !value->getType()->isPointerTy() || levels == 0)
             return value;
-        Value *moved = builder.CreateCall(get_runtime_ptr_fn("yc_move_to_parent"), {builder.CreatePointerCast(value, detail::getPtrTy(context), "runtime.move.ptr")}, "runtime.move");
+        Type *ptrTy = detail::getPtrTy(context);
+        Type *sizeTy = Type::getInt64Ty(context);
+        FunctionType *moveType = FunctionType::get(ptrTy, {ptrTy, sizeTy}, false);
+        FunctionCallee moveFn = module->getOrInsertFunction("yc_move_to_ancestor", moveType);
+        Value *moved = builder.CreateCall(moveFn, {
+            builder.CreatePointerCast(value, ptrTy, "runtime.move.ptr"),
+            ConstantInt::get(sizeTy, levels),
+        }, "runtime.move");
         if (moved->getType() != value->getType())
             return builder.CreatePointerCast(moved, value->getType(), "runtime.move.cast");
         return moved;
+    }
+
+    void CodeGen::emit_runtime_escape_aggregate(Value *value, size_t levels)
+    {
+        if (!value)
+            return;
+        Type *type = value->getType();
+        if (type->isPointerTy())
+        {
+            emit_runtime_move_to_ancestor(value, levels);
+            return;
+        }
+        if (auto *structType = dyn_cast<StructType>(type))
+        {
+            for (unsigned i = 0; i < structType->getNumElements(); ++i)
+                emit_runtime_escape_aggregate(builder.CreateExtractValue(value, {i}, "runtime.escape.field"), levels);
+            return;
+        }
+        if (auto *arrayType = dyn_cast<ArrayType>(type))
+        {
+            for (uint64_t i = 0; i < arrayType->getNumElements(); ++i)
+                emit_runtime_escape_aggregate(builder.CreateExtractValue(value, {static_cast<unsigned>(i)}, "runtime.escape.element"), levels);
+        }
+    }
+
+    void CodeGen::emit_runtime_scope_unwind(size_t target_depth)
+    {
+        if (target_depth > runtime_scope_depth)
+            target_depth = runtime_scope_depth;
+        for (size_t depth = runtime_scope_depth; depth > target_depth; --depth)
+            builder.CreateCall(get_runtime_void_fn("yc_frame_pop"));
     }
 
     void CodeGen::emit_runtime_move_frame_to_parent()

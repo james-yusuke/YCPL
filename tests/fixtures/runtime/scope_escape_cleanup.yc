@@ -1,0 +1,48 @@
+import "std/fmt" as fmt
+import "std/text" as text
+
+extern fn runtime_live_allocations() i64 as "yc_runtime_live_allocations"
+
+fn build_in_scope() string {
+    result: string := none
+    scope temporary {
+        result = text.concat("scope", " escape")
+    }
+    return result
+}
+
+fn loop_cleanup() i64 {
+    before := runtime_live_allocations()
+    i: i32 := 0
+    for (; i < 8; i++) {
+        scope iteration {
+            temporary := text.concat("loop", " value")
+            if temporary == none {
+                break
+            }
+            if i < 7 {
+                continue
+            }
+        }
+    }
+    return runtime_live_allocations() - before
+}
+
+fn break_cleanup() i64 {
+    before := runtime_live_allocations()
+    for {
+        scope iteration {
+            temporary := text.concat("break", " value")
+            if temporary != none {
+                break
+            }
+        }
+    }
+    return runtime_live_allocations() - before
+}
+
+fn main() {
+    fmt.println(build_in_scope())
+    fmt.println(loop_cleanup())
+    fmt.println(break_cleanup())
+}

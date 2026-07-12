@@ -230,22 +230,22 @@ jobs:
             fi
           }
 
-          YCPL_NO_BOOTSTRAP=1 bazel-bin/ycc-ycpl build examples/57_self_codegen_control_flow.yc -o /tmp/ycpl-ci-control
+          YCPL_NO_BOOTSTRAP=1 bazel-bin/ycc-ycpl build tests/fixtures/selfhost/57_self_codegen_control_flow.yc -o /tmp/ycpl-ci-control
           check_exit_13 /tmp/ycpl-ci-control/merged
 
-          YCPL_NO_BOOTSTRAP=1 bazel-bin/ycc-ycpl build examples/58_self_codegen_else_helper.yc -o /tmp/ycpl-ci-else
+          YCPL_NO_BOOTSTRAP=1 bazel-bin/ycc-ycpl build tests/fixtures/selfhost/58_self_codegen_else_helper.yc -o /tmp/ycpl-ci-else
           check_exit_13 /tmp/ycpl-ci-else/merged
 
-          YCPL_NO_BOOTSTRAP=1 bazel-bin/ycc-ycpl build examples/59_self_codegen_param_call.yc -o /tmp/ycpl-ci-param
+          YCPL_NO_BOOTSTRAP=1 bazel-bin/ycc-ycpl build tests/fixtures/selfhost/59_self_codegen_param_call.yc -o /tmp/ycpl-ci-param
           check_exit_13 /tmp/ycpl-ci-param/merged
 
-          YCPL_NO_BOOTSTRAP=1 bazel-bin/ycc-ycpl build examples/60_self_codegen_helper_chain.yc -o /tmp/ycpl-ci-chain
+          YCPL_NO_BOOTSTRAP=1 bazel-bin/ycc-ycpl build tests/fixtures/selfhost/60_self_codegen_helper_chain.yc -o /tmp/ycpl-ci-chain
           check_exit_13 /tmp/ycpl-ci-chain/merged
 
-          YCPL_NO_BOOTSTRAP=1 bazel-bin/ycc-ycpl build examples/61_self_codegen_two_arg_call.yc -o /tmp/ycpl-ci-twoarg
+          YCPL_NO_BOOTSTRAP=1 bazel-bin/ycc-ycpl build tests/fixtures/selfhost/61_self_codegen_two_arg_call.yc -o /tmp/ycpl-ci-twoarg
           check_exit_13 /tmp/ycpl-ci-twoarg/merged
 
-          YCPL_NO_BOOTSTRAP=1 bazel-bin/ycc-ycpl build examples/62_self_codegen_forward_call.yc -o /tmp/ycpl-ci-forward
+          YCPL_NO_BOOTSTRAP=1 bazel-bin/ycc-ycpl build tests/fixtures/selfhost/62_self_codegen_forward_call.yc -o /tmp/ycpl-ci-forward
           check_exit_13 /tmp/ycpl-ci-forward/merged
 
       - name: Test with Bazel
@@ -263,7 +263,7 @@ jobs:
             //...
 
       - name: Run compiler regression examples
-        run: examples/run_tests.sh
+        run: tests/run_bootstrap_regression.sh
 
       - name: Install VSCode extension dependencies
         run: |
@@ -291,9 +291,9 @@ jobs:
             echo "| Bazel build | \`bazel build //...\` |"
             echo "| YCPL compiler gates | \`bazel test --test_timeout=1800 //:examples_test //:lsp_protocol_test //:ycc_ycpl_test //:self_host_stage_test\` |"
             echo "| YCPL selfhost smoke | \`YCPL_NO_BOOTSTRAP=1 bazel-bin/ycc-ycpl build-ir compiler/ycpl -o /tmp/ycpl-ci-self-ir\` |"
-            echo "| YCPL merge readiness | \`YCPL_NO_BOOTSTRAP=1 bazel-bin/ycc-ycpl build examples/57..62 -o /tmp/ycpl-ci-*\` |"
+            echo "| YCPL merge readiness | \`YCPL_NO_BOOTSTRAP=1 bazel-bin/ycc-ycpl build tests/fixtures/selfhost/57..62 -o /tmp/ycpl-ci-*\` |"
             echo "| Bazel test | \`bazel test --test_timeout=1800 //...\` |"
-            echo "| Compiler examples | \`examples/run_tests.sh\` |"
+            echo "| Compiler examples | \`tests/run_bootstrap_regression.sh\` |"
             echo "| VSCode extension | \`npm ci --prefix editors/vscode/extension && npm ci --prefix editors/vscode/language-server && npm run check --prefix editors/vscode/extension && npm run check --prefix editors/vscode/language-server\` |"
             echo "| LSP protocol | \`tools/lsp/run_tests.sh\` |"
           } >> "$GITHUB_STEP_SUMMARY"

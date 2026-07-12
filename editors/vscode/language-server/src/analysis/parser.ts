@@ -20,7 +20,7 @@ import {
   rangeFromOffsets
 } from "./text.js";
 
-const declarationKeywords = new Set(["fn", "struct", "enum", "type", "module", "package", "const", "mut"]);
+const declarationKeywords = new Set(["fn", "struct", "enum", "type", "module", "package", "const"]);
 const keywordSet = new Set<string>(keywords);
 const primitiveSet = new Set<string>(primitiveTypes);
 const typeCategories: SymbolCategory[] = ["struct", "enum", "typeAlias"];
@@ -175,8 +175,8 @@ export class YcplParser {
       if (token.text === "type" && next.text) {
         symbols.push(this.createTypeAliasSymbol(uri, text, lineOffsets, next, exported, globalScope.id));
       }
-      if ((token.text === "const" || token.text === "mut") && next.text && !isInsideSpan(next, structBodies)) {
-        symbols.push(this.createSymbol(uri, text, lineOffsets, next, token.text === "const" ? "constant" : "variable", this.variableDetail(text, next.end), exported, scopeForOffset(scopes, next.start).id, enclosingFunctionName(next.start, functionRanges)));
+      if (token.text === "const" && next.text && !isInsideSpan(next, structBodies)) {
+        symbols.push(this.createSymbol(uri, text, lineOffsets, next, "constant", this.variableDetail(text, next.end), exported, scopeForOffset(scopes, next.start).id, enclosingFunctionName(next.start, functionRanges)));
       }
       if (isLikelyVariableDeclaration(text, tokens, i, parameterSpans, structBodies)) {
         symbols.push(this.createSymbol(uri, text, lineOffsets, token, "variable", this.variableDetail(text, token.end), false, scopeForOffset(scopes, token.start).id, enclosingFunctionName(token.start, functionRanges)));

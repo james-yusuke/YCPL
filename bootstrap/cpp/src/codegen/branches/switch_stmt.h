@@ -66,6 +66,7 @@ Value *CodeGen::codegen_switchstmt(const ast::SwitchStmt *ss)
 
     break_targets.push_back(afterBB);
     break_defer_depths.push_back(deferred_scopes.size());
+    break_runtime_depths.push_back(runtime_scope_depth);
 
     for (size_t i = 0; i < ss->cases.size(); ++i)
     {
@@ -86,6 +87,7 @@ Value *CodeGen::codegen_switchstmt(const ast::SwitchStmt *ss)
 
     break_targets.pop_back();
     break_defer_depths.pop_back();
+    break_runtime_depths.pop_back();
     builder.SetInsertPoint(afterBB);
     return nullptr;
 }

@@ -29,6 +29,8 @@ Value *CodeGen::codegen_for_loop(const ast::ForStmt *forStmt)
     continue_targets.push_back(loopHeaderBB);
     break_defer_depths.push_back(deferred_scopes.size());
     continue_defer_depths.push_back(deferred_scopes.size());
+    break_runtime_depths.push_back(runtime_scope_depth);
+    continue_runtime_depths.push_back(runtime_scope_depth);
 
     builder.SetInsertPoint(bodyBB);
 
@@ -44,6 +46,8 @@ Value *CodeGen::codegen_for_loop(const ast::ForStmt *forStmt)
     continue_targets.pop_back();
     break_defer_depths.pop_back();
     continue_defer_depths.pop_back();
+    break_runtime_depths.pop_back();
+    continue_runtime_depths.pop_back();
 
     builder.SetInsertPoint(afterBB);
 
