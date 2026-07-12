@@ -137,7 +137,7 @@
         },
         {
           "name": "keyword.declaration.ycpl",
-          "match": "\\b(pub|extern|intrinsic|fn|struct|enum|type|const|owned|mut)\\b"
+          "match": "\\b(pub|extern|intrinsic|fn|struct|enum|type|const|owned)\\b"
         },
         {
           "name": "constant.language.ycpl",

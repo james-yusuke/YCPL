@@ -50,6 +50,8 @@ Value *CodeGen::codegen_c_style_for_loop(const ast::ForCStyleStmt *forStmt)
     continue_targets.push_back(incBB);
     break_defer_depths.push_back(deferred_scopes.size());
     continue_defer_depths.push_back(deferred_scopes.size());
+    break_runtime_depths.push_back(runtime_scope_depth);
+    continue_runtime_depths.push_back(runtime_scope_depth);
 
     push_scope();
     if (forStmt->body)
@@ -67,6 +69,8 @@ Value *CodeGen::codegen_c_style_for_loop(const ast::ForCStyleStmt *forStmt)
     continue_targets.pop_back();
     break_defer_depths.pop_back();
     continue_defer_depths.pop_back();
+    break_runtime_depths.pop_back();
+    continue_runtime_depths.pop_back();
 
     if (!builder.GetInsertBlock()->getTerminator())
     {

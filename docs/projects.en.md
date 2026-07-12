@@ -6,11 +6,11 @@ YCPL compiles either explicit `.yc` files or a project rooted by `YCPL.json`.
 
 ```text
 File mode:
-  bazel run //:ycc -- build examples/01_hello.yc
+  bazel run //:ycc -- build examples/basics/hello.yc
       |
       v
   resolve modules -> write .ll -> llc -> clang -> binary
-  bazel run //:ycc -- run examples/01_hello.yc
+  bazel run //:ycc -- run examples/basics/hello.yc
       |
       v
   build native binary -> execute it
@@ -27,9 +27,9 @@ Project mode:
 ## Single File
 
 ```sh
-bazel run //:ycc -- build examples/01_hello.yc -o /tmp/ycpl_hello
-bazel run //:ycc -- run examples/01_hello.yc -o /tmp/ycpl_hello
-bazel run //:ycc -- build-ir examples/01_hello.yc -o /tmp/ycpl_hello
+bazel run //:ycc -- build examples/basics/hello.yc -o /tmp/ycpl_hello
+bazel run //:ycc -- run examples/basics/hello.yc -o /tmp/ycpl_hello
+bazel run //:ycc -- build-ir examples/basics/hello.yc -o /tmp/ycpl_hello
 ```
 
 ## LLVM Toolchain Paths

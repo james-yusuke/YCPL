@@ -6,18 +6,18 @@ import "std/map" as map
 import "std/text" as text
 
 fn make_counts() Map<string, i32> {
-    counts := map.new_i32(2)
-    map.put_i32_value(counts, "runtime", 21)
+    counts := map.make_i32(2)
+    map.set_i32(counts, "runtime", 21)
     return counts
 }
 
 fn main() {
-    xs := array.new([]i32, 1)
-    xs = array.append(xs, 4)
-    xs = array.append(xs, 9)
+    xs := array.make([]i32)
+    xs = array.push(xs, 4)
+    xs = array.push(xs, 9)
     fmt.println(array.get(xs, 1))
 
-    b := text.new_builder(2)
+    b := text.builder(2)
     b = text.append(b, "YC")
     b = text.append(b, "PL")
     fmt.println(text.to_string(b))
@@ -26,7 +26,7 @@ fn main() {
     fmt.println(data.len)
 
     counts := make_counts()
-    fmt.println(map.get_i32_value(counts, "runtime", 0))
+    fmt.println(map.get_i32_or(counts, "runtime", 0))
 
     root := json.parse("{\"name\":\"YCPL\"}")
     name := json.get(root, "name")

@@ -124,9 +124,9 @@ LLVM_DIR=/opt/homebrew/opt/llvm@22/lib/cmake/llvm cmake -S . -B build
 
 ```text
 Single file:
-  examples/01_hello.yc -> ycc build -> native binary
-  examples/01_hello.yc -> ycc run -> native binary, then execute it
-  examples/01_hello.yc -> ycc build-ir -> LLVM IR
+  examples/basics/hello.yc -> ycc build -> native binary
+  examples/basics/hello.yc -> ycc run -> native binary, then execute it
+  examples/basics/hello.yc -> ycc build-ir -> LLVM IR
 
 Project:
   YCPL.json -> scan src/**/*.yc deterministically -> ycc build -> native binary
@@ -134,10 +134,10 @@ Project:
 ```
 
 ```sh
-bazel run //:ycc -- build examples/01_hello.yc -o /tmp/ycpl_hello
-bazel run //:ycc -- run examples/01_hello.yc -o /tmp/ycpl_hello
-bazel run //:ycc -- build-ir examples/01_hello.yc -o /tmp/ycpl_hello
-cd examples/04_module_project && ../../bazel-bin/ycc build
+bazel run //:ycc -- build examples/basics/hello.yc -o /tmp/ycpl_hello
+bazel run //:ycc -- run examples/basics/hello.yc -o /tmp/ycpl_hello
+bazel run //:ycc -- build-ir examples/basics/hello.yc -o /tmp/ycpl_hello
+cd examples/projects/module_project && ../../bazel-bin/ycc build
 ```
 
 ## Self Hosting
@@ -217,19 +217,19 @@ compiler/ycpl
 ```
 
 ```sh
-bazel-bin/ycc-ycpl lex examples/01_hello.yc
-bazel-bin/ycc-ycpl parse examples/01_hello.yc
-bazel-bin/ycc-ycpl check examples/53_self_codegen_main.yc
-bazel-bin/ycc-ycpl build-ir-self examples/53_self_codegen_main.yc -o /tmp/ycpl-self-tiny
-bazel-bin/ycc-ycpl build examples/54_self_codegen_arithmetic.yc -o /tmp/ycpl-self-native
-bazel-bin/ycc-ycpl build examples/56_self_codegen_call_assignment.yc -o /tmp/ycpl-self-call
-bazel-bin/ycc-ycpl build examples/57_self_codegen_control_flow.yc -o /tmp/ycpl-self-control
-bazel-bin/ycc-ycpl build examples/58_self_codegen_else_helper.yc -o /tmp/ycpl-self-else
-bazel-bin/ycc-ycpl build examples/59_self_codegen_param_call.yc -o /tmp/ycpl-self-param
-bazel-bin/ycc-ycpl build examples/60_self_codegen_helper_chain.yc -o /tmp/ycpl-self-chain
-bazel-bin/ycc-ycpl build examples/61_self_codegen_two_arg_call.yc -o /tmp/ycpl-self-twoarg
-bazel-bin/ycc-ycpl build-ir-self examples/99_self_codegen_main_args.yc -o /tmp/ycpl-self-main-args
-bazel-bin/ycc-ycpl build examples/62_self_codegen_forward_call.yc -o /tmp/ycpl-self-forward
+bazel-bin/ycc-ycpl lex examples/basics/hello.yc
+bazel-bin/ycc-ycpl parse examples/basics/hello.yc
+bazel-bin/ycc-ycpl check tests/fixtures/selfhost/53_self_codegen_main.yc
+bazel-bin/ycc-ycpl build-ir-self tests/fixtures/selfhost/53_self_codegen_main.yc -o /tmp/ycpl-self-tiny
+bazel-bin/ycc-ycpl build tests/fixtures/selfhost/54_self_codegen_arithmetic.yc -o /tmp/ycpl-self-native
+bazel-bin/ycc-ycpl build tests/fixtures/selfhost/56_self_codegen_call_assignment.yc -o /tmp/ycpl-self-call
+bazel-bin/ycc-ycpl build tests/fixtures/selfhost/57_self_codegen_control_flow.yc -o /tmp/ycpl-self-control
+bazel-bin/ycc-ycpl build tests/fixtures/selfhost/58_self_codegen_else_helper.yc -o /tmp/ycpl-self-else
+bazel-bin/ycc-ycpl build tests/fixtures/selfhost/59_self_codegen_param_call.yc -o /tmp/ycpl-self-param
+bazel-bin/ycc-ycpl build tests/fixtures/selfhost/60_self_codegen_helper_chain.yc -o /tmp/ycpl-self-chain
+bazel-bin/ycc-ycpl build tests/fixtures/selfhost/61_self_codegen_two_arg_call.yc -o /tmp/ycpl-self-twoarg
+bazel-bin/ycc-ycpl build-ir-self tests/fixtures/selfhost/99_self_codegen_main_args.yc -o /tmp/ycpl-self-main-args
+bazel-bin/ycc-ycpl build tests/fixtures/selfhost/62_self_codegen_forward_call.yc -o /tmp/ycpl-self-forward
 bazel-bin/ycc-ycpl parse compiler/ycpl
 bazel-bin/ycc-ycpl check compiler/ycpl
 bazel-bin/ycc-ycpl build-ir compiler/ycpl -o /tmp/ycpl-self-ir
@@ -273,7 +273,7 @@ stage-2 gate
 ├─ generated stage4 native output can parse/check compiler/ycpl and emit llc-valid stage5 IR/native output
 ├─ generated stage3 native output lowers tiny arithmetic, call/assignment, control-flow, else/helper, one-argument i32 helper-call, multi-helper chain, two-argument helper-call, and forward helper-call inputs to native exit code 13
 ├─ generated stage2/stage3 native output rejects unsupported file build-ir input instead of returning project compiler IR
-├─ generated stage2 binary builds examples/54, examples/59, examples/60, examples/61, examples/62, and renamed copies to native exit code 13
+├─ generated stage2 binary builds tests/fixtures/selfhost/54, 59, 60, 61, 62, and renamed copies to native exit code 13
 └─ full compiler-equivalent build/native codegen remains the next stage
 ```
 
@@ -288,7 +288,7 @@ YCPL source -> extern fn ... as "LLVM..." -> ycc build
 
 ```sh
 LLVM_CONFIG=/opt/homebrew/opt/llvm@22/bin/llvm-config \
-  bazel-bin/ycc build examples/50_llvm_c_api.yc -o /tmp/ycpl_llvm
+  bazel-bin/ycc build tests/fixtures/compiler/50_llvm_c_api.yc -o /tmp/ycpl_llvm
 ```
 
 Programs importing `std/llvm` can call LLVM's C API directly. `ycc build`
@@ -370,7 +370,7 @@ covered by `tools/lsp/run_tests.sh`.
 ## Test Map
 
 ```text
-examples/run_tests.sh
+tests/run_bootstrap_regression.sh
 ├─ single-file positive tests
 ├─ project builds
 ├─ expected compile failures

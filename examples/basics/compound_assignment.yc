@@ -13,9 +13,9 @@ fn main() {
     x /= 4
     x %= 4
 
-    xs := array.new([]i32, 2)
-    xs = array.append(xs, 3)
-    xs = array.append(xs, 4)
+    xs := array.make([]i32)
+    xs = array.push(xs, 3)
+    xs = array.push(xs, 4)
     xs[0] += 7
     xs[1] *= 3
 
@@ -24,5 +24,4 @@ fn main() {
 
     fmt.println(x + array.get(xs, 0) + array.get(xs, 1) + box.value)
 
-    array.free(xs)
 }

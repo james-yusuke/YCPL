@@ -119,9 +119,14 @@ namespace codegen
                     }
                 }
                 if (rv && rv->getType()->isPointerTy())
-                    rv = emit_runtime_move_to_parent(rv);
-                else if (retTy && retTy->isStructTy())
+                    rv = emit_runtime_move_to_ancestor(rv, runtime_scope_depth + 1);
+                else if (rv)
+                {
+                    emit_runtime_escape_aggregate(rv, runtime_scope_depth + 1);
+                    // Legacy aggregate types may contain related allocations that
+                    // are not yet linked into a runtime ownership graph.
                     emit_runtime_move_frame_to_parent();
+                }
                 emit_runtime_function_exit(F && F->getName() == "main");
                 builder.CreateRet(rv);
             }
@@ -152,6 +157,8 @@ namespace codegen
             size_t keepDepth = break_defer_depths.empty() ? deferred_scopes.size() : break_defer_depths.back();
             auto deferredSnapshot = deferred_scopes;
             emit_deferred_scopes_to_depth(keepDepth);
+            size_t runtimeDepth = break_runtime_depths.empty() ? runtime_scope_depth : break_runtime_depths.back();
+            emit_runtime_scope_unwind(runtimeDepth);
             builder.CreateBr(break_targets.back());
             deferred_scopes = std::move(deferredSnapshot);
 
@@ -171,6 +178,8 @@ namespace codegen
             size_t keepDepth = continue_defer_depths.empty() ? deferred_scopes.size() : continue_defer_depths.back();
             auto deferredSnapshot = deferred_scopes;
             emit_deferred_scopes_to_depth(keepDepth);
+            size_t runtimeDepth = continue_runtime_depths.empty() ? runtime_scope_depth : continue_runtime_depths.back();
+            emit_runtime_scope_unwind(runtimeDepth);
             builder.CreateBr(continue_targets.back());
             deferred_scopes = std::move(deferredSnapshot);
             Function *F = builder.GetInsertBlock()->getParent();
@@ -204,9 +213,15 @@ namespace codegen
     {
         if (!ss || !ss->body)
             return nullptr;
+        builder.CreateCall(get_runtime_void_fn("yc_frame_push"));
+        runtime_scope_depth++;
         push_scope();
         codegen_block(ss->body.get());
         pop_scope();
+        if (builder.GetInsertBlock() && !builder.GetInsertBlock()->getTerminator())
+            builder.CreateCall(get_runtime_void_fn("yc_frame_pop"));
+        if (runtime_scope_depth > 0)
+            runtime_scope_depth--;
         return nullptr;
     }
 }

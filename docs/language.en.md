@@ -194,13 +194,12 @@ The bootstrap C++ compiler supports `defer`. `defer expr` or `defer { ... }`
 runs just before the current function exits, in LIFO order.
 
 ```YCPL
-b: owned Bytes := bytes.from_string("YCPL")
-defer b.free()
+defer fmt.println("leaving scope")
 ```
 
 `scope name { ... }` is a named lexical scope for making temporary work regions
 explicit.
 
 When exactly one imported module exposes a matching public function,
-`value.method(x)` is treated as `module.method(value, x)`. For example,
-`b.free()` is sugar for `bytes.free(b)`.
+`value.method(x)` is treated as `module.method(value, x)`. Managed values do
+not need a deferred release; their runtime frame owns them automatically.

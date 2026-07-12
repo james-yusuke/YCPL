@@ -1,0 +1,8 @@
+import "std/io" as io
+import "std/bytes" as bytes
+
+fn main() {
+    buf := bytes.make(64)
+    n := io.read(0, buf.data, 63)
+    io.write(1, buf.data, n)
+}

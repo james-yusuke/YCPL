@@ -29,5 +29,5 @@ runtime root if the manager supports subdirectories.
 From the repository root:
 
 ```sh
-vim -Nu NONE -n +'set rtp^=editors/vim' +'filetype plugin indent on' +'syntax on' +'edit examples/01_hello.yc' +q
+vim -Nu NONE -n +'set rtp^=editors/vim' +'filetype plugin indent on' +'syntax on' +'edit examples/basics/hello.yc' +q
 ```

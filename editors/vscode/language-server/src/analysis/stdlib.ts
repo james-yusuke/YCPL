@@ -20,6 +20,40 @@ export interface StandardLibraryParameter {
   typeName?: string;
 }
 
+const hiddenModules = new Set(["std/mem"]);
+const hiddenCompatibilitySymbols = new Set([
+  "std/array:new",
+  "std/array:append",
+  "std/array:free",
+  "std/bytes:new",
+  "std/bytes:append",
+  "std/bytes:free",
+  "std/map:new_string",
+  "std/map:new_i32",
+  "std/map:get_string_value",
+  "std/map:get_i32_value",
+  "std/map:put_string_value",
+  "std/map:put_i32_value",
+  "std/map:remove_string_value",
+  "std/map:remove_i32_value",
+  "std/map:free_string",
+  "std/map:free_i32",
+  "std/map:find",
+  "std/map:first_empty",
+  "std/map:has",
+  "std/map:get",
+  "std/map:put",
+  "std/map:remove",
+  "std/map:get_i32",
+  "std/map:put_i32",
+  "std/map:free",
+  "std/text:free_builder",
+  "std/text:new_builder",
+  "std/text:builder_new",
+  "std/text:builder_append",
+  "std/text:builder_free"
+]);
+
 /** Provides lazily indexed YCPL standard-library modules and exported symbols. */
 export class StandardLibraryIndex {
   private symbols: StandardLibrarySymbol[] | undefined;
@@ -49,6 +83,9 @@ export class StandardLibraryIndex {
         if (!modulePath) {
           continue;
         }
+        if (hiddenModules.has(modulePath)) {
+          continue;
+        }
         const moduleAlias = modulePath.slice(modulePath.lastIndexOf("/") + 1);
         symbols.push({
           label: modulePath,
@@ -59,6 +96,9 @@ export class StandardLibraryIndex {
         });
         const uri = pathToFileURL(file).toString();
         for (const match of text.matchAll(/\bpub\s+fn\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(([^)]*)\)\s*([^{\n]*)/g)) {
+          if (hiddenCompatibilitySymbols.has(`${modulePath}:${match[1]}`)) {
+            continue;
+          }
           const returnType = match[3]?.trim();
           const parameters = parseParameters(match[2]);
           const signature = `${match[1]}(${formatParameters(parameters)})${returnType ? ` ${returnType}` : ""}`;
@@ -156,8 +196,9 @@ function fallbackStdlib(): StandardLibrarySymbol[] {
     { label: "map.set_i32", modulePath: "std/map", moduleAlias: "map", symbolName: "set_i32", detail: "set_i32(handle Map<string, i32>, key string, value i32) i32", signature: "set_i32(handle Map<string, i32>, key string, value i32) i32", returnType: "i32", parameters: [{ name: "handle", typeName: "Map<string, i32>" }, { name: "key", typeName: "string" }, { name: "value", typeName: "i32" }], kind: CompletionItemKind.Function },
     { label: "map.get_i32_or", modulePath: "std/map", moduleAlias: "map", symbolName: "get_i32_or", detail: "get_i32_or(handle Map<string, i32>, key string, missing i32) i32", signature: "get_i32_or(handle Map<string, i32>, key string, missing i32) i32", returnType: "i32", parameters: [{ name: "handle", typeName: "Map<string, i32>" }, { name: "key", typeName: "string" }, { name: "missing", typeName: "i32" }], kind: CompletionItemKind.Function },
     { label: "bytes.from_string", modulePath: "std/bytes", moduleAlias: "bytes", symbolName: "from_string", detail: "from_string(text string) Bytes", signature: "from_string(text string) Bytes", returnType: "Bytes", parameters: [{ name: "text", typeName: "string" }], kind: CompletionItemKind.Function },
+    { label: "bytes.make", modulePath: "std/bytes", moduleAlias: "bytes", symbolName: "make", detail: "make(cap i32) Bytes", signature: "make(cap i32) Bytes", returnType: "Bytes", parameters: [{ name: "cap", typeName: "i32" }], kind: CompletionItemKind.Function },
+    { label: "bytes.push", modulePath: "std/bytes", moduleAlias: "bytes", symbolName: "push", detail: "push(b Bytes, value i32) Bytes", signature: "push(b Bytes, value i32) Bytes", returnType: "Bytes", parameters: [{ name: "b", typeName: "Bytes" }, { name: "value", typeName: "i32" }], kind: CompletionItemKind.Function },
     { label: "bytes.to_string", modulePath: "std/bytes", moduleAlias: "bytes", symbolName: "to_string", detail: "to_string(b Bytes) string", signature: "to_string(b Bytes) string", returnType: "string", parameters: [{ name: "b", typeName: "Bytes" }], kind: CompletionItemKind.Function },
-    { label: "bytes.free", modulePath: "std/bytes", moduleAlias: "bytes", symbolName: "free", detail: "free(b Bytes)", signature: "free(b Bytes)", parameters: [{ name: "b", typeName: "Bytes" }], kind: CompletionItemKind.Function },
     { label: "hex.encode", modulePath: "std/hex", moduleAlias: "hex", symbolName: "encode", detail: "encode(b Bytes) string", signature: "encode(b Bytes) string", returnType: "string", parameters: [{ name: "b", typeName: "Bytes" }], kind: CompletionItemKind.Function },
     { label: "hex.decode", modulePath: "std/hex", moduleAlias: "hex", symbolName: "decode", detail: "decode(text string) Bytes", signature: "decode(text string) Bytes", returnType: "Bytes", parameters: [{ name: "text", typeName: "string" }], kind: CompletionItemKind.Function },
     { label: "base64.encode", modulePath: "std/base64", moduleAlias: "base64", symbolName: "encode", detail: "encode(b Bytes) string", signature: "encode(b Bytes) string", returnType: "string", parameters: [{ name: "b", typeName: "Bytes" }], kind: CompletionItemKind.Function },

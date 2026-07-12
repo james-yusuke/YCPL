@@ -45,10 +45,12 @@ namespace codegen
         std::vector<std::map<std::string, llvm::Value *>> locals_stack;
         std::vector<std::map<std::string, std::string>> locals_stack_type;
         std::vector<std::map<std::string, bool>> locals_stack_const;
+        std::vector<size_t> locals_stack_runtime_depth;
         std::unordered_map<std::string, llvm::Type *> localPointedType;
         std::unordered_map<std::string, llvm::Type *> globalPointedType;
         std::vector<std::vector<const ast::Stmt *>> deferred_scopes;
         bool emitting_deferred = false;
+        size_t runtime_scope_depth = 0;
 
         // Function and loop state shared by expression/statement lowering.
         std::map<std::string, llvm::Function *> function_protos;
@@ -57,6 +59,8 @@ namespace codegen
         std::vector<llvm::BasicBlock *> continue_targets;
         std::vector<size_t> break_defer_depths;
         std::vector<size_t> continue_defer_depths;
+        std::vector<size_t> break_runtime_depths;
+        std::vector<size_t> continue_runtime_depths;
 
         // Struct registry prepared before function body generation.
         std::unordered_map<std::string, llvm::StructType *> struct_types;
@@ -117,6 +121,9 @@ namespace codegen
         void emit_runtime_function_entry(bool is_main);
         void emit_runtime_function_exit(bool is_main);
         llvm::Value *emit_runtime_move_to_parent(llvm::Value *value);
+        llvm::Value *emit_runtime_move_to_ancestor(llvm::Value *value, size_t levels);
+        void emit_runtime_escape_aggregate(llvm::Value *value, size_t levels = 1);
+        void emit_runtime_scope_unwind(size_t target_depth);
         void emit_runtime_move_frame_to_parent();
 
         // Expression lowering.
@@ -178,6 +185,7 @@ namespace codegen
         llvm::Value *lookup_local(const std::string &name);
         llvm::Type *resolve_llvm_type_name(const std::string &typeName);
         std::string *lookup_local_type(const std::string &name);
+        size_t local_scope_escape_levels(const std::string &name) const;
         std::string infer_expr_type_name(const ast::Expr *expr);
         bool is_local_const(const std::string &name);
         void emit_deferred_statements();

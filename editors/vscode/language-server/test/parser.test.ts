@@ -130,13 +130,12 @@ test("parser indexes enum and type alias syntax", () => {
   assert.equal(document.references.some((reference) => ["switch", "case", "default"].includes(reference.name)), false);
 });
 
-test("parser handles defer owned scope syntax", () => {
+test("parser handles managed values and scope syntax", () => {
   const document = parser.parse("file:///lifetime.yc", 1, [
     "import \"std/bytes\" as bytes",
     "",
     "fn main() {",
     "    b: owned Bytes := bytes.from_string(\"YCPL\")",
-    "    defer b.free()",
     "    scope encoding {",
     "        b.len",
     "    }",
@@ -146,4 +145,19 @@ test("parser handles defer owned scope syntax", () => {
   assert.equal(document.symbols.find((symbol) => symbol.name === "b")?.typeName, "owned Bytes");
   assert.equal(document.references.some((reference) => ["owned", "defer", "scope", "encoding"].includes(reference.name)), false);
   assert.equal(document.scopes.some((scope) => scope.kind === "scope" && scope.name === "scope"), true);
+});
+
+test("retired language words are ordinary identifiers", () => {
+  const document = parser.parse("file:///retired-identifiers.yc", 1, [
+    "fn main() i32 {",
+    "    mut := 1",
+    "    match := mut + 1",
+    "    go := match + 1",
+    "    return go",
+    "}"
+  ].join("\n"));
+
+  assert.equal(document.symbols.some((symbol) => symbol.name === "mut" && symbol.category === "variable"), true);
+  assert.equal(document.symbols.some((symbol) => symbol.name === "match" && symbol.category === "variable"), true);
+  assert.equal(document.symbols.some((symbol) => symbol.name === "go" && symbol.category === "variable"), true);
 });
