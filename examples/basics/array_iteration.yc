@@ -1,0 +1,18 @@
+import "std/array" as array
+import "std/fmt" as fmt
+
+fn main() {
+    xs := array.make([]i32)
+    xs = array.push(xs, 1)
+    xs = array.push(xs, 2)
+    xs = array.push(xs, 3)
+    xs = array.push(xs, 4)
+    xs = array.push(xs, 5)
+
+    total: i32 := 0
+    for value in xs {
+        total += value
+    }
+
+    fmt.println(total)
+}

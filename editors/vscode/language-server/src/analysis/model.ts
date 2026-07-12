@@ -17,7 +17,6 @@ export const keywords = [
   "type",
   "const",
   "owned",
-  "mut",
   "if",
   "else",
   "for",

@@ -81,7 +81,7 @@ fmt.println(value) -> stdout
 array.make([]T)
     -> { data, len, cap, elem_size }
     -> array.push / array.get / array.set
-    -> YCPL runtime 管理。array.free は互換 release として残す
+    -> YCPL runtime 管理
 
 text.concat / text.join / text.repeat
     -> managed StringBuilder を隠した high-level string construction
@@ -89,19 +89,19 @@ text.concat / text.join / text.repeat
 json.parse(text)
     -> JsonValue { root, source, range, owns }
     -> json.get / json.at views
-    -> managed allocation foundation。json.free は互換として残す
+    -> managed allocation foundation
 
 bytes.from_string(text)
     -> Bytes { root, data, len, cap, owns }
     -> bytes.to_string / bytes.byte_to_string
     -> hex.encode / base64.encode / hash.crc32
-    -> YCPL runtime 管理。bytes.free は互換として残す
+    -> YCPL runtime 管理
 
 map.make_i32(cap) / map.make_string(cap)
     -> Map<string, i32> / Map<string, string> runtime handle
     -> map.set_i32 / map.get_i32_or / map.delete_i32
     -> map.set_string / map.get_string / map.delete_string
-    -> YCPL runtime 管理。map.free_i32 / map.free_string は互換として残す
+    -> YCPL runtime 管理
 ```
 
 ```YCPL
@@ -127,7 +127,7 @@ fn main() {
 ## メモリ所有
 
 ```text
-array.make / mem.alloc / json.parse / bytes.from_string / map.make_*
+array.make / json.parse / bytes.from_string / map.make_*
     -> static link される YCPL runtime 経由で確保
     -> 所有している function frame の終了時に解放
     -> return される managed root は caller frame へ移動
@@ -136,23 +136,23 @@ array.make / mem.alloc / json.parse / bytes.from_string / map.make_*
 json.get / json.at
     -> non-owning views
 
-array.free / mem.free / bytes.free / json.free / map.free_*
-    -> 旧コード移行用の yc_release compatibility wrapper
-
-std/unsafe/mem と std/unsafe/mem
+std/unsafe/mem
     -> FFI 境界だけで使う raw C malloc/calloc/realloc/free
 ```
 
 `ycc build` は `bootstrap/cpp/runtime/yc_runtime.c` を各 native binary に
 static link します。runtime は `yc_runtime_init`、`yc_runtime_shutdown`、
 `yc_frame_push`、`yc_frame_pop`、`yc_alloc`、`yc_calloc`、`yc_realloc`、
-`yc_release`、`yc_move_to_parent` を提供します。この milestone では
+`yc_release`、`yc_move_to_parent`、`yc_move_to_ancestor` を提供します。この milestone では
 background tracing GC は入れず、frame ownership による deterministic cleanup
-へ寄せつつ、移行期間の manual-free 互換を残しています。managed root を返す場合は、
-slice/map などの backing storage が caller で生きるよう、その frame の allocation を
-保守的に caller frame へ移動します。
-array と map の root は child allocation を登録するため、root を release すると
-backing data / key-value arrays も release されます。
+を行います。managed value が escape する場合は、その ownership root と到達可能な
+child だけを caller frame へ移し、無関係な local allocation は callee frame に残します。
+array、map、Bytes、StringBuilder、JsonValue の root と backing allocation は同じ
+ownership graph で管理されます。
+
+pointer return は選択的なgraph escapeを使います。aggregate returnについては、
+compiler内部の全bufferがruntime childとして登録されるまで、frame全体を保持する
+互換fallbackも併用します。
 
 `extern fn` は YCPL 名を C/LLVM symbol に対応させます。`intrinsic fn` は bundled
 `std` 専用で、user module では拒否されます。

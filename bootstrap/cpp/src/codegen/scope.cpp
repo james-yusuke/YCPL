@@ -9,6 +9,7 @@ namespace codegen
         locals_stack_const.emplace_back();
         locals_stack_type.emplace_back();
         locals_stack.emplace_back();
+        locals_stack_runtime_depth.push_back(runtime_scope_depth);
         deferred_scopes.emplace_back();
     }
 
@@ -23,6 +24,8 @@ namespace codegen
             locals_stack_type.pop_back();
         if (!locals_stack_const.empty())
             locals_stack_const.pop_back();
+        if (!locals_stack_runtime_depth.empty())
+            locals_stack_runtime_depth.pop_back();
     }
 
     void CodeGen::emit_deferred_scopes_to_depth(size_t keepDepth)
@@ -87,6 +90,23 @@ namespace codegen
         }
 
         return nullptr;
+    }
+
+    size_t CodeGen::local_scope_escape_levels(const std::string &name) const
+    {
+        if (locals_stack.empty())
+            return 0;
+        for (int i = static_cast<int>(locals_stack.size()) - 1; i >= 0; --i)
+        {
+            if (locals_stack[static_cast<size_t>(i)].find(name) != locals_stack[static_cast<size_t>(i)].end())
+            {
+                size_t targetDepth = i < static_cast<int>(locals_stack_runtime_depth.size())
+                    ? locals_stack_runtime_depth[static_cast<size_t>(i)]
+                    : runtime_scope_depth;
+                return runtime_scope_depth > targetDepth ? runtime_scope_depth - targetDepth : 0;
+            }
+        }
+        return 0;
     }
 
     std::string CodeGen::infer_expr_type_name(const ast::Expr *expr)

@@ -6,16 +6,13 @@ import "std/hash" as hash
 import "std/hex" as hex
 
 fn main() {
-    b: owned Bytes := bytes.from_string("YCPL")
-    defer b.free()
+    b := bytes.from_string("YCPL")
 
     encodedbase := base32.encode(b)
     decodedbase := base32.decode(encodedbase)
-    defer decodedbase.free()
 
     encodedurl := base64.encode_url(b)
     decodedurl := base64.decode_url(encodedurl)
-    defer decodedurl.free()
 
     scope encoding {
         fmt.println(encodedbase)

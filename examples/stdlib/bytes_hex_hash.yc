@@ -26,7 +26,4 @@ fn main() {
     fmt.println(hash.fnv1a32(b))
     fmt.println(hash.crc32(b))
 
-    bytes.free(b)
-    bytes.free(copy)
-    bytes.free(decoded)
 }

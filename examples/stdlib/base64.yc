@@ -8,14 +8,11 @@ fn roundtrip(text string) {
     decoded := base64.decode(encoded)
     fmt.println(encoded)
     fmt.println(bytes.eq(b, decoded))
-    bytes.free(b)
-    bytes.free(decoded)
 }
 
 fn main() {
     empty := bytes.from_string("")
     fmt.println(base64.encode(empty))
-    bytes.free(empty)
 
     roundtrip("f")
     roundtrip("fo")

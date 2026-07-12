@@ -17,6 +17,7 @@ void yc_release(void *ptr);
 void yc_attach_child(void *parent, void *child);
 void yc_replace_child(void *parent, void *old_child, void *new_child);
 void *yc_move_to_parent(void *ptr);
+void *yc_move_to_ancestor(void *ptr, size_t levels);
 void yc_move_frame_to_parent(void);
 void *yc_move_to_root(void *ptr);
 char *yc_keep_string(const char *ptr);

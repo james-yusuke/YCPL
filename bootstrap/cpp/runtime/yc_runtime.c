@@ -15,8 +15,10 @@ typedef struct YcAllocHeader {
     struct YcAllocHeader *next;
     struct YcAllocHeader *frame_prev;
     struct YcAllocHeader *frame_next;
-    void *children[4];
-    uint32_t child_count;
+    struct YcAllocHeader *owner;
+    struct YcAllocHeader *first_child;
+    struct YcAllocHeader *sibling_prev;
+    struct YcAllocHeader *sibling_next;
 } YcAllocHeader;
 
 static YcAllocHeader *yc_head = NULL;
@@ -189,17 +191,16 @@ static void yc_frame_unlink(YcAllocHeader *header) {
     header->frame_next = NULL;
 }
 
-static void yc_frame_move_all(uint32_t from, uint32_t to) {
-    if (from >= yc_frame_heads_cap || from == to) {
+static void yc_move_graph_to_frame(YcAllocHeader *header, uint32_t frame) {
+    if (!header) {
         return;
     }
-
-    YcAllocHeader *header = yc_frame_heads[from];
-    while (header) {
-        YcAllocHeader *next = header->frame_next;
+    if (header->frame != frame) {
         yc_frame_unlink(header);
-        yc_frame_link(header, to);
-        header = next;
+        yc_frame_link(header, frame);
+    }
+    for (YcAllocHeader *child = header->first_child; child; child = child->sibling_next) {
+        yc_move_graph_to_frame(child, frame);
     }
 }
 
@@ -223,6 +224,56 @@ static YcAllocHeader *yc_header_from_ptr(void *ptr) {
     }
 
     return NULL;
+}
+
+static YcAllocHeader *yc_header_containing_ptr(void *ptr) {
+    return yc_header_from_ptr(ptr);
+}
+
+static YcAllocHeader *yc_owner_root(YcAllocHeader *header) {
+    while (header && header->owner) {
+        header = header->owner;
+    }
+    return header;
+}
+
+static int yc_is_owner_ancestor(YcAllocHeader *ancestor, YcAllocHeader *header) {
+    for (YcAllocHeader *current = header; current; current = current->owner) {
+        if (current == ancestor) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+static void yc_detach_owner(YcAllocHeader *header) {
+    if (!header || !header->owner) {
+        return;
+    }
+    YcAllocHeader *owner = header->owner;
+    if (header->sibling_prev) {
+        header->sibling_prev->sibling_next = header->sibling_next;
+    } else if (owner->first_child == header) {
+        owner->first_child = header->sibling_next;
+    }
+    if (header->sibling_next) {
+        header->sibling_next->sibling_prev = header->sibling_prev;
+    }
+    header->owner = NULL;
+    header->sibling_prev = NULL;
+    header->sibling_next = NULL;
+}
+
+static void yc_link_owner(YcAllocHeader *owner, YcAllocHeader *child) {
+    yc_detach_owner(child);
+    child->owner = owner;
+    child->sibling_prev = NULL;
+    child->sibling_next = owner->first_child;
+    if (owner->first_child) {
+        owner->first_child->sibling_prev = child;
+    }
+    owner->first_child = child;
+    yc_move_graph_to_frame(child, owner->frame);
 }
 
 static void yc_link(YcAllocHeader *header) {
@@ -256,24 +307,15 @@ static void yc_release_header(YcAllocHeader *header) {
     if (!header || header->magic != YC_ALLOC_MAGIC) {
         return;
     }
-    void *children[4];
-    uint32_t child_count = header->child_count;
-    if (child_count > 4) {
-        child_count = 4;
+    yc_detach_owner(header);
+    while (header->first_child) {
+        yc_release_header(header->first_child);
     }
-    for (uint32_t i = 0; i < child_count; ++i) {
-        children[i] = header->children[i];
-    }
-    header->child_count = 0;
     yc_frame_unlink(header);
     yc_unlink(header);
     yc_registry_remove(header);
     header->magic = 0;
     free(header);
-
-    for (uint32_t i = 0; i < child_count; ++i) {
-        yc_release(children[i]);
-    }
 }
 
 void yc_runtime_init(void) {
@@ -324,10 +366,10 @@ void *yc_alloc(size_t size) {
     header->magic = YC_ALLOC_MAGIC;
     header->size = size;
     header->flags = 0;
-    header->child_count = 0;
-    for (uint32_t i = 0; i < 4; ++i) {
-        header->children[i] = NULL;
-    }
+    header->owner = NULL;
+    header->first_child = NULL;
+    header->sibling_prev = NULL;
+    header->sibling_next = NULL;
     yc_link(header);
     yc_frame_link(header, yc_current_frame);
     yc_registry_insert(header);
@@ -335,6 +377,9 @@ void *yc_alloc(size_t size) {
 }
 
 void *yc_calloc(size_t count, size_t size) {
+    if (size != 0 && count > SIZE_MAX / size) {
+        return NULL;
+    }
     size_t total = count * size;
     void *ptr = yc_alloc(total);
     if (ptr) {
@@ -380,16 +425,13 @@ void yc_attach_child(void *parent, void *child) {
         return;
     }
 
-    for (uint32_t i = 0; i < parent_header->child_count && i < 4; ++i) {
-        if (parent_header->children[i] == child) {
-            return;
-        }
+    if (child_header->owner == parent_header) {
+        return;
     }
-
-    if (parent_header->child_count < 4) {
-        parent_header->children[parent_header->child_count] = child;
-        parent_header->child_count++;
+    if (yc_is_owner_ancestor(child_header, parent_header)) {
+        return;
     }
+    yc_link_owner(parent_header, child_header);
 }
 
 void yc_replace_child(void *parent, void *old_child, void *new_child) {
@@ -403,33 +445,30 @@ void yc_replace_child(void *parent, void *old_child, void *new_child) {
         return;
     }
 
-    for (uint32_t i = 0; i < parent_header->child_count && i < 4; ++i) {
-        if (parent_header->children[i] == new_child) {
-            return;
-        }
+    YcAllocHeader *old_header = yc_header_from_ptr(old_child);
+    if (old_header && old_header->owner == parent_header) {
+        yc_detach_owner(old_header);
     }
-
-    if (old_child) {
-        for (uint32_t i = 0; i < parent_header->child_count && i < 4; ++i) {
-            if (parent_header->children[i] == old_child) {
-                parent_header->children[i] = new_child;
-                return;
-            }
-        }
-    }
-
     yc_attach_child(parent, new_child);
 }
 
 void *yc_move_to_parent(void *ptr) {
-    YcAllocHeader *header = yc_header_from_ptr(ptr);
+    return yc_move_to_ancestor(ptr, 1);
+}
+
+void *yc_move_to_ancestor(void *ptr, size_t levels) {
+    YcAllocHeader *header = yc_header_containing_ptr(ptr);
     if (!header) {
         return ptr;
     }
-    if (header->frame != yc_current_frame || yc_current_frame == 0) {
+    YcAllocHeader *root = yc_owner_root(header);
+    if (!root || levels == 0 || yc_current_frame == 0) {
         return ptr;
     }
-    yc_frame_move_all(header->frame, header->frame - 1);
+    uint32_t target = levels >= yc_current_frame ? 0 : yc_current_frame - (uint32_t)levels;
+    if (root->frame > target) {
+        yc_move_graph_to_frame(root, target);
+    }
     return ptr;
 }
 
@@ -437,16 +476,19 @@ void yc_move_frame_to_parent(void) {
     if (yc_current_frame == 0) {
         return;
     }
-    yc_frame_move_all(yc_current_frame, yc_current_frame - 1);
+    while (yc_current_frame < yc_frame_heads_cap && yc_frame_heads[yc_current_frame]) {
+        YcAllocHeader *header = yc_owner_root(yc_frame_heads[yc_current_frame]);
+        yc_move_graph_to_frame(header, yc_current_frame - 1);
+    }
 }
 
 void *yc_move_to_root(void *ptr) {
-    YcAllocHeader *header = yc_header_from_ptr(ptr);
-    if (!header || header->frame <= 1) {
+    YcAllocHeader *header = yc_header_containing_ptr(ptr);
+    YcAllocHeader *root = yc_owner_root(header);
+    if (!root || root->frame <= 1) {
         return ptr;
     }
-    yc_frame_unlink(header);
-    yc_frame_link(header, 1);
+    yc_move_graph_to_frame(root, 1);
     return ptr;
 }
 
