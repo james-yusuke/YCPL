@@ -120,7 +120,7 @@ namespace codegen
                 }
                 if (rv && rv->getType()->isPointerTy())
                     rv = emit_runtime_move_to_ancestor(rv, runtime_scope_depth + 1);
-                else if (rv)
+                else if (rv && (rv->getType()->isStructTy() || rv->getType()->isArrayTy()))
                 {
                     emit_runtime_escape_aggregate(rv, runtime_scope_depth + 1);
                     // Legacy aggregate types may contain related allocations that
