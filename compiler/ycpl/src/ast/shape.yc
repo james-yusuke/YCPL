@@ -56,18 +56,6 @@ fn is_declare_assign(kind i32, lexeme string) bool {
     return kind == tok.assign() && lexeme[0] == ':'
 }
 
-fn is_removed_keyword(lexeme string) bool {
-    if str.eq(lexeme, "go") { return true }
-    if str.eq(lexeme, "select") { return true }
-    if str.eq(lexeme, "interface") { return true }
-    if str.eq(lexeme, "is") { return true }
-    if str.eq(lexeme, "importas") { return true }
-    if str.eq(lexeme, "mut") { return true }
-    if str.eq(lexeme, "match") { return true }
-    if str.eq(lexeme, "or") { return true }
-    return false
-}
-
 pub fn scan(path string, source string) AstShape {
     lx := lexer.new(path, source)
     shape := AstShape{ok: true, message: "", line: 1, col: 1, decl_nodes: 0, stmt_nodes: 0, expr_nodes: 0, type_nodes: 0, digest: 17}
@@ -85,9 +73,6 @@ pub fn scan(path string, source string) AstShape {
             break
         }
 
-        if lx.kind == tok.ident() && is_removed_keyword(lx.lexeme) {
-            return AstShape{ok: false, message: "removed keyword is not supported", line: lx.tok_line, col: lx.tok_col, decl_nodes: 0, stmt_nodes: 0, expr_nodes: 0, type_nodes: 0, digest: 17}
-        }
 
         if lx.kind == tok.kw_import() {
             shape = add_node(shape, 101, lx.lexeme)

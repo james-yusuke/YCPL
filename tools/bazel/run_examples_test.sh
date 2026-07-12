@@ -65,4 +65,4 @@ if ! command -v "$CLANG" >/dev/null 2>&1; then
 fi
 
 cd "$RUNFILES_ROOT"
-exec examples/run_tests.sh
+exec tests/run_bootstrap_regression.sh

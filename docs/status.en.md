@@ -55,23 +55,23 @@ self-hosting
    ├─ nested source folders: src/ast, src/codegen, src/parser, ...
    ├─ ycc-ycpl lex <file.yc>
    ├─ ycc-ycpl parse <file.yc>
-   ├─ ycc-ycpl check examples/53_self_codegen_main.yc
-   ├─ ycc-ycpl build-ir-self examples/53_self_codegen_main.yc -o <out>
-   ├─ ycc-ycpl build examples/54_self_codegen_arithmetic.yc -o <out>
-   ├─ ycc-ycpl build examples/56_self_codegen_call_assignment.yc -o <out>
-   ├─ ycc-ycpl build examples/57_self_codegen_control_flow.yc -o <out>
-   ├─ ycc-ycpl build examples/58_self_codegen_else_helper.yc -o <out>
-   ├─ ycc-ycpl build examples/59_self_codegen_param_call.yc -o <out>
-   ├─ ycc-ycpl build examples/60_self_codegen_helper_chain.yc -o <out>
-   ├─ ycc-ycpl build examples/61_self_codegen_two_arg_call.yc -o <out>
-   ├─ ycc-ycpl build examples/62_self_codegen_forward_call.yc -o <out>
+   ├─ ycc-ycpl check tests/fixtures/selfhost/53_self_codegen_main.yc
+   ├─ ycc-ycpl build-ir-self tests/fixtures/selfhost/53_self_codegen_main.yc -o <out>
+   ├─ ycc-ycpl build tests/fixtures/selfhost/54_self_codegen_arithmetic.yc -o <out>
+   ├─ ycc-ycpl build tests/fixtures/selfhost/56_self_codegen_call_assignment.yc -o <out>
+   ├─ ycc-ycpl build tests/fixtures/selfhost/57_self_codegen_control_flow.yc -o <out>
+   ├─ ycc-ycpl build tests/fixtures/selfhost/58_self_codegen_else_helper.yc -o <out>
+   ├─ ycc-ycpl build tests/fixtures/selfhost/59_self_codegen_param_call.yc -o <out>
+   ├─ ycc-ycpl build tests/fixtures/selfhost/60_self_codegen_helper_chain.yc -o <out>
+   ├─ ycc-ycpl build tests/fixtures/selfhost/61_self_codegen_two_arg_call.yc -o <out>
+   ├─ ycc-ycpl build tests/fixtures/selfhost/62_self_codegen_forward_call.yc -o <out>
    ├─ ycc-ycpl parse compiler/ycpl
    ├─ ycc-ycpl check compiler/ycpl
    ├─ YCPL_NO_BOOTSTRAP=1 ycc-ycpl build-ir compiler/ycpl -o <out>
    ├─ YCPL_NO_BOOTSTRAP=1 ycc-ycpl build compiler/ycpl -o <out>
    ├─ generated stage2 binary parse/check/build-ir compiler/ycpl
    ├─ generated stage2 binary build compiler/ycpl -o <stage3-out>
-   ├─ generated stage2 binary build examples/54_self_codegen_arithmetic.yc, examples/56_self_codegen_call_assignment.yc, examples/57_self_codegen_control_flow.yc, examples/58_self_codegen_else_helper.yc, examples/59_self_codegen_param_call.yc, examples/60_self_codegen_helper_chain.yc, examples/61_self_codegen_two_arg_call.yc, examples/62_self_codegen_forward_call.yc, and renamed copies
+   ├─ generated stage2 binary build tests/fixtures/selfhost/54_self_codegen_arithmetic.yc, tests/fixtures/selfhost/56_self_codegen_call_assignment.yc, tests/fixtures/selfhost/57_self_codegen_control_flow.yc, tests/fixtures/selfhost/58_self_codegen_else_helper.yc, tests/fixtures/selfhost/59_self_codegen_param_call.yc, tests/fixtures/selfhost/60_self_codegen_helper_chain.yc, tests/fixtures/selfhost/61_self_codegen_two_arg_call.yc, tests/fixtures/selfhost/62_self_codegen_forward_call.yc, and renamed copies
    ├─ ycc-ycpl build compiler/ycpl -o <out>
    └─ unsupported inputs still delegate to bootstrap ycc
 ```

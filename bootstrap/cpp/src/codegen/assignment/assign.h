@@ -28,6 +28,28 @@ Value *CodeGen::codegen_assign(const ast::AssignStmt *as)
         return "";
     };
 
+    std::function<std::string(const ast::Expr *)> base_target_ident;
+    base_target_ident = [&](const ast::Expr *expr) -> std::string
+    {
+        if (auto id = dynamic_cast<const ast::Ident *>(expr))
+            return id->name;
+        if (auto member = dynamic_cast<const ast::MemberExpr *>(expr))
+            return base_target_ident(member->object.get());
+        if (auto index = dynamic_cast<const ast::IndexExpr *>(expr))
+            return base_target_ident(index->collection.get());
+        return "";
+    };
+
+    auto escape_rhs_to_target_scope = [&](Value *value)
+    {
+        if (!value || as->op != "=")
+            return;
+        std::string targetName = base_target_ident(as->target.get());
+        size_t levels = targetName.empty() ? 0 : local_scope_escape_levels(targetName);
+        if (levels > 0)
+            emit_runtime_escape_aggregate(value, levels);
+    };
+
     std::string constName = base_const_ident(e);
     if (!constName.empty())
     {
@@ -314,6 +336,7 @@ Value *CodeGen::codegen_assign(const ast::AssignStmt *as)
                 return nullptr;
         }
 
+        escape_rhs_to_target_scope(rv);
         builder.CreateStore(rv, addr);
         return rv;
     }
@@ -476,6 +499,7 @@ Value *CodeGen::codegen_assign(const ast::AssignStmt *as)
             }
         }
 
+        escape_rhs_to_target_scope(storeVal);
         builder.CreateStore(storeVal, storePtr);
         return nullptr;
     }
@@ -509,6 +533,7 @@ Value *CodeGen::codegen_assign(const ast::AssignStmt *as)
         if (storeVal->getType()->isPointerTy() && storeVal->getType() != storePtr->getType())
         {
             Value *vc = builder.CreateBitCast(storeVal, storePtr->getType(), "assign_ptr_bitcast_rhs");
+            escape_rhs_to_target_scope(vc);
             builder.CreateStore(vc, storePtr);
             return nullptr;
         }
@@ -517,6 +542,7 @@ Value *CodeGen::codegen_assign(const ast::AssignStmt *as)
         Value *lhsCast = storePtr;
         if (storePtr->getType() != targetPtrTy)
             lhsCast = builder.CreateBitCast(storePtr, targetPtrTy, "assign_ptr_bitcast");
+        escape_rhs_to_target_scope(storeVal);
         builder.CreateStore(storeVal, lhsCast);
         return nullptr;
     }

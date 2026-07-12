@@ -26,6 +26,7 @@ test("completion returns keywords and indexed symbols", async () => {
   assert.ok(items.some((item) => item.label === "fn"));
   assert.ok(items.some((item) => item.label === "greet"));
   assert.equal(items.some((item) => item.label === "match"), false);
+  assert.equal(items.some((item) => item.label === "mut"), false);
 });
 
 test("stdlib member completion adds missing import edits", async () => {
@@ -74,11 +75,7 @@ test("stdlib completion supports std modules and UFCS methods", async () => {
   const providers = new YcplProviders(index, new StandardLibraryIndex(undefined), new NullCompilerBridge());
 
   const memberItems = await providers.completion({ textDocument: { uri: document.uri }, position: Position.create(4, 6) });
-  const free = memberItems.find((item) => item.label === "free");
-  if (!free) {
-    assert.fail("Expected UFCS free completion");
-  }
-  assert.equal(free.insertText, "free($0)");
+  assert.equal(memberItems.some((item) => item.label === "free"), false);
 
   const normalItems = await providers.completion({ textDocument: { uri: document.uri }, position: Position.create(2, 4) });
   const base32 = normalItems.find((item) => item.label === "base32.encode");

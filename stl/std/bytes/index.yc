@@ -79,6 +79,10 @@ pub fn new(cap i32) Bytes {
     return Bytes{root: root, data: data, len: 0, cap: cap, owns: true}
 }
 
+pub fn make(cap i32) Bytes {
+    return new(cap)
+}
+
 pub fn empty() Bytes {
     return new(0)
 }
@@ -161,6 +165,10 @@ pub fn append(b Bytes, value i32) Bytes {
     out.len += 1
     out.data[out.len] = 0
     return out
+}
+
+pub fn push(b Bytes, value i32) Bytes {
+    return append(b, value)
 }
 
 pub fn reserve(b Bytes, cap i32) Bytes {

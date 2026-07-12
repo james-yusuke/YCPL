@@ -114,18 +114,6 @@ fn is_type_token(kind i32) bool {
     return kind == tok.ident() || kind == tok.star() || kind == tok.lbrack() || kind == tok.rbrack() || kind == tok.kw_byte() || kind == tok.kw_owned()
 }
 
-fn is_removed_keyword(lexeme string) bool {
-    if str.eq(lexeme, "go") { return true }
-    if str.eq(lexeme, "select") { return true }
-    if str.eq(lexeme, "interface") { return true }
-    if str.eq(lexeme, "is") { return true }
-    if str.eq(lexeme, "importas") { return true }
-    if str.eq(lexeme, "mut") { return true }
-    if str.eq(lexeme, "match") { return true }
-    if str.eq(lexeme, "or") { return true }
-    return false
-}
-
 pub fn scan(path string, source string) SymbolScan {
     lx := lexer.new(path, source)
     scan := empty_ok()
@@ -165,9 +153,6 @@ pub fn scan(path string, source string) SymbolScan {
             break
         }
 
-        if lx.kind == tok.ident() && is_removed_keyword(lx.lexeme) {
-            return fail(lx.tok_line, lx.tok_col, "removed keyword is not supported")
-        }
 
         if lx.kind == tok.newline() {
             pending_pub = false

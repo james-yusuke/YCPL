@@ -82,7 +82,7 @@ fmt.println(value) -> stdout
 array.make([]T)
     -> { data, len, cap, elem_size }
     -> array.push / array.get / array.set
-    -> managed by YCPL runtime; array.free remains a compatibility release
+    -> managed by the YCPL runtime
 
 text.concat / text.join / text.repeat
     -> high-level string construction over managed StringBuilder internals
@@ -90,19 +90,19 @@ text.concat / text.join / text.repeat
 json.parse(text)
     -> JsonValue { root, source, range, owns }
     -> json.get / json.at views
-    -> managed allocation foundation; json.free remains compatibility
+    -> managed allocation foundation
 
 bytes.from_string(text)
     -> Bytes { root, data, len, cap, owns }
     -> bytes.to_string / bytes.byte_to_string
     -> hex.encode / base64.encode / hash.crc32
-    -> managed by YCPL runtime; bytes.free remains compatibility
+    -> managed by the YCPL runtime
 
 map.make_i32(cap) / map.make_string(cap)
     -> Map<string, i32> / Map<string, string> runtime handle
     -> map.set_i32 / map.get_i32_or / map.delete_i32
     -> map.set_string / map.get_string / map.delete_string
-    -> managed by YCPL runtime; map.free_i32 / map.free_string remain compatibility
+    -> managed by the YCPL runtime
 ```
 
 ```YCPL
@@ -128,7 +128,7 @@ fn main() {
 ## Memory Ownership
 
 ```text
-array.make / mem.alloc / json.parse / bytes.from_string / map.make_*
+array.make / json.parse / bytes.from_string / map.make_*
     -> allocated through the statically linked YCPL runtime
     -> released when the owning function frame exits
     -> returned managed roots are moved to the caller frame
@@ -137,23 +137,24 @@ array.make / mem.alloc / json.parse / bytes.from_string / map.make_*
 json.get / json.at
     -> non-owning views
 
-array.free / mem.free / bytes.free / json.free / map.free_*
-    -> compatibility wrappers over yc_release while old code migrates
-
-std/unsafe/mem and std/unsafe/mem
+std/unsafe/mem
     -> raw C malloc/calloc/realloc/free for FFI boundaries only
 ```
 
 `ycc build` links `bootstrap/cpp/runtime/yc_runtime.c` into every native binary.
 The runtime currently provides `yc_runtime_init`, `yc_runtime_shutdown`,
 `yc_frame_push`, `yc_frame_pop`, `yc_alloc`, `yc_calloc`, `yc_realloc`,
-`yc_release`, and `yc_move_to_parent`. Background tracing GC is intentionally
+`yc_release`, `yc_move_to_parent`, and `yc_move_to_ancestor`. Background tracing GC is intentionally
 not part of this milestone; the design is deterministic frame ownership with
-manual-free compatibility during migration. When a managed root is returned,
-the runtime conservatively moves allocations from that frame to the caller
-frame so composite values such as slices/maps keep their backing storage alive.
-Array and map roots now register child allocations, so releasing the root also
-releases the backing data/arrays.
+manual-free compatibility during migration. When a managed value escapes, the
+runtime moves only its ownership root and reachable children to the caller
+frame. Unrelated local allocations remain in the callee frame. Array, map,
+Bytes, StringBuilder, and JsonValue roots keep their backing allocations in the
+same ownership graph.
+
+Pointer returns use selective graph escape. Aggregate returns also retain a
+temporary whole-frame compatibility fallback until every compiler-internal
+aggregate registers all of its related buffers as runtime children.
 
 `extern fn` maps YCPL names to C/LLVM symbols. `intrinsic fn` is reserved for
 bundled `std` modules and is rejected in user modules.

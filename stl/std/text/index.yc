@@ -208,6 +208,10 @@ pub fn new_builder(cap i32) StringBuilder {
     return StringBuilder{root: root, data: data, len: 0, cap: cap, owns: true}
 }
 
+pub fn builder(cap i32) StringBuilder {
+    return new_builder(cap)
+}
+
 pub fn builder_len(b StringBuilder) i32 {
     return b.len
 }

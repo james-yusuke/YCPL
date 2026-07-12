@@ -40,18 +40,6 @@ fn is_declare_assign(kind i32, lexeme string) bool {
     return kind == tok.assign() && lexeme[0] == ':'
 }
 
-fn is_removed_keyword(lexeme string) bool {
-    if str.eq(lexeme, "go") { return true }
-    if str.eq(lexeme, "select") { return true }
-    if str.eq(lexeme, "interface") { return true }
-    if str.eq(lexeme, "is") { return true }
-    if str.eq(lexeme, "importas") { return true }
-    if str.eq(lexeme, "mut") { return true }
-    if str.eq(lexeme, "match") { return true }
-    if str.eq(lexeme, "or") { return true }
-    return false
-}
-
 fn ok(tokens i32, program Program) ParseResult {
     return ParseResult{ok: true, message: "", line: 1, col: 1, tokens: tokens, decls: program.decls, functions: program.functions, structs: program.structs, imports: program.imports, max_depth: program.max_depth, program: program}
 }
@@ -113,9 +101,6 @@ pub fn parse(path string, source string) ParseResult {
         }
         tokens += 1
 
-        if lx.kind == tok.ident() && is_removed_keyword(lx.lexeme) {
-            return fail(lx.tok_line, lx.tok_col, "removed keyword is not supported")
-        }
 
         if lx.kind == tok.lparen() { paren += 1 }
         if lx.kind == tok.rparen() { paren -= 1 }

@@ -17,7 +17,7 @@ fn main() {
     fmt.println(text.find("hello YCPL", "YCPL"))
     fmt.println(text.starts_with("Content-Length", "Content"))
     fmt.println(text.line_of_offset("a\nb\nc", 3))
-    fmt.println(fs.exists("examples/01_hello.yc"))
+    fmt.println(fs.exists("examples/basics/hello.yc"))
 
     keys := array.new([]string, 2)
     values := array.new([]string, 2)
