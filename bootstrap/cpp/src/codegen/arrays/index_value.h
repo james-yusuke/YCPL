@@ -90,6 +90,32 @@ Value *CodeGen::codegen_index(const ast::IndexExpr *ie)
         {
             return string_element_value(colVal, idxVal, "string.expr.index");
         }
+
+        // Indexing is also valid for a raw typed pointer stored in a member or
+        // returned from an expression.  The old ident-only path below missed
+        // those cases and interpreted every pointer-valued member as a YCPL
+        // dynamic-array header.
+        if (pt.is_pointer_only())
+        {
+            Type *elemTy = resolve_llvm_type_name(pt.base);
+            if (!elemTy)
+            {
+                error("index: cannot resolve pointer element type");
+                return nullptr;
+            }
+
+            idxVal = coerce_index_to_i64(idxVal, "ptr_expr_idx_i64");
+            if (!idxVal)
+                return nullptr;
+
+            Value *elemPtr = builder.CreateInBoundsGEP(elemTy, colVal, {idxVal}, "ptr_expr_index");
+            Value *loaded = builder.CreateLoad(elemTy, elemPtr, "ptr_expr_index_load");
+            if (elemTy->isIntegerTy(1))
+                return builder.CreateZExt(loaded, builder.getInt32Ty(), "ptr_expr_index_bool_ext");
+            if (elemTy->isIntegerTy(8))
+                return builder.CreateZExt(loaded, builder.getInt32Ty(), "ptr_expr_index_i8_ext");
+            return loaded;
+        }
     }
 
     Value *elemSizeVal = nullptr;
@@ -168,49 +194,8 @@ Value *CodeGen::codegen_index(const ast::IndexExpr *ie)
 
                 if (pt.is_array())
                 {
-                    PointerType *structPtrTy = detail::getPtrTy(context);
-                    PointerType *structPtrPtrTy = detail::getPtrTy(context);
-
-                    Value *typedPtr = builder.CreateBitCast(elemPtrI8, structPtrPtrTy, "elem_ptr_to_structptrptr_dyn");
-                    Value *loadedStructPtr = builder.CreateLoad(structPtrTy, typedPtr, "load_structptr_dyn");
-
-                    Value *isNull = builder.CreateICmpEQ(loadedStructPtr, ConstantPointerNull::get(structPtrTy), "is_null_loaded");
-
-                    BasicBlock *curBB = builder.GetInsertBlock();
-                    Function *F = curBB->getParent();
-                    BasicBlock *notNullBB = BasicBlock::Create(context, "loaded_notnull", F);
-                    BasicBlock *nullBB = BasicBlock::Create(context, "loaded_null", F);
-                    BasicBlock *contBB = BasicBlock::Create(context, "loaded_cont", F);
-
-                    builder.CreateCondBr(isNull, nullBB, notNullBB);
-
-                    builder.SetInsertPoint(nullBB);
-                    Value *nullRet = ConstantPointerNull::get(structPtrTy);
-                    builder.CreateBr(contBB);
-
-                    builder.SetInsertPoint(notNullBB);
-
-                    FunctionCallee mallocFn = detail::getMalloc(M);
-
-                    uint64_t stSize = dl.getTypeAllocSize(st);
-                    Value *sizeConst = ConstantInt::get(detail::getI64Ty(context), stSize);
-
-                    Value *raw = builder.CreateCall(mallocFn, {sizeConst}, "malloc_tok");
-
-                    Value *dstStructPtr = builder.CreateBitCast(raw, structPtrTy, "malloc_cast_to_structptr");
-
-                    Value *dst_i8 = builder.CreateBitCast(dstStructPtr, i8PtrTy, "dst_i8");
-                    Value *src_i8 = builder.CreateBitCast(loadedStructPtr, i8PtrTy, "src_i8");
-                    builder.CreateMemCpy(dst_i8, /*DstAlign=*/MaybeAlign(), src_i8, /*SrcAlign=*/MaybeAlign(), sizeConst);
-
-                    builder.CreateBr(contBB);
-
-                    builder.SetInsertPoint(contBB);
-                    PHINode *phi = builder.CreatePHI(structPtrTy, 2, "loaded_structptr_copied");
-                    phi->addIncoming(nullRet, nullBB);
-                    phi->addIncoming(dstStructPtr, notNullBB);
-
-                    return phi;
+                    Value *typedPtr = builder.CreateBitCast(elemPtrI8, detail::getPtrTy(context), "elem_struct_ptr_dyn");
+                    return builder.CreateLoad(st, typedPtr, "load_struct_value_dyn");
                 }
                 else
                 {

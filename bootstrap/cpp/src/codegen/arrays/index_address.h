@@ -64,6 +64,24 @@ Value *CodeGen::codegen_index_addr(const ast::IndexExpr *ie)
 
             return string_element_addr(colVal, idxVal, "string.expr.index.addr");
         }
+
+        // Member expressions such as arena.nodes[index] are not Ident nodes,
+        // but they may still be raw typed pointers.  Lower them as a typed
+        // GEP before considering the YCPL dynamic-array representation.
+        if (pt.is_pointer_only())
+        {
+            Type *elemTy = resolve_llvm_type_name(pt.base);
+            if (!elemTy)
+            {
+                error("index address: cannot resolve pointer element type");
+                return nullptr;
+            }
+
+            idxVal = coerce_index_to_i64(idxVal, "ptr_expr_idx_i64_addr");
+            if (!idxVal)
+                return nullptr;
+            return builder.CreateInBoundsGEP(elemTy, colVal, {idxVal}, "ptr_expr_index_addr");
+        }
     }
 
     Value *elemSizeVal = nullptr;

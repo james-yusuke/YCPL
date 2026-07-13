@@ -6,6 +6,7 @@ import "parser/parser" as parser
 import "resolver/resolver" as resolver
 import "source/source" as source
 import "lexer/token" as tok
+import "ast/nodes" as astnodes
 import "std/fmt" as fmt
 import "std/str" as str
 
@@ -42,6 +43,16 @@ fn run_parse(path string, text string) i32 {
         return 1
     }
     fmt.printf("parse ok: tokens=%d decls=%d funcs=%d structs=%d imports=%d nodes=%d depth=%d\n", result.tokens, result.decls, result.functions, result.structs, result.imports, result.program.arena.nodes, result.max_depth)
+    return 0
+}
+
+fn run_parse_ast(path string, text string) i32 {
+    result := parser.parse_ast(path, text)
+    if !result.ok {
+        fmt.printf("%s:%d:%d: %s\n", path, result.error_line, result.error_col, result.message)
+        return 1
+    }
+    fmt.printf("ast ok: decls=%d types=%d stmts=%d exprs=%d fields=%d params=%d\n", astnodes.decl_count(result.arena), astnodes.type_count(result.arena), astnodes.stmt_count(result.arena), astnodes.expr_count(result.arena), astnodes.field_count(result.arena), astnodes.param_count(result.arena))
     return 0
 }
 
@@ -281,6 +292,9 @@ fn main(argc i32, argv *string) i32 {
     }
     if str.eq(mode, "parse") {
         return run_parse(path, src.text)
+    }
+    if str.eq(mode, "parse-ast") {
+        return run_parse_ast(path, src.text)
     }
     if str.eq(mode, "check") {
         return run_check(path, src.text)

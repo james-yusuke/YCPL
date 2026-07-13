@@ -1,0 +1,296 @@
+module compiler.ycpl.ast.nodes
+
+import "std/array" as array
+import "std/mem" as mem
+
+pub fn invalid_id() i32 { return -1 }
+
+pub fn type_void() i32 { return 1 }
+pub fn type_i32() i32 { return 2 }
+pub fn type_i64() i32 { return 3 }
+pub fn type_bool() i32 { return 4 }
+pub fn type_byte() i32 { return 5 }
+pub fn type_char() i32 { return 6 }
+pub fn type_float() i32 { return 7 }
+pub fn type_double() i32 { return 8 }
+pub fn type_string() i32 { return 9 }
+pub fn type_size() i32 { return 10 }
+pub fn type_pointer() i32 { return 11 }
+pub fn type_slice() i32 { return 12 }
+pub fn type_map() i32 { return 13 }
+pub fn type_named() i32 { return 14 }
+pub fn type_none() i32 { return 15 }
+
+pub fn decl_import() i32 { return 1 }
+pub fn decl_function() i32 { return 2 }
+pub fn decl_struct() i32 { return 3 }
+pub fn decl_enum() i32 { return 4 }
+pub fn decl_alias() i32 { return 5 }
+
+pub fn stmt_block() i32 { return 1 }
+pub fn stmt_local() i32 { return 2 }
+pub fn stmt_assign() i32 { return 3 }
+pub fn stmt_expr() i32 { return 4 }
+pub fn stmt_return() i32 { return 5 }
+pub fn stmt_if() i32 { return 6 }
+pub fn stmt_for() i32 { return 7 }
+pub fn stmt_for_in() i32 { return 8 }
+pub fn stmt_switch() i32 { return 9 }
+pub fn stmt_break() i32 { return 10 }
+pub fn stmt_continue() i32 { return 11 }
+pub fn stmt_defer() i32 { return 12 }
+pub fn stmt_scope() i32 { return 13 }
+
+pub fn expr_ident() i32 { return 1 }
+pub fn expr_int() i32 { return 2 }
+pub fn expr_float() i32 { return 3 }
+pub fn expr_char() i32 { return 4 }
+pub fn expr_string() i32 { return 5 }
+pub fn expr_bool() i32 { return 6 }
+pub fn expr_none() i32 { return 7 }
+pub fn expr_unary() i32 { return 8 }
+pub fn expr_binary() i32 { return 9 }
+pub fn expr_call() i32 { return 10 }
+pub fn expr_member() i32 { return 11 }
+pub fn expr_index() i32 { return 12 }
+pub fn expr_array() i32 { return 13 }
+pub fn expr_struct() i32 { return 14 }
+pub fn expr_type() i32 { return 15 }
+pub fn expr_postfix() i32 { return 16 }
+
+pub fn flag_public() i32 { return 1 }
+pub fn flag_extern() i32 { return 2 }
+pub fn flag_intrinsic() i32 { return 4 }
+pub fn flag_variadic() i32 { return 8 }
+pub fn flag_const() i32 { return 16 }
+pub fn flag_owned() i32 { return 32 }
+
+pub struct Span {
+    file i32
+    line i32
+    col i32
+    end_line i32
+    end_col i32
+}
+
+pub struct TypeNode {
+    kind i32
+    span Span
+    name string
+    base i32
+    key i32
+    value i32
+    flags i32
+}
+
+pub struct ParamNode {
+    span Span
+    name string
+    type_id i32
+    flags i32
+}
+
+pub struct FieldNode {
+    span Span
+    name string
+    type_id i32
+    flags i32
+    value i64
+}
+
+pub struct DeclNode {
+    kind i32
+    span Span
+    name string
+    module_name string
+    link_name string
+    type_id i32
+    body i32
+    first_param i32
+    param_count i32
+    first_field i32
+    field_count i32
+    flags i32
+}
+
+pub struct StmtNode {
+    kind i32
+    span Span
+    first_child i32
+    child_count i32
+    a i32
+    b i32
+    c i32
+    name string
+    op string
+    flags i32
+}
+
+pub struct ExprNode {
+    kind i32
+    span Span
+    type_id i32
+    left i32
+    right i32
+    first_arg i32
+    arg_count i32
+    name string
+    text string
+    int_value i64
+    float_value double
+    flags i32
+}
+
+pub struct AstArena {
+    types *TypeNode
+    type_len i32
+    type_cap i32
+    params *ParamNode
+    param_len i32
+    param_cap i32
+    fields *FieldNode
+    field_len i32
+    field_cap i32
+    decls *DeclNode
+    decl_len i32
+    decl_cap i32
+    stmts *StmtNode
+    stmt_len i32
+    stmt_cap i32
+    exprs *ExprNode
+    expr_len i32
+    expr_cap i32
+    children []i32
+}
+
+pub struct ProgramAst {
+    ok bool
+    message string
+    error_line i32
+    error_col i32
+    file string
+    module_name string
+    arena AstArena
+    root_decls []i32
+}
+
+pub fn span(file i32, line i32, col i32, end_line i32, end_col i32) Span {
+    return Span{file: file, line: line, col: col, end_line: end_line, end_col: end_col}
+}
+
+pub fn empty_span() Span {
+    return span(0, 1, 1, 1, 1)
+}
+
+pub fn make_type(kind i32, at Span, name string, base i32, key i32, value i32, flags i32) TypeNode {
+    return TypeNode{kind: kind, span: at, name: name, base: base, key: key, value: value, flags: flags}
+}
+
+pub fn make_param(at Span, name string, type_id i32, flags i32) ParamNode {
+    return ParamNode{span: at, name: name, type_id: type_id, flags: flags}
+}
+
+pub fn make_field(at Span, name string, type_id i32, flags i32, value i64) FieldNode {
+    return FieldNode{span: at, name: name, type_id: type_id, flags: flags, value: value}
+}
+
+pub fn make_decl(kind i32, at Span, name string, module_name string, link_name string, type_id i32, body i32, first_param i32, param_count i32, first_field i32, field_count i32, flags i32) DeclNode {
+    return DeclNode{kind: kind, span: at, name: name, module_name: module_name, link_name: link_name, type_id: type_id, body: body, first_param: first_param, param_count: param_count, first_field: first_field, field_count: field_count, flags: flags}
+}
+
+pub fn make_stmt(kind i32, at Span, first_child i32, child_count i32, a i32, b i32, c i32, name string, op string, flags i32) StmtNode {
+    return StmtNode{kind: kind, span: at, first_child: first_child, child_count: child_count, a: a, b: b, c: c, name: name, op: op, flags: flags}
+}
+
+pub fn make_expr(kind i32, at Span, type_id i32, left i32, right i32, first_arg i32, arg_count i32, name string, text string, int_value i64, float_value double, flags i32) ExprNode {
+    return ExprNode{kind: kind, span: at, type_id: type_id, left: left, right: right, first_arg: first_arg, arg_count: arg_count, name: name, text: text, int_value: int_value, float_value: float_value, flags: flags}
+}
+
+pub fn arena_new() AstArena {
+    return AstArena{
+        types: mem.calloc(32, mem.sizeof(TypeNode)), type_len: 0, type_cap: 32,
+        params: mem.calloc(64, mem.sizeof(ParamNode)), param_len: 0, param_cap: 64,
+        fields: mem.calloc(64, mem.sizeof(FieldNode)), field_len: 0, field_cap: 64,
+        decls: mem.calloc(64, mem.sizeof(DeclNode)), decl_len: 0, decl_cap: 64,
+        stmts: mem.calloc(256, mem.sizeof(StmtNode)), stmt_len: 0, stmt_cap: 256,
+        exprs: mem.calloc(512, mem.sizeof(ExprNode)), expr_len: 0, expr_cap: 512,
+        children: array.new([]i32, 512),
+    }
+}
+
+pub fn program_new(file string) ProgramAst {
+    return ProgramAst{ok: true, message: "", error_line: 1, error_col: 1, file: file, module_name: "", arena: arena_new(), root_decls: array.new([]i32, 32)}
+}
+
+pub fn add_type(arena AstArena, node TypeNode) AstArena {
+    if arena.type_len >= arena.type_cap {
+        arena.type_cap = arena.type_cap * 2
+        arena.types = mem.realloc(arena.types, arena.type_cap * mem.sizeof(TypeNode))
+    }
+    arena.types[arena.type_len] = node
+    arena.type_len += 1
+    return arena
+}
+
+pub fn add_param(arena AstArena, node ParamNode) AstArena {
+    if arena.param_len >= arena.param_cap {
+        arena.param_cap = arena.param_cap * 2
+        arena.params = mem.realloc(arena.params, arena.param_cap * mem.sizeof(ParamNode))
+    }
+    arena.params[arena.param_len] = node
+    arena.param_len += 1
+    return arena
+}
+
+pub fn add_field(arena AstArena, node FieldNode) AstArena {
+    if arena.field_len >= arena.field_cap {
+        arena.field_cap = arena.field_cap * 2
+        arena.fields = mem.realloc(arena.fields, arena.field_cap * mem.sizeof(FieldNode))
+    }
+    arena.fields[arena.field_len] = node
+    arena.field_len += 1
+    return arena
+}
+
+pub fn add_decl(arena AstArena, node DeclNode) AstArena {
+    if arena.decl_len >= arena.decl_cap {
+        arena.decl_cap = arena.decl_cap * 2
+        arena.decls = mem.realloc(arena.decls, arena.decl_cap * mem.sizeof(DeclNode))
+    }
+    arena.decls[arena.decl_len] = node
+    arena.decl_len += 1
+    return arena
+}
+
+pub fn add_stmt(arena AstArena, node StmtNode) AstArena {
+    if arena.stmt_len >= arena.stmt_cap {
+        arena.stmt_cap = arena.stmt_cap * 2
+        arena.stmts = mem.realloc(arena.stmts, arena.stmt_cap * mem.sizeof(StmtNode))
+    }
+    arena.stmts[arena.stmt_len] = node
+    arena.stmt_len += 1
+    return arena
+}
+
+pub fn add_expr(arena AstArena, node ExprNode) AstArena {
+    if arena.expr_len >= arena.expr_cap {
+        arena.expr_cap = arena.expr_cap * 2
+        arena.exprs = mem.realloc(arena.exprs, arena.expr_cap * mem.sizeof(ExprNode))
+    }
+    arena.exprs[arena.expr_len] = node
+    arena.expr_len += 1
+    return arena
+}
+
+pub fn add_child(arena AstArena, id i32) AstArena {
+    arena.children = array.append(arena.children, id)
+    return arena
+}
+
+pub fn type_count(arena AstArena) i32 { return arena.type_len }
+pub fn param_count(arena AstArena) i32 { return arena.param_len }
+pub fn field_count(arena AstArena) i32 { return arena.field_len }
+pub fn decl_count(arena AstArena) i32 { return arena.decl_len }
+pub fn stmt_count(arena AstArena) i32 { return arena.stmt_len }
+pub fn expr_count(arena AstArena) i32 { return arena.expr_len }
+pub fn child_count(arena AstArena) i32 { return array.len(arena.children) }
