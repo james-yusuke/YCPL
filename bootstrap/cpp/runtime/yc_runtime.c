@@ -1,8 +1,16 @@
 #include "yc_runtime.h"
 
 #include <stdint.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+#include <dirent.h>
+#include <errno.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <sys/wait.h>
+#include <unistd.h>
 
 #define YC_ALLOC_MAGIC ((uint64_t)0x5943504c52544d45ULL)
 
@@ -507,4 +515,365 @@ char *yc_keep_string(const char *ptr) {
 
 size_t yc_runtime_live_allocations(void) {
     return yc_registry_count;
+}
+
+typedef struct YcPathList {
+    char **items;
+    size_t len;
+    size_t cap;
+} YcPathList;
+
+static int yc_path_list_push(YcPathList *list, const char *path) {
+    if (list->len == list->cap) {
+        size_t next_cap = list->cap == 0 ? 32 : list->cap * 2;
+        char **next = (char **)realloc(list->items, next_cap * sizeof(char *));
+        if (!next) {
+            return 0;
+        }
+        list->items = next;
+        list->cap = next_cap;
+    }
+    size_t len = strlen(path);
+    char *copy = (char *)malloc(len + 1);
+    if (!copy) {
+        return 0;
+    }
+    memcpy(copy, path, len + 1);
+    list->items[list->len++] = copy;
+    return 1;
+}
+
+static int yc_has_yc_extension(const char *path) {
+    size_t len = strlen(path);
+    return len >= 3 && path[len - 3] == '.' && path[len - 2] == 'y' && path[len - 1] == 'c';
+}
+
+static int yc_collect_yc_paths(const char *dir, YcPathList *list) {
+    DIR *handle = opendir(dir);
+    if (!handle) {
+        return 0;
+    }
+
+    int ok = 1;
+    struct dirent *entry;
+    while ((entry = readdir(handle)) != NULL) {
+        if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) {
+            continue;
+        }
+
+        size_t dir_len = strlen(dir);
+        size_t name_len = strlen(entry->d_name);
+        int needs_slash = dir_len > 0 && dir[dir_len - 1] != '/';
+        size_t path_len = dir_len + (size_t)needs_slash + name_len;
+        char *path = (char *)malloc(path_len + 1);
+        if (!path) {
+            ok = 0;
+            break;
+        }
+        memcpy(path, dir, dir_len);
+        size_t at = dir_len;
+        if (needs_slash) {
+            path[at++] = '/';
+        }
+        memcpy(path + at, entry->d_name, name_len + 1);
+
+        struct stat info;
+        if (lstat(path, &info) == 0) {
+            if (S_ISDIR(info.st_mode)) {
+                if (!yc_collect_yc_paths(path, list)) {
+                    ok = 0;
+                }
+            } else if (S_ISREG(info.st_mode) && yc_has_yc_extension(path)) {
+                if (!yc_path_list_push(list, path)) {
+                    ok = 0;
+                }
+            }
+        }
+        free(path);
+        if (!ok) {
+            break;
+        }
+    }
+    closedir(handle);
+    return ok;
+}
+
+static int yc_compare_paths(const void *left, const void *right) {
+    const char *const *a = (const char *const *)left;
+    const char *const *b = (const char *const *)right;
+    return strcmp(*a, *b);
+}
+
+char *yc_fs_find_yc_files(const char *root) {
+    if (!root) {
+        return NULL;
+    }
+
+    size_t root_len = strlen(root);
+    const char suffix[] = "/src";
+    int has_src_suffix = root_len >= 4 && strcmp(root + root_len - 4, suffix) == 0;
+    size_t start_len = root_len + (has_src_suffix ? 0 : sizeof(suffix) - 1);
+    char *start = (char *)malloc(start_len + 1);
+    if (!start) {
+        return NULL;
+    }
+    memcpy(start, root, root_len);
+    if (!has_src_suffix) {
+        memcpy(start + root_len, suffix, sizeof(suffix));
+    } else {
+        start[root_len] = '\0';
+    }
+
+    YcPathList list = {0};
+    int ok = yc_collect_yc_paths(start, &list);
+    free(start);
+    if (!ok) {
+        for (size_t i = 0; i < list.len; ++i) {
+            free(list.items[i]);
+        }
+        free(list.items);
+        return NULL;
+    }
+
+    qsort(list.items, list.len, sizeof(char *), yc_compare_paths);
+    size_t total = 1;
+    for (size_t i = 0; i < list.len; ++i) {
+        size_t len = strlen(list.items[i]);
+        if (len > SIZE_MAX - total - 1) {
+            for (size_t j = 0; j < list.len; ++j) {
+                free(list.items[j]);
+            }
+            free(list.items);
+            return NULL;
+        }
+        total += len + 1;
+    }
+
+    char *output = (char *)yc_alloc(total);
+    if (!output) {
+        for (size_t i = 0; i < list.len; ++i) {
+            free(list.items[i]);
+        }
+        free(list.items);
+        return NULL;
+    }
+
+    size_t at = 0;
+    for (size_t i = 0; i < list.len; ++i) {
+        size_t len = strlen(list.items[i]);
+        memcpy(output + at, list.items[i], len);
+        at += len;
+        output[at++] = '\n';
+        free(list.items[i]);
+    }
+    output[at] = '\0';
+    free(list.items);
+    return output;
+}
+
+static char **yc_make_argv(const char *program, const char *const *args, size_t count) {
+    if (count > (SIZE_MAX / sizeof(char *)) - 2) {
+        return NULL;
+    }
+    char **argv = (char **)calloc(count + 2, sizeof(char *));
+    if (!argv) {
+        return NULL;
+    }
+    argv[0] = (char *)program;
+    for (size_t i = 0; i < count; ++i) {
+        argv[i + 1] = (char *)args[i];
+    }
+    return argv;
+}
+
+int yc_process_run(const char *program, const char *const *args, size_t count) {
+    if (!program) {
+        return 127;
+    }
+    char **argv = yc_make_argv(program, args, count);
+    if (!argv) {
+        return 127;
+    }
+
+    pid_t child = fork();
+    if (child == 0) {
+        execvp(program, argv);
+        _exit(127);
+    }
+    free(argv);
+    if (child < 0) {
+        return 127;
+    }
+
+    int child_status = 0;
+    while (waitpid(child, &child_status, 0) < 0) {
+        if (errno != EINTR) {
+            return 127;
+        }
+    }
+    if (WIFEXITED(child_status)) {
+        return WEXITSTATUS(child_status);
+    }
+    if (WIFSIGNALED(child_status)) {
+        return 128 + WTERMSIG(child_status);
+    }
+    return 127;
+}
+
+char *yc_process_capture(const char *program, const char *const *args, size_t count, int *status) {
+    if (status) {
+        *status = 127;
+    }
+    if (!program) {
+        return NULL;
+    }
+
+    int pipes[2];
+    if (pipe(pipes) != 0) {
+        return NULL;
+    }
+    char **argv = yc_make_argv(program, args, count);
+    if (!argv) {
+        close(pipes[0]);
+        close(pipes[1]);
+        return NULL;
+    }
+
+    pid_t child = fork();
+    if (child == 0) {
+        close(pipes[0]);
+        if (dup2(pipes[1], STDOUT_FILENO) < 0) {
+            _exit(127);
+        }
+        close(pipes[1]);
+        execvp(program, argv);
+        _exit(127);
+    }
+    free(argv);
+    close(pipes[1]);
+    if (child < 0) {
+        close(pipes[0]);
+        return NULL;
+    }
+
+    size_t cap = 4096;
+    size_t len = 0;
+    char *buffer = (char *)malloc(cap);
+    if (!buffer) {
+        close(pipes[0]);
+        waitpid(child, NULL, 0);
+        return NULL;
+    }
+
+    for (;;) {
+        if (len + 2048 + 1 > cap) {
+            size_t next_cap = cap * 2;
+            char *next = (char *)realloc(buffer, next_cap);
+            if (!next) {
+                free(buffer);
+                close(pipes[0]);
+                waitpid(child, NULL, 0);
+                return NULL;
+            }
+            buffer = next;
+            cap = next_cap;
+        }
+        ssize_t got = read(pipes[0], buffer + len, cap - len - 1);
+        if (got > 0) {
+            len += (size_t)got;
+            continue;
+        }
+        if (got < 0 && errno == EINTR) {
+            continue;
+        }
+        break;
+    }
+    close(pipes[0]);
+
+    int child_status = 0;
+    while (waitpid(child, &child_status, 0) < 0 && errno == EINTR) {
+    }
+    int exit_status = 127;
+    if (WIFEXITED(child_status)) {
+        exit_status = WEXITSTATUS(child_status);
+    } else if (WIFSIGNALED(child_status)) {
+        exit_status = 128 + WTERMSIG(child_status);
+    }
+    if (status) {
+        *status = exit_status;
+    }
+
+    char *output = (char *)yc_alloc(len + 1);
+    if (output) {
+        memcpy(output, buffer, len);
+        output[len] = '\0';
+    }
+    free(buffer);
+    return output;
+}
+
+static char **yc_unpack_argv(const char *program, const char *packed_args, size_t packed_size, size_t *count_out) {
+    size_t count = 0;
+    size_t at = 0;
+    while (at < packed_size) {
+        size_t remaining = packed_size - at;
+        size_t len = 0;
+        while (len < remaining && packed_args[at + len] != '\0') {
+            len++;
+        }
+        if (len == remaining) {
+            return NULL;
+        }
+        count++;
+        at += len + 1;
+    }
+
+    char **argv = (char **)calloc(count + 2, sizeof(char *));
+    if (!argv) {
+        return NULL;
+    }
+    argv[0] = (char *)program;
+    at = 0;
+    for (size_t i = 0; i < count; ++i) {
+        argv[i + 1] = (char *)(packed_args + at);
+        at += strlen(packed_args + at) + 1;
+    }
+    if (count_out) {
+        *count_out = count;
+    }
+    return argv;
+}
+
+int yc_process_run_packed(const char *program, const char *packed_args, size_t packed_size) {
+    if (!program || (!packed_args && packed_size != 0)) {
+        return 127;
+    }
+    size_t count = 0;
+    char **argv = yc_unpack_argv(program, packed_args, packed_size, &count);
+    if (!argv) {
+        return 127;
+    }
+    int status = yc_process_run(program, (const char *const *)(argv + 1), count);
+    free(argv);
+    return status;
+}
+
+char *yc_process_capture_packed(const char *program, const char *packed_args, size_t packed_size, int *status) {
+    if (!program || (!packed_args && packed_size != 0)) {
+        if (status) {
+            *status = 127;
+        }
+        return NULL;
+    }
+    size_t count = 0;
+    char **argv = yc_unpack_argv(program, packed_args, packed_size, &count);
+    if (!argv) {
+        if (status) {
+            *status = 127;
+        }
+        return NULL;
+    }
+    char *output = yc_process_capture(program, (const char *const *)(argv + 1), count, status);
+    free(argv);
+    return output;
 }

@@ -24,7 +24,10 @@ namespace codegen
     void CodeGen::error(const std::string &msg)
     {
         failed = true;
-        std::cerr << "[codegen error] " << msg << "\n";
+        std::cerr << "[codegen error]";
+        if (builder.GetInsertBlock() && builder.GetInsertBlock()->getParent())
+            std::cerr << " in " << builder.GetInsertBlock()->getParent()->getName().str();
+        std::cerr << ": " << msg << "\n";
     }
 
     llvm::Value *CodeGen::cast_to_integer_type(llvm::Value *v, llvm::Type *targetType)
