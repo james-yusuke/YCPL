@@ -88,6 +88,31 @@ fn look(p *Parser, offset i32) AstToken {
     return AstToken{kind: p.tokens.kinds[at], text: text.slice(p.tokens.source, p.tokens.starts[at], p.tokens.lengths[at]), line: p.tokens.lines[at], col: p.tokens.cols[at]}
 }
 
+// At a `{` after an identifier, distinguish `Type{field: value}` from the
+// block that terminates `if condition {` or `for condition {`. Newlines are
+// permitted after the opening brace of a literal.
+fn struct_literal_start(p *Parser) bool {
+    offset := 1
+    next := look(p, offset)
+    for (; next.kind == tok.newline(); ) {
+        offset += 1
+        next = look(p, offset)
+    }
+    if next.kind == tok.rbrace() {
+        return true
+    }
+    if next.kind != tok.ident() {
+        return false
+    }
+    offset += 1
+    next = look(p, offset)
+    for (; next.kind == tok.newline(); ) {
+        offset += 1
+        next = look(p, offset)
+    }
+    return next.kind == tok.colon()
+}
+
 fn fail(p *Parser, message string) *Parser {
     at := current(p)
     p.ok = false
@@ -315,7 +340,7 @@ fn parse_primary(p *Parser) *Parser {
         } else if suffix.kind == tok.plusplus() || suffix.kind == tok.minusminus() {
             p = advance(p)
             p = add_expr(p, ast.make_expr(ast.expr_postfix(), at_span(suffix), ast.invalid_id(), left, ast.invalid_id(), 0, 0, "", suffix.text, 0, 0.0, 0))
-        } else if suffix.kind == tok.lbrace() && kind == tok.ident() && left == primary_id {
+        } else if suffix.kind == tok.lbrace() && kind == tok.ident() && left == primary_id && struct_literal_start(p) {
             p = advance(p)
             p = skip_lines(p)
             fields := array.new([]i32, 8)
@@ -398,8 +423,11 @@ fn parse_local(p *Parser, is_const bool) *Parser {
         p = parse_type(p)
         type_id = p.type_result
     }
-    if current(p).kind != tok.assign() || !str.eq(current(p).text, ":=") {
-        return fail(p, "expected ':=' after local")
+    if current(p).kind != tok.assign() {
+        return fail(p, "expected initializer after local")
+    }
+    if type_id == ast.invalid_id() && !str.eq(current(p).text, ":=") {
+        return fail(p, "untyped local declarations require ':='")
     }
     p = advance(p)
     p = parse_expression(p, 1)
