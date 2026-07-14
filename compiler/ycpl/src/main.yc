@@ -7,6 +7,7 @@ import "resolver/resolver" as resolver
 import "source/source" as source
 import "lexer/token" as tok
 import "ast/nodes" as astnodes
+import "ast/project" as astproject
 import "std/fmt" as fmt
 import "std/str" as str
 
@@ -53,6 +54,16 @@ fn run_parse_ast(path string, text string) i32 {
         return 1
     }
     fmt.printf("ast ok: decls=%d types=%d stmts=%d exprs=%d fields=%d params=%d\n", astnodes.decl_count(result.arena), astnodes.type_count(result.arena), astnodes.stmt_count(result.arena), astnodes.expr_count(result.arena), astnodes.field_count(result.arena), astnodes.param_count(result.arena))
+    return 0
+}
+
+fn run_parse_ast_project(path string) i32 {
+    result := astproject.parse_project(path)
+    if !result.ok {
+        fmt.printf("%s:%d:%d: %s\n", result.file, result.line, result.col, result.message)
+        return 1
+    }
+    fmt.printf("ast project ok: files=%d decls=%d types=%d stmts=%d exprs=%d fields=%d params=%d imports=%d funcs=%d structs=%d enums=%d aliases=%d digest=%d\n", result.files, result.decls, result.types, result.stmts, result.exprs, result.fields, result.params, result.imports, result.functions, result.structs, result.enums, result.aliases, result.digest)
     return 0
 }
 
@@ -273,6 +284,9 @@ fn main(argc i32, argv *string) i32 {
 
     path := argv[2]
     if resolver.is_compiler_project(path) {
+        if str.eq(mode, "parse-ast") {
+            return run_parse_ast_project(path)
+        }
         if str.eq(mode, "parse") {
             return run_parse_project(path)
         }

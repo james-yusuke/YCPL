@@ -6,6 +6,7 @@ extern fn runtime_process_run(program string, args *string, count i64) i32 as "y
 extern fn runtime_process_capture(program string, args *string, count i64, status *i32) string as "yc_process_capture"
 extern fn runtime_process_run_packed(program string, args string, size i64) i32 as "yc_process_run_packed"
 extern fn runtime_process_capture_packed(program string, args string, size i64, status *i32) string as "yc_process_capture_packed"
+extern fn runtime_native_link(clang string, llvm_config string, linkflags string, object_file string, runtime_object string, output_file string) i32 as "yc_native_link"
 
 pub struct ProcessOutput {
     ok bool
@@ -46,4 +47,8 @@ pub fn capture_packed(program string, args string, size i32) ProcessOutput {
 // a transient aggregate result.
 pub fn capture_packed_text(program string, args string, size i32, status *i32) string {
     return runtime_process_capture_packed(program, args, size, status)
+}
+
+pub fn native_link(clang string, llvm_config string, linkflags string, object_file string, runtime_object string, output_file string) i32 {
+    return runtime_native_link(clang, llvm_config, linkflags, object_file, runtime_object, output_file)
 }

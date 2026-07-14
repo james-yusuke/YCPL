@@ -877,3 +877,99 @@ char *yc_process_capture_packed(const char *program, const char *packed_args, si
     free(argv);
     return output;
 }
+
+typedef struct YcArgVector {
+    char **items;
+    size_t len;
+    size_t cap;
+} YcArgVector;
+
+static void yc_arg_vector_destroy(YcArgVector *vector) {
+    if (!vector) {
+        return;
+    }
+    for (size_t i = 0; i < vector->len; ++i) {
+        free(vector->items[i]);
+    }
+    free(vector->items);
+    vector->items = NULL;
+    vector->len = 0;
+    vector->cap = 0;
+}
+
+static int yc_arg_vector_push(YcArgVector *vector, const char *text, size_t len) {
+    if (!vector || !text || len > SIZE_MAX - 1) {
+        return 0;
+    }
+    if (vector->len == vector->cap) {
+        size_t next_cap = vector->cap ? vector->cap * 2 : 16;
+        if (next_cap < vector->cap || next_cap > SIZE_MAX / sizeof(char *)) {
+            return 0;
+        }
+        char **next = (char **)realloc(vector->items, next_cap * sizeof(char *));
+        if (!next) {
+            return 0;
+        }
+        vector->items = next;
+        vector->cap = next_cap;
+    }
+    char *copy = (char *)malloc(len + 1);
+    if (!copy) {
+        return 0;
+    }
+    memcpy(copy, text, len);
+    copy[len] = '\0';
+    vector->items[vector->len++] = copy;
+    return 1;
+}
+
+static int yc_arg_vector_push_text(YcArgVector *vector, const char *text) {
+    return text && yc_arg_vector_push(vector, text, strlen(text));
+}
+
+static int yc_arg_vector_push_words(YcArgVector *vector, const char *words) {
+    if (!words) {
+        return 1;
+    }
+    const unsigned char *at = (const unsigned char *)words;
+    while (*at) {
+        while (*at == ' ' || *at == '\t' || *at == '\r' || *at == '\n') {
+            ++at;
+        }
+        const unsigned char *start = at;
+        while (*at && *at != ' ' && *at != '\t' && *at != '\r' && *at != '\n') {
+            ++at;
+        }
+        if (at != start && !yc_arg_vector_push(vector, (const char *)start, (size_t)(at - start))) {
+            return 0;
+        }
+    }
+    return 1;
+}
+
+int yc_native_link(const char *clang, const char *llvm_config, const char *linkflags,
+                   const char *object_file, const char *runtime_object, const char *output_file) {
+    if (!clang || !llvm_config || !object_file || !runtime_object || !output_file) {
+        return 127;
+    }
+    const char *const llvm_args[] = {"--ldflags", "--libs", "core", "--system-libs"};
+    int config_status = 127;
+    char *llvm_flags = yc_process_capture(llvm_config, llvm_args, 4, &config_status);
+    if (config_status != 0 || !llvm_flags) {
+        yc_release(llvm_flags);
+        return config_status ? config_status : 127;
+    }
+
+    YcArgVector args = {0};
+    int ok = yc_arg_vector_push_words(&args, linkflags) &&
+             yc_arg_vector_push_text(&args, object_file) &&
+             yc_arg_vector_push_text(&args, runtime_object) &&
+             yc_arg_vector_push_text(&args, "-o") &&
+             yc_arg_vector_push_text(&args, output_file) &&
+             yc_arg_vector_push_words(&args, llvm_flags) &&
+             yc_arg_vector_push_text(&args, "-lm");
+    int status = ok ? yc_process_run(clang, (const char *const *)args.items, args.len) : 127;
+    yc_arg_vector_destroy(&args);
+    yc_release(llvm_flags);
+    return status;
+}

@@ -1,0 +1,90 @@
+module compiler.ycpl.ast.project
+
+import "ast/nodes" as ast
+import "parser/parser" as parser
+import "resolver/resolver" as resolver
+import "source/source" as source
+
+// This is deliberately a streaming project parser for the first migration
+// step. Each file is parsed into the real typed arena, then the project keeps
+// AST-derived totals and a stable digest. Resolver/checker will consume the
+// same per-file ProgramAst representation next, without returning to the old
+// token-summary parser.
+pub struct ProjectAstResult {
+    ok bool
+    file string
+    message string
+    line i32
+    col i32
+    files i32
+    decls i32
+    types i32
+    stmts i32
+    exprs i32
+    fields i32
+    params i32
+    imports i32
+    functions i32
+    structs i32
+    enums i32
+    aliases i32
+    digest i32
+}
+
+fn fail(file string, line i32, col i32, message string) ProjectAstResult {
+    return ProjectAstResult{ok: false, file: file, message: message, line: line, col: col, files: 0, decls: 0, types: 0, stmts: 0, exprs: 0, fields: 0, params: 0, imports: 0, functions: 0, structs: 0, enums: 0, aliases: 0, digest: 17}
+}
+
+fn add_decl_kinds(result ProjectAstResult, program ProgramAst) ProjectAstResult {
+    i := 0
+    for (; i < ast.decl_count(program.arena); i++) {
+        node: *DeclNode := program.arena.decls + i
+        if node.kind == ast.decl_import() { result.imports += 1 }
+        if node.kind == ast.decl_function() { result.functions += 1 }
+        if node.kind == ast.decl_struct() { result.structs += 1 }
+        if node.kind == ast.decl_enum() { result.enums += 1 }
+        if node.kind == ast.decl_alias() { result.aliases += 1 }
+    }
+    return result
+}
+
+pub fn parse_project(root string) ProjectAstResult {
+    sources := resolver.discover_sources(root)
+    if !sources.ok {
+        return fail(root, 1, 1, sources.message)
+    }
+
+    result := ProjectAstResult{ok: true, file: "", message: "", line: 1, col: 1, files: 0, decls: 0, types: 0, stmts: 0, exprs: 0, fields: 0, params: 0, imports: 0, functions: 0, structs: 0, enums: 0, aliases: 0, digest: 17}
+    i := 0
+    for (; i < sources.count; i++) {
+        path := resolver.source_path_at(sources, i)
+        loaded := source.load(path)
+        if !loaded.ok {
+            return fail(path, 1, 1, "could not read source file")
+        }
+        program := parser.parse_ast(path, loaded.text)
+        if !program.ok {
+            return fail(path, program.error_line, program.error_col, program.message)
+        }
+
+        decls := ast.decl_count(program.arena)
+        types := ast.type_count(program.arena)
+        stmts := ast.stmt_count(program.arena)
+        exprs := ast.expr_count(program.arena)
+        fields := ast.field_count(program.arena)
+        params := ast.param_count(program.arena)
+        result.files += 1
+        result.decls += decls
+        result.types += types
+        result.stmts += stmts
+        result.exprs += exprs
+        result.fields += fields
+        result.params += params
+        result = add_decl_kinds(result, program)
+        result.digest = result.digest * 31 + decls
+        result.digest = result.digest * 31 + types
+        result.digest = result.digest * 31 + stmts
+        result.digest = result.digest * 31 + exprs
+    }
+    return result
+}

@@ -63,6 +63,37 @@ fn args_push(args ArgList, value string) ArgList {
     return args
 }
 
+// Keep compiler argument tokenization in the packed argv buffer.  Constructing
+// an intermediate YCPL string for every llvm-config flag used to exercise the
+// general string/index lowering path and could corrupt long linker flags.
+fn args_push_range(args ArgList, text string, start i32, end i32) ArgList {
+    if !args.ok {
+        return args
+    }
+    value_len := end - start
+    needed := args.len + value_len + 1
+    if needed > args.cap {
+        next_cap := args.cap * 2
+        for (; next_cap < needed; ) {
+            next_cap = next_cap * 2
+        }
+        next: string := mem.realloc(args.data, next_cap)
+        if next == none {
+            args.ok = false
+            return args
+        }
+        args.data = next
+        args.cap = next_cap
+    }
+    if value_len > 0 {
+        mem.copy(args.data + args.len, text + start, value_len)
+    }
+    args.len += value_len
+    args.data[args.len] = 0
+    args.len += 1
+    return args
+}
+
 fn whitespace(ch i32) bool {
     return ch == ' ' || ch == '\n' || ch == '\r' || ch == '\t'
 }
@@ -94,7 +125,7 @@ fn args_push_words(args ArgList, text string) ArgList {
         start := i
         for (; i < n && !whitespace(text[i]); i++) {
         }
-        args = args_push(args, copy_range(text, start, i))
+        args = args_push_range(args, text, start, i)
     }
     return args
 }
@@ -411,27 +442,9 @@ pub fn build_native_from_ir(out_dir string) DriverResult {
     }
 
     llvm_config := find_llvm_config()
-    llvm_args := args_new(4)
-    llvm_args = args_push(llvm_args, "--ldflags")
-    llvm_args = args_push(llvm_args, "--libs")
-    llvm_args = args_push(llvm_args, "core")
-    llvm_args = args_push(llvm_args, "--system-libs")
-    if !llvm_args.ok {
-        return DriverResult{ok: false, code: 1, message: "failed to allocate llvm-config arguments", command: llvm_config}
+    code := os.native_link(clang, llvm_config, linkflags, obj_file, runtime_obj, bin_file)
+    if code != 0 {
+        return DriverResult{ok: false, code: code, message: "clang link failed", command: clang}
     }
-    capture_status := 0
-    llvm_flags := os.capture_packed_text(llvm_config, llvm_args.data, llvm_args.len, &capture_status)
-    if capture_status != 0 || llvm_flags == none {
-        return DriverResult{ok: false, code: capture_status, message: "llvm-config failed; set LLVM_CONFIG or LLVM_BINDIR", command: llvm_config}
-    }
-
-    args = args_new(32)
-    args = args_push_words(args, linkflags)
-    args = args_push(args, obj_file)
-    args = args_push(args, runtime_obj)
-    args = args_push(args, "-o")
-    args = args_push(args, bin_file)
-    args = args_push_words(args, llvm_flags)
-    args = args_push(args, "-lm")
-    return run_argv(clang, args, "clang link failed")
+    return DriverResult{ok: true, code: 0, message: "", command: clang}
 }

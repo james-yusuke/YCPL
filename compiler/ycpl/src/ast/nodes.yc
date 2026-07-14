@@ -207,7 +207,7 @@ pub fn make_expr(kind i32, at Span, type_id i32, left i32, right i32, first_arg 
 }
 
 pub fn arena_new() AstArena {
-    return AstArena{
+    arena := AstArena{
         types: mem.calloc(32, mem.sizeof(TypeNode)), type_len: 0, type_cap: 32,
         params: mem.calloc(64, mem.sizeof(ParamNode)), param_len: 0, param_cap: 64,
         fields: mem.calloc(64, mem.sizeof(FieldNode)), field_len: 0, field_cap: 64,
@@ -216,6 +216,15 @@ pub fn arena_new() AstArena {
         exprs: mem.calloc(512, mem.sizeof(ExprNode)), expr_len: 0, expr_cap: 512,
         children: array.new([]i32, 512),
     }
+    // AstArena lives inside ProgramAst.  It crosses several recursive parser
+    // frames, so its backing stores must not remain owned by arena_new's frame.
+    arena.types = mem.keep(arena.types)
+    arena.params = mem.keep(arena.params)
+    arena.fields = mem.keep(arena.fields)
+    arena.decls = mem.keep(arena.decls)
+    arena.stmts = mem.keep(arena.stmts)
+    arena.exprs = mem.keep(arena.exprs)
+    return arena
 }
 
 pub fn program_new(file string) ProgramAst {
@@ -227,7 +236,19 @@ pub fn add_type(arena AstArena, node TypeNode) AstArena {
         arena.type_cap = arena.type_cap * 2
         arena.types = mem.realloc(arena.types, arena.type_cap * mem.sizeof(TypeNode))
     }
-    arena.types[arena.type_len] = node
+    arena.types = mem.keep(arena.types)
+    // Do not copy a struct through `*T[index]`: that was interpreted as a
+    // dynamic-array access by older bootstrap codegen paths.  Field stores via
+    // a typed pointer are both ABI-correct and the representation needed by
+    // the self-host AST arena.
+    slot: *TypeNode := arena.types + arena.type_len
+    slot.kind = node.kind
+    slot.span = node.span
+    slot.name = node.name
+    slot.base = node.base
+    slot.key = node.key
+    slot.value = node.value
+    slot.flags = node.flags
     arena.type_len += 1
     return arena
 }
@@ -237,7 +258,12 @@ pub fn add_param(arena AstArena, node ParamNode) AstArena {
         arena.param_cap = arena.param_cap * 2
         arena.params = mem.realloc(arena.params, arena.param_cap * mem.sizeof(ParamNode))
     }
-    arena.params[arena.param_len] = node
+    arena.params = mem.keep(arena.params)
+    slot: *ParamNode := arena.params + arena.param_len
+    slot.span = node.span
+    slot.name = node.name
+    slot.type_id = node.type_id
+    slot.flags = node.flags
     arena.param_len += 1
     return arena
 }
@@ -247,7 +273,13 @@ pub fn add_field(arena AstArena, node FieldNode) AstArena {
         arena.field_cap = arena.field_cap * 2
         arena.fields = mem.realloc(arena.fields, arena.field_cap * mem.sizeof(FieldNode))
     }
-    arena.fields[arena.field_len] = node
+    arena.fields = mem.keep(arena.fields)
+    slot: *FieldNode := arena.fields + arena.field_len
+    slot.span = node.span
+    slot.name = node.name
+    slot.type_id = node.type_id
+    slot.flags = node.flags
+    slot.value = node.value
     arena.field_len += 1
     return arena
 }
@@ -257,7 +289,20 @@ pub fn add_decl(arena AstArena, node DeclNode) AstArena {
         arena.decl_cap = arena.decl_cap * 2
         arena.decls = mem.realloc(arena.decls, arena.decl_cap * mem.sizeof(DeclNode))
     }
-    arena.decls[arena.decl_len] = node
+    arena.decls = mem.keep(arena.decls)
+    slot: *DeclNode := arena.decls + arena.decl_len
+    slot.kind = node.kind
+    slot.span = node.span
+    slot.name = node.name
+    slot.module_name = node.module_name
+    slot.link_name = node.link_name
+    slot.type_id = node.type_id
+    slot.body = node.body
+    slot.first_param = node.first_param
+    slot.param_count = node.param_count
+    slot.first_field = node.first_field
+    slot.field_count = node.field_count
+    slot.flags = node.flags
     arena.decl_len += 1
     return arena
 }
@@ -267,7 +312,18 @@ pub fn add_stmt(arena AstArena, node StmtNode) AstArena {
         arena.stmt_cap = arena.stmt_cap * 2
         arena.stmts = mem.realloc(arena.stmts, arena.stmt_cap * mem.sizeof(StmtNode))
     }
-    arena.stmts[arena.stmt_len] = node
+    arena.stmts = mem.keep(arena.stmts)
+    slot: *StmtNode := arena.stmts + arena.stmt_len
+    slot.kind = node.kind
+    slot.span = node.span
+    slot.first_child = node.first_child
+    slot.child_count = node.child_count
+    slot.a = node.a
+    slot.b = node.b
+    slot.c = node.c
+    slot.name = node.name
+    slot.op = node.op
+    slot.flags = node.flags
     arena.stmt_len += 1
     return arena
 }
@@ -277,7 +333,20 @@ pub fn add_expr(arena AstArena, node ExprNode) AstArena {
         arena.expr_cap = arena.expr_cap * 2
         arena.exprs = mem.realloc(arena.exprs, arena.expr_cap * mem.sizeof(ExprNode))
     }
-    arena.exprs[arena.expr_len] = node
+    arena.exprs = mem.keep(arena.exprs)
+    slot: *ExprNode := arena.exprs + arena.expr_len
+    slot.kind = node.kind
+    slot.span = node.span
+    slot.type_id = node.type_id
+    slot.left = node.left
+    slot.right = node.right
+    slot.first_arg = node.first_arg
+    slot.arg_count = node.arg_count
+    slot.name = node.name
+    slot.text = node.text
+    slot.int_value = node.int_value
+    slot.float_value = node.float_value
+    slot.flags = node.flags
     arena.expr_len += 1
     return arena
 }

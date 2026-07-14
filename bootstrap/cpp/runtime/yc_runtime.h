@@ -29,6 +29,8 @@ int yc_process_run(const char *program, const char *const *args, size_t count);
 char *yc_process_capture(const char *program, const char *const *args, size_t count, int *status);
 int yc_process_run_packed(const char *program, const char *packed_args, size_t packed_size);
 char *yc_process_capture_packed(const char *program, const char *packed_args, size_t packed_size, int *status);
+int yc_native_link(const char *clang, const char *llvm_config, const char *linkflags,
+                   const char *object_file, const char *runtime_object, const char *output_file);
 
 #ifdef __cplusplus
 }

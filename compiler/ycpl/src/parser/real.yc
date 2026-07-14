@@ -4,10 +4,11 @@ import "ast/nodes" as ast
 import "lexer/lexer" as lexer
 import "lexer/token" as tok
 import "std/array" as array
-import "std/fmt" as fmt
 import "std/mem" as mem
 import "std/str" as str
 import "std/text" as text
+
+extern fn c_atoi(text string) i32 as "atoi"
 
 struct AstToken {
     kind i32
@@ -170,10 +171,9 @@ fn builtin_type_kind(name string) i32 {
 }
 
 fn parse_type(p *Parser) *Parser {
-    fmt.println("parse-ast: type begin")
-    owned := false
+    owner_marker := false
     if current(p).kind == tok.kw_owned() {
-        owned = true
+        owner_marker = true
         p = advance(p)
     }
     prefix := 0
@@ -193,7 +193,7 @@ fn parse_type(p *Parser) *Parser {
     }
     p = advance(p)
     flags := 0
-    if owned { flags = ast.flag_owned() }
+    if owner_marker { flags = ast.flag_owned() }
 
     if str.eq(at.text, "Map") && current(p).kind == tok.lt() {
         p = advance(p)
@@ -205,7 +205,6 @@ fn parse_type(p *Parser) *Parser {
         p = expect(p, tok.gt(), "expected '>' after Map type")
         p = add_type(p, ast.make_type(ast.type_map(), at_span(at), "Map", ast.invalid_id(), key, value, flags))
     } else {
-        fmt.println("parse-ast: type add")
         p = add_type(p, ast.make_type(builtin_type_kind(at.text), at_span(at), at.text, ast.invalid_id(), ast.invalid_id(), ast.invalid_id(), flags))
     }
     base := p.type_result
@@ -218,7 +217,6 @@ fn parse_type(p *Parser) *Parser {
         base = p.type_result
     }
     p.type_result = base
-    fmt.println("parse-ast: type done")
     return p
 }
 
@@ -286,6 +284,7 @@ fn parse_primary(p *Parser) *Parser {
         return fail(p, "expected expression")
     }
 
+    primary_id := p.expr_result
     for (; p.ok; ) {
         left := p.expr_result
         suffix := current(p)
@@ -316,8 +315,9 @@ fn parse_primary(p *Parser) *Parser {
         } else if suffix.kind == tok.plusplus() || suffix.kind == tok.minusminus() {
             p = advance(p)
             p = add_expr(p, ast.make_expr(ast.expr_postfix(), at_span(suffix), ast.invalid_id(), left, ast.invalid_id(), 0, 0, "", suffix.text, 0, 0.0, 0))
-        } else if suffix.kind == tok.lbrace() && kind == tok.ident() && (look(p, 1).kind == tok.rbrace() || (look(p, 1).kind == tok.ident() && look(p, 2).kind == tok.colon())) {
+        } else if suffix.kind == tok.lbrace() && kind == tok.ident() && left == primary_id {
             p = advance(p)
+            p = skip_lines(p)
             fields := array.new([]i32, 8)
             for (; p.ok && current(p).kind != tok.rbrace(); ) {
                 field := current(p)
@@ -377,7 +377,6 @@ fn parse_block(p *Parser) *Parser {
     ids := array.new([]i32, 16)
     p = skip_lines(p)
     for (; p.ok && current(p).kind != tok.rbrace() && current(p).kind != tok.eof(); ) {
-        fmt.println("parse-ast: block statement")
         p = parse_statement(p)
         if p.ok { ids = array.append(ids, p.stmt_result) }
         if current(p).kind == tok.semicolon() { p = advance(p) }
@@ -391,21 +390,18 @@ fn parse_block(p *Parser) *Parser {
 }
 
 fn parse_local(p *Parser, is_const bool) *Parser {
-    fmt.println("parse-ast: local")
     name := current(p)
     p = expect(p, tok.ident(), "expected local name")
     type_id := ast.invalid_id()
     if current(p).kind == tok.colon() {
-        fmt.println("parse-ast: local type")
         p = advance(p)
         p = parse_type(p)
         type_id = p.type_result
     }
-    if current(p).kind != tok.assign() || current(p).text[0] != ':' {
+    if current(p).kind != tok.assign() || !str.eq(current(p).text, ":=") {
         return fail(p, "expected ':=' after local")
     }
     p = advance(p)
-    fmt.println("parse-ast: local value")
     p = parse_expression(p, 1)
     flags := 0
     if is_const { flags = ast.flag_const() }
@@ -509,7 +505,6 @@ fn parse_switch(p *Parser) *Parser {
 
 fn parse_statement(p *Parser) *Parser {
     p = skip_lines(p)
-    fmt.println("parse-ast: statement")
     at := current(p)
     if at.kind == tok.kw_return() {
         p = advance(p)
@@ -550,7 +545,7 @@ fn parse_statement(p *Parser) *Parser {
         p = advance(p)
         return parse_local(p, true)
     }
-    if at.kind == tok.ident() && (look(p, 1).kind == tok.colon() || (look(p, 1).kind == tok.assign() && look(p, 1).text[0] == ':')) {
+    if at.kind == tok.ident() && (look(p, 1).kind == tok.colon() || (look(p, 1).kind == tok.assign() && str.eq(look(p, 1).text, ":="))) {
         return parse_local(p, false)
     }
     p = parse_expression(p, 1)
@@ -652,8 +647,7 @@ fn parse_enum(p *Parser, flags i32) *Parser {
             literal := current(p)
             p = expect(p, tok.int_lit(), "expected integer enum value")
             value = 0
-            i := 0
-            for (; i < str.len(literal.text); i++) { value = value * 10 + literal.text[i] - '0' }
+            value = c_atoi(literal.text)
         }
         p.program.arena = ast.add_field(p.program.arena, ast.make_field(at_span(item), item.text, ast.invalid_id(), 0, value))
         count += 1
