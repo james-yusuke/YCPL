@@ -1,0 +1,9 @@
+module c.stdlib
+
+pub extern fn malloc(size size_t) *byte as "malloc"
+pub extern fn calloc(count size_t, size size_t) *byte as "calloc"
+pub extern fn realloc(ptr *byte, size size_t) *byte as "realloc"
+pub extern fn free(ptr *byte) as "free"
+
+pub extern fn getenv(name string) string as "getenv"
+pub extern fn system(command string) i32 as "system"

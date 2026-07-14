@@ -1,0 +1,9 @@
+module c.stdio
+
+pub extern fn fopen(path string, mode string) *byte as "fopen"
+pub extern fn fputs(text string, file *byte) i32 as "fputs"
+pub extern fn fclose(file *byte) i32 as "fclose"
+pub extern fn fgets(buf string, size i32, file *byte) string as "fgets"
+
+pub extern fn popen(command string, mode string) *byte as "popen"
+pub extern fn pclose(file *byte) i32 as "pclose"
