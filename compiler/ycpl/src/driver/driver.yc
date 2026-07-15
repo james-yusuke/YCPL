@@ -4,6 +4,7 @@ import "std/fs" as fs
 import "std/mem" as mem
 import "std/os" as os
 import "std/str" as str
+import "c/yc_runtime" as runtime
 
 pub struct DriverResult {
     ok bool
@@ -321,6 +322,19 @@ fn find_runtime_source() string {
     return ""
 }
 
+fn find_runtime_library() string {
+    explicit := env_or_empty("YCPL_RUNTIME_LIB")
+    if !is_empty(explicit) {
+        return explicit
+    }
+    executable_dir := runtime.executable_dir()
+    if !is_empty(executable_dir) {
+        adjacent := join_path(executable_dir, "libyc_runtime.a")
+        if fs.exists(adjacent) { return adjacent }
+    }
+    return ""
+}
+
 fn run_argv(program string, args ArgList, message string) DriverResult {
     if !args.ok {
         return DriverResult{ok: false, code: 1, message: "failed to allocate compiler arguments", command: program}
@@ -415,10 +429,7 @@ pub fn build_native_from_ir(out_dir string) DriverResult {
     obj_file := join_path(out_dir, "merged.o")
     bin_file := join_path(out_dir, "merged")
     runtime_obj := join_path(out_dir, "yc_runtime.o")
-    runtime_source := find_runtime_source()
-    if is_empty(runtime_source) {
-        return DriverResult{ok: false, code: 1, message: "YCPL runtime source not found; set YCPL_RUNTIME_SRC", command: ""}
-    }
+    runtime_input := find_runtime_library()
 
     args := args_new(4)
     args = args_push(args, "-filetype=obj")
@@ -430,19 +441,26 @@ pub fn build_native_from_ir(out_dir string) DriverResult {
         return result
     }
 
-    args = args_new(5)
-    args = args_push(args, "-std=c11")
-    args = args_push(args, "-c")
-    args = args_push(args, runtime_source)
-    args = args_push(args, "-o")
-    args = args_push(args, runtime_obj)
-    result = run_argv(clang, args, "YCPL runtime compile failed")
-    if !result.ok {
-        return result
+    if is_empty(runtime_input) {
+        runtime_source := find_runtime_source()
+        if is_empty(runtime_source) {
+            return DriverResult{ok: false, code: 1, message: "YCPL runtime not found; set YCPL_RUNTIME_LIB or YCPL_RUNTIME_SRC", command: ""}
+        }
+        args = args_new(5)
+        args = args_push(args, "-std=c11")
+        args = args_push(args, "-c")
+        args = args_push(args, runtime_source)
+        args = args_push(args, "-o")
+        args = args_push(args, runtime_obj)
+        result = run_argv(clang, args, "YCPL runtime compile failed")
+        if !result.ok {
+            return result
+        }
+        runtime_input = runtime_obj
     }
 
     llvm_config := find_llvm_config()
-    code := os.native_link(clang, llvm_config, linkflags, obj_file, runtime_obj, bin_file)
+    code := os.native_link(clang, llvm_config, linkflags, obj_file, runtime_input, bin_file)
     if code != 0 {
         return DriverResult{ok: false, code: code, message: "clang link failed", command: clang}
     }

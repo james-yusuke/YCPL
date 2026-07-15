@@ -66,6 +66,13 @@ cc_binary(
     ],
 )
 
+# Stable stage-0 name. `ycc` remains pointed at it only until the stage3
+# promotion at the end of the self-host transition.
+alias(
+    name = "ycc-bootstrap",
+    actual = ":ycc",
+)
+
 cc_binary(
     name = "ycc_legacy",
     srcs = ["bootstrap/cpp/src/main.cpp"],

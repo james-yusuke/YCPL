@@ -25,6 +25,8 @@ size_t yc_runtime_live_allocations(void);
 
 /* Portable compiler support. Returned text is managed by the YCPL runtime. */
 char *yc_fs_find_yc_files(const char *root);
+char *yc_fs_find_yc_files_in(const char *root);
+char *yc_executable_dir(void);
 int yc_process_run(const char *program, const char *const *args, size_t count);
 char *yc_process_capture(const char *program, const char *const *args, size_t count, int *status);
 int yc_process_run_packed(const char *program, const char *packed_args, size_t packed_size);
