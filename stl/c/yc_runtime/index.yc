@@ -1,0 +1,7 @@
+module c.yc_runtime
+
+// Raw compiler-support entry points supplied by the existing YCPL C runtime.
+// Higher-level project discovery and diagnostics live in the compiler.
+pub extern fn find_yc_files(root string) string as "yc_fs_find_yc_files"
+pub extern fn find_yc_files_in(root string) string as "yc_fs_find_yc_files_in"
+pub extern fn executable_dir() string as "yc_executable_dir"

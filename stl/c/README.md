@@ -11,6 +11,7 @@ c/
 ├─ math     pow, sin, cos, sqrt
 ├─ unistd   close, read, write
 ├─ fcntl    open
+├─ yc_runtime compiler-support source traversal
 └─ sys/stat mkdir
 ```
 

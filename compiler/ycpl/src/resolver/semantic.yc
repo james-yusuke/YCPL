@@ -1,0 +1,357 @@
+module compiler.ycpl.resolver.semantic
+
+import "ast/nodes" as ast
+import "ast/project" as project
+import "std/mem" as mem
+import "std/str" as str
+import "std/text" as text
+
+pub struct SymbolRef {
+    file_id i32
+    node_id i32
+}
+
+pub struct Symbol {
+    id i32
+    kind i32
+    file_id i32
+    node_id i32
+    name string
+    module_name string
+    import_path string
+    link_name string
+    flags i32
+    type_file i32
+    type_id i32
+}
+
+pub struct ImportBinding {
+    file_id i32
+    decl_id i32
+    alias string
+    path string
+    target_file i32
+}
+
+pub struct SemanticProject {
+    ok bool
+    file string
+    line i32
+    col i32
+    message string
+    syntax ProjectAstResult
+    symbols *Symbol
+    symbol_len i32
+    symbol_cap i32
+    imports *ImportBinding
+    import_len i32
+    import_cap i32
+}
+
+fn has_flag(flags i32, flag i32) bool {
+    return (flags / flag) % 2 == 1
+}
+
+fn fail(result SemanticProject, file string, line i32, col i32, message string) SemanticProject {
+    result.ok = false
+    result.file = file
+    result.line = line
+    result.col = col
+    result.message = message
+    return result
+}
+
+fn sanitize(value string) string {
+    n := str.len(value)
+    out: string := mem.calloc(n * 2 + 1, 1)
+    if out == none { return none }
+    at := 0
+    i := 0
+    for (; i < n; i++) {
+        ch := value[i]
+        alpha := (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z')
+        digit := ch >= '0' && ch <= '9'
+        if alpha || digit || ch == '_' {
+            out[at] = ch
+            at += 1
+        } else {
+            out[at] = '_'
+            out[at + 1] = '_'
+            at += 2
+        }
+    }
+    return out
+}
+
+fn mangle(module_name string, name string, flags i32, explicit_link string) string {
+    if has_flag(flags, ast.flag_extern()) {
+        if str.len(explicit_link) > 0 { return explicit_link }
+        return name
+    }
+    if has_flag(flags, ast.flag_intrinsic()) {
+        return text.concat3("__YCPL_", sanitize(module_name), text.concat3("_", name, ""))
+    }
+    if str.eq(name, "main") { return "main" }
+    return text.concat3(sanitize(module_name), "__", name)
+}
+
+fn default_module(program ProgramAst, import_path string) string {
+    if str.len(program.module_name) > 0 { return program.module_name }
+    return sanitize(import_path)
+}
+
+fn grow_symbols(result SemanticProject) SemanticProject {
+    if result.symbol_len < result.symbol_cap { return result }
+    next_cap := result.symbol_cap * 2
+    if next_cap < 64 { next_cap = 64 }
+    next: *Symbol := mem.realloc(result.symbols, next_cap * mem.sizeof(Symbol))
+    if next == none { return fail(result, "", 1, 1, "failed to grow symbol arena") }
+    result.symbols = mem.keep(next)
+    result.symbol_cap = next_cap
+    return result
+}
+
+pub fn symbol_at(result SemanticProject, symbol_id i32) *Symbol {
+    if symbol_id < 0 || symbol_id >= result.symbol_len || result.symbols == none { return none }
+    return result.symbols + symbol_id
+}
+
+pub fn find_in_module(result SemanticProject, module_name string, name string) i32 {
+    i := 0
+    for (; i < result.symbol_len; i++) {
+        symbol: *Symbol := result.symbols + i
+        if str.eq(symbol.module_name, module_name) && str.eq(symbol.name, name) { return i }
+    }
+    return ast.invalid_id()
+}
+
+fn find_type_in_module(result SemanticProject, module_name string, name string) i32 {
+    i := 0
+    for (; i < result.symbol_len; i++) {
+        symbol: *Symbol := result.symbols + i
+        is_type := symbol.kind == ast.decl_struct() || symbol.kind == ast.decl_enum() || symbol.kind == ast.decl_alias()
+        if is_type && str.eq(symbol.module_name, module_name) && str.eq(symbol.name, name) { return i }
+    }
+    return ast.invalid_id()
+}
+
+fn find_imported_type(result SemanticProject, file_id i32, name string) i32 {
+    import_id := 0
+    for (; import_id < result.import_len; import_id++) {
+        binding: *ImportBinding := result.imports + import_id
+        if binding.file_id == file_id {
+            symbol_id := 0
+            for (; symbol_id < result.symbol_len; symbol_id++) {
+                symbol: *Symbol := result.symbols + symbol_id
+                is_type := symbol.kind == ast.decl_struct() || symbol.kind == ast.decl_enum() || symbol.kind == ast.decl_alias()
+                if is_type && str.eq(symbol.import_path, binding.path) && str.eq(symbol.name, name) {
+                    return symbol_id
+                }
+            }
+        }
+    }
+    return ast.invalid_id()
+}
+
+pub fn find_by_import(result SemanticProject, import_path string, name string) i32 {
+    i := 0
+    for (; i < result.symbol_len; i++) {
+        symbol: *Symbol := result.symbols + i
+        if str.eq(symbol.import_path, import_path) && str.eq(symbol.name, name) { return i }
+    }
+    return ast.invalid_id()
+}
+
+fn default_alias(path string) string {
+    n := str.len(path)
+    start := 0
+    i := 0
+    for (; i < n; i++) {
+        if path[i] == '/' || path[i] == '.' { start = i + 1 }
+    }
+    count := n - start
+    out: string := mem.calloc(count + 1, 1)
+    if out != none && count > 0 { mem.copy(out, path + start, count) }
+    return out
+}
+
+fn target_file_for_path(syntax ProjectAstResult, path string) i32 {
+    i := 0
+    for (; i < syntax.files; i++) {
+        if str.eq(project.import_path_at(syntax, i), path) { return i }
+    }
+    return ast.invalid_id()
+}
+
+fn grow_imports(result SemanticProject) SemanticProject {
+    if result.import_len < result.import_cap { return result }
+    next_cap := result.import_cap * 2
+    if next_cap < 32 { next_cap = 32 }
+    next: *ImportBinding := mem.realloc(result.imports, next_cap * mem.sizeof(ImportBinding))
+    if next == none { return fail(result, "", 1, 1, "failed to grow import arena") }
+    result.imports = mem.keep(next)
+    result.import_cap = next_cap
+    return result
+}
+
+fn collect_import(result SemanticProject, file_id i32, program ProgramAst, decl_id i32) SemanticProject {
+    decl: *DeclNode := program.arena.decls + decl_id
+    alias := decl.name
+    if str.len(alias) == 0 { alias = default_alias(decl.link_name) }
+    i := 0
+    for (; i < result.import_len; i++) {
+        binding: *ImportBinding := result.imports + i
+        if binding.file_id == file_id && str.eq(binding.alias, alias) {
+            return fail(result, project.path_at(result.syntax, file_id), decl.span.line, decl.span.col, "duplicate import alias")
+        }
+    }
+    target := target_file_for_path(result.syntax, decl.link_name)
+    if target == ast.invalid_id() {
+        return fail(result, project.path_at(result.syntax, file_id), decl.span.line, decl.span.col, "module not found")
+    }
+    result = grow_imports(result)
+    if !result.ok { return result }
+    slot: *ImportBinding := result.imports + result.import_len
+    slot.file_id = file_id
+    slot.decl_id = decl_id
+    slot.alias = mem.keep(alias)
+    slot.path = mem.keep(decl.link_name)
+    slot.target_file = target
+    decl.resolved_file = target
+    decl.resolved_id = 0
+    result.import_len += 1
+    return result
+}
+
+pub fn import_for_alias(result SemanticProject, file_id i32, alias string) *ImportBinding {
+    i := 0
+    for (; i < result.import_len; i++) {
+        binding: *ImportBinding := result.imports + i
+        if binding.file_id == file_id && str.eq(binding.alias, alias) { return binding }
+    }
+    return none
+}
+
+fn add_symbol(result SemanticProject, file_id i32, file_path string, import_path string, program ProgramAst, decl_id i32) SemanticProject {
+    decl: *DeclNode := program.arena.decls + decl_id
+    module_name: string := default_module(program, import_path)
+    duplicate := find_in_module(result, module_name, decl.name)
+    if duplicate != ast.invalid_id() {
+        return fail(result, file_path, decl.span.line, decl.span.col, "duplicate declaration")
+    }
+    if has_flag(decl.flags, ast.flag_extern()) && has_flag(decl.flags, ast.flag_intrinsic()) {
+        return fail(result, file_path, decl.span.line, decl.span.col, "function cannot be both extern and intrinsic")
+    }
+    if has_flag(decl.flags, ast.flag_intrinsic()) {
+        if str.len(module_name) < 3 || module_name[0] != 's' || module_name[1] != 't' || module_name[2] != 'd' {
+            return fail(result, file_path, decl.span.line, decl.span.col, "intrinsic functions are only allowed in std modules")
+        }
+    }
+    if (has_flag(decl.flags, ast.flag_extern()) || has_flag(decl.flags, ast.flag_intrinsic())) && decl.body != ast.invalid_id() {
+        return fail(result, file_path, decl.span.line, decl.span.col, "extern or intrinsic function cannot have a body")
+    }
+
+    result = grow_symbols(result)
+    if !result.ok { return result }
+    id := result.symbol_len
+    slot: *Symbol := result.symbols + id
+    slot.id = id
+    slot.kind = decl.kind
+    slot.file_id = file_id
+    slot.node_id = decl_id
+    slot.name = mem.keep(decl.name)
+    slot.module_name = mem.keep(module_name)
+    slot.import_path = mem.keep(import_path)
+    slot.link_name = mem.keep(mangle(module_name, decl.name, decl.flags, decl.link_name))
+    slot.flags = decl.flags
+    slot.type_file = file_id
+    slot.type_id = decl.type_id
+    decl.module_name = module_name
+    decl.link_name = slot.link_name
+    result.symbol_len += 1
+    return result
+}
+
+pub fn collect(syntax ProjectAstResult) SemanticProject {
+    cap := syntax.decls
+    if cap < 64 { cap = 64 }
+    storage: *Symbol := mem.calloc(cap, mem.sizeof(Symbol))
+    import_cap := syntax.imports
+    if import_cap < 32 { import_cap = 32 }
+    import_storage: *ImportBinding := mem.calloc(import_cap, mem.sizeof(ImportBinding))
+    result := SemanticProject{ok: storage != none && import_storage != none, file: "", line: 1, col: 1, message: "", syntax: syntax, symbols: storage, symbol_len: 0, symbol_cap: cap, imports: import_storage, import_len: 0, import_cap: import_cap}
+    if storage == none || import_storage == none { return fail(result, "", 1, 1, "failed to allocate semantic arenas") }
+    result.symbols = mem.keep(storage)
+    result.imports = mem.keep(import_storage)
+
+    file_id := 0
+    for (; file_id < syntax.files; file_id++) {
+        program: ProgramAst := project.program_at(syntax, file_id)
+        file_path := project.path_at(syntax, file_id)
+        import_path := project.import_path_at(syntax, file_id)
+        decl_id := 0
+        for (; decl_id < program.arena.decl_len; decl_id++) {
+            decl: *DeclNode := program.arena.decls + decl_id
+            if decl.kind != ast.decl_import() {
+                result = add_symbol(result, file_id, file_path, import_path, program, decl_id)
+                if !result.ok { return result }
+            }
+        }
+    }
+    return result
+}
+
+pub fn resolve_imports(result SemanticProject) SemanticProject {
+    file_id := 0
+    for (; file_id < result.syntax.files; file_id++) {
+        program: ProgramAst := project.program_at(result.syntax, file_id)
+        decl_id := 0
+        for (; decl_id < program.arena.decl_len; decl_id++) {
+            decl: *DeclNode := program.arena.decls + decl_id
+            if decl.kind == ast.decl_import() {
+                result = collect_import(result, file_id, program, decl_id)
+                if !result.ok { return result }
+            }
+        }
+    }
+    return result
+}
+
+pub fn resolve_types(result SemanticProject) SemanticProject {
+    file_id := 0
+    for (; file_id < result.syntax.files; file_id++) {
+        program: ProgramAst := project.program_at(result.syntax, file_id)
+        module_name: string := default_module(program, project.import_path_at(result.syntax, file_id))
+        type_id := 0
+        for (; type_id < program.arena.type_len; type_id++) {
+            node: *TypeNode := program.arena.types + type_id
+            if node.kind == ast.type_named() {
+                symbol_id := find_type_in_module(result, module_name, node.name)
+                if symbol_id == ast.invalid_id() {
+                    symbol_id = find_imported_type(result, file_id, node.name)
+                }
+                if symbol_id == ast.invalid_id() {
+                    return fail(result, project.path_at(result.syntax, file_id), node.span.line, node.span.col, "unknown type")
+                }
+                symbol: *Symbol := symbol_at(result, symbol_id)
+                node.resolved_file = symbol.file_id
+                node.resolved_id = symbol.node_id
+            }
+        }
+    }
+    return result
+}
+
+pub fn load(root string, stl_root string) SemanticProject {
+    syntax := project.parse_compilation(root, stl_root)
+    if !syntax.ok {
+        empty: *Symbol := none
+        empty_imports: *ImportBinding := none
+        return SemanticProject{ok: false, file: syntax.file, line: syntax.line, col: syntax.col, message: syntax.message, syntax: syntax, symbols: empty, symbol_len: 0, symbol_cap: 0, imports: empty_imports, import_len: 0, import_cap: 0}
+    }
+    result := collect(syntax)
+    if !result.ok { return result }
+    result = resolve_imports(result)
+    if !result.ok { return result }
+    return resolve_types(result)
+}

@@ -20,6 +20,9 @@ pub fn type_slice() i32 { return 12 }
 pub fn type_map() i32 { return 13 }
 pub fn type_named() i32 { return 14 }
 pub fn type_none() i32 { return 15 }
+pub fn type_any() i32 { return 16 }
+pub fn type_meta() i32 { return 17 }
+pub fn type_generic() i32 { return 18 }
 
 pub fn decl_import() i32 { return 1 }
 pub fn decl_function() i32 { return 2 }
@@ -57,6 +60,7 @@ pub fn expr_array() i32 { return 13 }
 pub fn expr_struct() i32 { return 14 }
 pub fn expr_type() i32 { return 15 }
 pub fn expr_postfix() i32 { return 16 }
+pub fn expr_cast() i32 { return 17 }
 
 pub fn flag_public() i32 { return 1 }
 pub fn flag_extern() i32 { return 2 }
@@ -81,6 +85,8 @@ pub struct TypeNode {
     key i32
     value i32
     flags i32
+    resolved_file i32
+    resolved_id i32
 }
 
 pub struct ParamNode {
@@ -111,6 +117,8 @@ pub struct DeclNode {
     first_field i32
     field_count i32
     flags i32
+    resolved_file i32
+    resolved_id i32
 }
 
 pub struct StmtNode {
@@ -124,6 +132,8 @@ pub struct StmtNode {
     name string
     op string
     flags i32
+    symbol_file i32
+    symbol_id i32
 }
 
 pub struct ExprNode {
@@ -139,6 +149,9 @@ pub struct ExprNode {
     int_value i64
     float_value double
     flags i32
+    type_file i32
+    symbol_file i32
+    symbol_id i32
 }
 
 pub struct AstArena {
@@ -168,6 +181,7 @@ pub struct ProgramAst {
     message string
     error_line i32
     error_col i32
+    file_id i32
     file string
     module_name string
     arena AstArena
@@ -183,7 +197,7 @@ pub fn empty_span() Span {
 }
 
 pub fn make_type(kind i32, at Span, name string, base i32, key i32, value i32, flags i32) TypeNode {
-    return TypeNode{kind: kind, span: at, name: name, base: base, key: key, value: value, flags: flags}
+    return TypeNode{kind: kind, span: at, name: name, base: base, key: key, value: value, flags: flags, resolved_file: invalid_id(), resolved_id: invalid_id()}
 }
 
 pub fn make_param(at Span, name string, type_id i32, flags i32) ParamNode {
@@ -195,15 +209,15 @@ pub fn make_field(at Span, name string, type_id i32, flags i32, value i64) Field
 }
 
 pub fn make_decl(kind i32, at Span, name string, module_name string, link_name string, type_id i32, body i32, first_param i32, param_count i32, first_field i32, field_count i32, flags i32) DeclNode {
-    return DeclNode{kind: kind, span: at, name: name, module_name: module_name, link_name: link_name, type_id: type_id, body: body, first_param: first_param, param_count: param_count, first_field: first_field, field_count: field_count, flags: flags}
+    return DeclNode{kind: kind, span: at, name: name, module_name: module_name, link_name: link_name, type_id: type_id, body: body, first_param: first_param, param_count: param_count, first_field: first_field, field_count: field_count, flags: flags, resolved_file: invalid_id(), resolved_id: invalid_id()}
 }
 
 pub fn make_stmt(kind i32, at Span, first_child i32, child_count i32, a i32, b i32, c i32, name string, op string, flags i32) StmtNode {
-    return StmtNode{kind: kind, span: at, first_child: first_child, child_count: child_count, a: a, b: b, c: c, name: name, op: op, flags: flags}
+    return StmtNode{kind: kind, span: at, first_child: first_child, child_count: child_count, a: a, b: b, c: c, name: name, op: op, flags: flags, symbol_file: invalid_id(), symbol_id: invalid_id()}
 }
 
 pub fn make_expr(kind i32, at Span, type_id i32, left i32, right i32, first_arg i32, arg_count i32, name string, text string, int_value i64, float_value double, flags i32) ExprNode {
-    return ExprNode{kind: kind, span: at, type_id: type_id, left: left, right: right, first_arg: first_arg, arg_count: arg_count, name: name, text: text, int_value: int_value, float_value: float_value, flags: flags}
+    return ExprNode{kind: kind, span: at, type_id: type_id, left: left, right: right, first_arg: first_arg, arg_count: arg_count, name: name, text: text, int_value: int_value, float_value: float_value, flags: flags, type_file: invalid_id(), symbol_file: invalid_id(), symbol_id: invalid_id()}
 }
 
 pub fn arena_new() AstArena {
@@ -228,7 +242,7 @@ pub fn arena_new() AstArena {
 }
 
 pub fn program_new(file string) ProgramAst {
-    return ProgramAst{ok: true, message: "", error_line: 1, error_col: 1, file: file, module_name: "", arena: arena_new(), root_decls: array.new([]i32, 32)}
+    return ProgramAst{ok: true, message: "", error_line: 1, error_col: 1, file_id: 0, file: file, module_name: "", arena: arena_new(), root_decls: array.new([]i32, 32)}
 }
 
 pub fn add_type(arena AstArena, node TypeNode) AstArena {
@@ -237,6 +251,7 @@ pub fn add_type(arena AstArena, node TypeNode) AstArena {
         arena.types = mem.realloc(arena.types, arena.type_cap * mem.sizeof(TypeNode))
     }
     arena.types = mem.keep(arena.types)
+    if node.name != none { node.name = mem.keep(node.name) }
     // Do not copy a struct through `*T[index]`: that was interpreted as a
     // dynamic-array access by older bootstrap codegen paths.  Field stores via
     // a typed pointer are both ABI-correct and the representation needed by
@@ -249,6 +264,8 @@ pub fn add_type(arena AstArena, node TypeNode) AstArena {
     slot.key = node.key
     slot.value = node.value
     slot.flags = node.flags
+    slot.resolved_file = node.resolved_file
+    slot.resolved_id = node.resolved_id
     arena.type_len += 1
     return arena
 }
@@ -259,6 +276,7 @@ pub fn add_param(arena AstArena, node ParamNode) AstArena {
         arena.params = mem.realloc(arena.params, arena.param_cap * mem.sizeof(ParamNode))
     }
     arena.params = mem.keep(arena.params)
+    if node.name != none { node.name = mem.keep(node.name) }
     slot: *ParamNode := arena.params + arena.param_len
     slot.span = node.span
     slot.name = node.name
@@ -274,6 +292,7 @@ pub fn add_field(arena AstArena, node FieldNode) AstArena {
         arena.fields = mem.realloc(arena.fields, arena.field_cap * mem.sizeof(FieldNode))
     }
     arena.fields = mem.keep(arena.fields)
+    if node.name != none { node.name = mem.keep(node.name) }
     slot: *FieldNode := arena.fields + arena.field_len
     slot.span = node.span
     slot.name = node.name
@@ -290,6 +309,9 @@ pub fn add_decl(arena AstArena, node DeclNode) AstArena {
         arena.decls = mem.realloc(arena.decls, arena.decl_cap * mem.sizeof(DeclNode))
     }
     arena.decls = mem.keep(arena.decls)
+    if node.name != none { node.name = mem.keep(node.name) }
+    if node.module_name != none { node.module_name = mem.keep(node.module_name) }
+    if node.link_name != none { node.link_name = mem.keep(node.link_name) }
     slot: *DeclNode := arena.decls + arena.decl_len
     slot.kind = node.kind
     slot.span = node.span
@@ -303,6 +325,8 @@ pub fn add_decl(arena AstArena, node DeclNode) AstArena {
     slot.first_field = node.first_field
     slot.field_count = node.field_count
     slot.flags = node.flags
+    slot.resolved_file = node.resolved_file
+    slot.resolved_id = node.resolved_id
     arena.decl_len += 1
     return arena
 }
@@ -313,6 +337,8 @@ pub fn add_stmt(arena AstArena, node StmtNode) AstArena {
         arena.stmts = mem.realloc(arena.stmts, arena.stmt_cap * mem.sizeof(StmtNode))
     }
     arena.stmts = mem.keep(arena.stmts)
+    if node.name != none { node.name = mem.keep(node.name) }
+    if node.op != none { node.op = mem.keep(node.op) }
     slot: *StmtNode := arena.stmts + arena.stmt_len
     slot.kind = node.kind
     slot.span = node.span
@@ -324,6 +350,8 @@ pub fn add_stmt(arena AstArena, node StmtNode) AstArena {
     slot.name = node.name
     slot.op = node.op
     slot.flags = node.flags
+    slot.symbol_file = node.symbol_file
+    slot.symbol_id = node.symbol_id
     arena.stmt_len += 1
     return arena
 }
@@ -334,6 +362,8 @@ pub fn add_expr(arena AstArena, node ExprNode) AstArena {
         arena.exprs = mem.realloc(arena.exprs, arena.expr_cap * mem.sizeof(ExprNode))
     }
     arena.exprs = mem.keep(arena.exprs)
+    if node.name != none { node.name = mem.keep(node.name) }
+    if node.text != none { node.text = mem.keep(node.text) }
     slot: *ExprNode := arena.exprs + arena.expr_len
     slot.kind = node.kind
     slot.span = node.span
@@ -347,6 +377,9 @@ pub fn add_expr(arena AstArena, node ExprNode) AstArena {
     slot.int_value = node.int_value
     slot.float_value = node.float_value
     slot.flags = node.flags
+    slot.type_file = node.type_file
+    slot.symbol_file = node.symbol_file
+    slot.symbol_id = node.symbol_id
     arena.expr_len += 1
     return arena
 }
@@ -363,3 +396,41 @@ pub fn decl_count(arena AstArena) i32 { return arena.decl_len }
 pub fn stmt_count(arena AstArena) i32 { return arena.stmt_len }
 pub fn expr_count(arena AstArena) i32 { return arena.expr_len }
 pub fn child_count(arena AstArena) i32 { return array.len(arena.children) }
+
+// Assign a stable project file id after parsing. The parser can stay focused
+// on syntax while every retained span and cross-file reference uses the same
+// project-local identity.
+pub fn assign_file_id(program ProgramAst, file_id i32) ProgramAst {
+    program.file_id = file_id
+    i := 0
+    for (; i < program.arena.type_len; i++) {
+        node: *TypeNode := program.arena.types + i
+        node.span.file = file_id
+    }
+    i = 0
+    for (; i < program.arena.param_len; i++) {
+        node: *ParamNode := program.arena.params + i
+        node.span.file = file_id
+    }
+    i = 0
+    for (; i < program.arena.field_len; i++) {
+        node: *FieldNode := program.arena.fields + i
+        node.span.file = file_id
+    }
+    i = 0
+    for (; i < program.arena.decl_len; i++) {
+        node: *DeclNode := program.arena.decls + i
+        node.span.file = file_id
+    }
+    i = 0
+    for (; i < program.arena.stmt_len; i++) {
+        node: *StmtNode := program.arena.stmts + i
+        node.span.file = file_id
+    }
+    i = 0
+    for (; i < program.arena.expr_len; i++) {
+        node: *ExprNode := program.arena.exprs + i
+        node.span.file = file_id
+    }
+    return program
+}

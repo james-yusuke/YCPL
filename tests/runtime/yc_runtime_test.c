@@ -73,11 +73,13 @@ static void test_portable_compiler_support(void) {
     char nested[304];
     char first[336];
     char second[336];
+    char cycle[336];
     snprintf(root, sizeof(root), "/tmp/yc_runtime_test_%ld", (long)getpid());
     snprintf(src, sizeof(src), "%s/src", root);
     snprintf(nested, sizeof(nested), "%s/nested", src);
     snprintf(first, sizeof(first), "%s/a.yc", src);
     snprintf(second, sizeof(second), "%s/b.yc", nested);
+    snprintf(cycle, sizeof(cycle), "%s/cycle", nested);
 
     assert(mkdir(root, 0700) == 0);
     assert(mkdir(src, 0700) == 0);
@@ -90,6 +92,7 @@ static void test_portable_compiler_support(void) {
     assert(file != NULL);
     fputs("fn a() {}\n", file);
     fclose(file);
+    assert(symlink(src, cycle) == 0);
 
     yc_runtime_init();
     yc_frame_push();
@@ -98,6 +101,12 @@ static void test_portable_compiler_support(void) {
     char expected[700];
     snprintf(expected, sizeof(expected), "%s\n%s\n", first, second);
     assert(strcmp(files, expected) == 0);
+    char *files_in = yc_fs_find_yc_files_in(src);
+    assert(files_in != NULL);
+    assert(strcmp(files_in, expected) == 0);
+    char *executable_dir = yc_executable_dir();
+    assert(executable_dir != NULL);
+    assert(executable_dir[0] != '\0');
 
     const char *capture_args[] = {"YCPL"};
     int status = -1;
@@ -125,6 +134,7 @@ static void test_portable_compiler_support(void) {
     assert(yc_runtime_live_allocations() == 0);
     yc_runtime_shutdown();
 
+    assert(unlink(cycle) == 0);
     assert(unlink(first) == 0);
     assert(unlink(second) == 0);
     assert(rmdir(nested) == 0);

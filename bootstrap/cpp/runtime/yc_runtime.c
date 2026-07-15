@@ -12,6 +12,10 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
+#if defined(__APPLE__)
+#include <mach-o/dyld.h>
+#endif
+
 #define YC_ALLOC_MAGIC ((uint64_t)0x5943504c52544d45ULL)
 
 typedef struct YcAllocHeader {
@@ -523,6 +527,17 @@ typedef struct YcPathList {
     size_t cap;
 } YcPathList;
 
+typedef struct YcVisitedDirectory {
+    dev_t device;
+    ino_t inode;
+} YcVisitedDirectory;
+
+typedef struct YcVisitedDirectoryList {
+    YcVisitedDirectory *items;
+    size_t len;
+    size_t cap;
+} YcVisitedDirectoryList;
+
 static int yc_path_list_push(YcPathList *list, const char *path) {
     if (list->len == list->cap) {
         size_t next_cap = list->cap == 0 ? 32 : list->cap * 2;
@@ -548,7 +563,44 @@ static int yc_has_yc_extension(const char *path) {
     return len >= 3 && path[len - 3] == '.' && path[len - 2] == 'y' && path[len - 1] == 'c';
 }
 
-static int yc_collect_yc_paths(const char *dir, YcPathList *list) {
+static int yc_mark_directory_visited(YcVisitedDirectoryList *visited, const struct stat *info) {
+    for (size_t i = 0; i < visited->len; ++i) {
+        if (visited->items[i].device == info->st_dev && visited->items[i].inode == info->st_ino) {
+            return 0;
+        }
+    }
+
+    if (visited->len == visited->cap) {
+        size_t next_cap = visited->cap == 0 ? 32 : visited->cap * 2;
+        YcVisitedDirectory *next = (YcVisitedDirectory *)realloc(
+            visited->items, next_cap * sizeof(YcVisitedDirectory));
+        if (!next) {
+            return -1;
+        }
+        visited->items = next;
+        visited->cap = next_cap;
+    }
+
+    visited->items[visited->len].device = info->st_dev;
+    visited->items[visited->len].inode = info->st_ino;
+    visited->len++;
+    return 1;
+}
+
+static int yc_collect_yc_paths(const char *dir, YcPathList *list, YcVisitedDirectoryList *visited) {
+    struct stat dir_info;
+    if (stat(dir, &dir_info) != 0 || !S_ISDIR(dir_info.st_mode)) {
+        return 0;
+    }
+
+    int visit_result = yc_mark_directory_visited(visited, &dir_info);
+    if (visit_result < 0) {
+        return 0;
+    }
+    if (visit_result == 0) {
+        return 1;
+    }
+
     DIR *handle = opendir(dir);
     if (!handle) {
         return 0;
@@ -578,9 +630,11 @@ static int yc_collect_yc_paths(const char *dir, YcPathList *list) {
         memcpy(path + at, entry->d_name, name_len + 1);
 
         struct stat info;
-        if (lstat(path, &info) == 0) {
+        /* Follow Bazel runfile links while the visited inode set prevents
+           recursive directory symlink cycles. */
+        if (stat(path, &info) == 0) {
             if (S_ISDIR(info.st_mode)) {
-                if (!yc_collect_yc_paths(path, list)) {
+                if (!yc_collect_yc_paths(path, list, visited)) {
                     ok = 0;
                 }
             } else if (S_ISREG(info.st_mode) && yc_has_yc_extension(path)) {
@@ -604,29 +658,11 @@ static int yc_compare_paths(const void *left, const void *right) {
     return strcmp(*a, *b);
 }
 
-char *yc_fs_find_yc_files(const char *root) {
-    if (!root) {
-        return NULL;
-    }
-
-    size_t root_len = strlen(root);
-    const char suffix[] = "/src";
-    int has_src_suffix = root_len >= 4 && strcmp(root + root_len - 4, suffix) == 0;
-    size_t start_len = root_len + (has_src_suffix ? 0 : sizeof(suffix) - 1);
-    char *start = (char *)malloc(start_len + 1);
-    if (!start) {
-        return NULL;
-    }
-    memcpy(start, root, root_len);
-    if (!has_src_suffix) {
-        memcpy(start + root_len, suffix, sizeof(suffix));
-    } else {
-        start[root_len] = '\0';
-    }
-
+static char *yc_fs_collect_yc_files(const char *start) {
     YcPathList list = {0};
-    int ok = yc_collect_yc_paths(start, &list);
-    free(start);
+    YcVisitedDirectoryList visited = {0};
+    int ok = yc_collect_yc_paths(start, &list, &visited);
+    free(visited.items);
     if (!ok) {
         for (size_t i = 0; i < list.len; ++i) {
             free(list.items[i]);
@@ -669,6 +705,74 @@ char *yc_fs_find_yc_files(const char *root) {
     output[at] = '\0';
     free(list.items);
     return output;
+}
+
+char *yc_fs_find_yc_files_in(const char *root) {
+    if (!root) {
+        return NULL;
+    }
+    return yc_fs_collect_yc_files(root);
+}
+
+char *yc_fs_find_yc_files(const char *root) {
+    if (!root) {
+        return NULL;
+    }
+
+    size_t root_len = strlen(root);
+    const char suffix[] = "/src";
+    int has_src_suffix = root_len >= 4 && strcmp(root + root_len - 4, suffix) == 0;
+    size_t start_len = root_len + (has_src_suffix ? 0 : sizeof(suffix) - 1);
+    char *start = (char *)malloc(start_len + 1);
+    if (!start) {
+        return NULL;
+    }
+    memcpy(start, root, root_len);
+    if (!has_src_suffix) {
+        memcpy(start + root_len, suffix, sizeof(suffix));
+    } else {
+        start[root_len] = '\0';
+    }
+    char *result = yc_fs_collect_yc_files(start);
+    free(start);
+    return result;
+}
+
+char *yc_executable_dir(void) {
+    char buffer[4096];
+    size_t length = 0;
+#if defined(__APPLE__)
+    uint32_t size = (uint32_t)sizeof(buffer);
+    if (_NSGetExecutablePath(buffer, &size) != 0) {
+        return NULL;
+    }
+    length = strlen(buffer);
+#elif defined(__linux__)
+    ssize_t got = readlink("/proc/self/exe", buffer, sizeof(buffer) - 1);
+    if (got <= 0) {
+        return NULL;
+    }
+    length = (size_t)got;
+    buffer[length] = '\0';
+#else
+    return NULL;
+#endif
+    while (length > 0 && buffer[length - 1] != '/') {
+        length--;
+    }
+    if (length == 0) {
+        return yc_keep_string(".");
+    }
+    while (length > 1 && buffer[length - 1] == '/') {
+        length--;
+    }
+    char *out = (char *)yc_alloc(length + 1);
+    if (!out) {
+        return NULL;
+    }
+    memcpy(out, buffer, length);
+    out[length] = '\0';
+    return out;
 }
 
 static char **yc_make_argv(const char *program, const char *const *args, size_t count) {
