@@ -400,8 +400,8 @@ expect_failure tests/fixtures/negative/41_unclosed_string_failure.yc "unterminat
 expect_failure tests/fixtures/negative/42_unclosed_comment_failure.yc "unclosed block comment"
 expect_failure tests/fixtures/negative/43_invalid_char_failure.yc "invalid char literal"
 expect_failure tests/fixtures/negative/44_unexpected_eof_failure.yc "expected '}' to end block"
-expect_failure tests/fixtures/negative/47_malformed_call_failure.yc "unclosed parenthesis"
-expect_failure tests/fixtures/negative/51_malformed_struct_literal_failure.yc "expected '}' to end block"
+expect_failure tests/fixtures/negative/47_malformed_call_failure.yc "expected ')' in call"
+expect_failure tests/fixtures/negative/51_malformed_struct_literal_failure.yc "expected '}' to close struct literal"
 expect_failure tests/fixtures/negative/52_misplaced_else_failure.yc "misplaced else"
 
 work_dir="$(mktemp -d "${TMPDIR:-/tmp}/ycpl-selfhost.XXXXXX")"

@@ -4,12 +4,19 @@ import "ast/nodes" as ast
 import "parser/parser" as parser
 import "resolver/resolver" as resolver
 import "source/source" as source
+import "c/yc_runtime" as runtime
+import "std/mem" as mem
+import "std/str" as str
 
-// This is deliberately a streaming project parser for the first migration
-// step. Each file is parsed into the real typed arena, then the project keeps
-// AST-derived totals and a stable digest. Resolver/checker will consume the
-// same per-file ProgramAst representation next, without returning to the old
-// token-summary parser.
+pub struct ProjectFile {
+    id i32
+    path string
+    relative_path string
+    import_path string
+    module_name string
+    program ProgramAst
+}
+
 pub struct ProjectAstResult {
     ok bool
     file string
@@ -29,10 +36,94 @@ pub struct ProjectAstResult {
     enums i32
     aliases i32
     digest i32
+    file_nodes *ProjectFile
+    file_cap i32
 }
 
 fn fail(file string, line i32, col i32, message string) ProjectAstResult {
-    return ProjectAstResult{ok: false, file: file, message: message, line: line, col: col, files: 0, decls: 0, types: 0, stmts: 0, exprs: 0, fields: 0, params: 0, imports: 0, functions: 0, structs: 0, enums: 0, aliases: 0, digest: 17}
+    return ProjectAstResult{ok: false, file: file, message: message, line: line, col: col, files: 0, decls: 0, types: 0, stmts: 0, exprs: 0, fields: 0, params: 0, imports: 0, functions: 0, structs: 0, enums: 0, aliases: 0, digest: 17, file_nodes: none, file_cap: 0}
+}
+
+fn relative_path(root string, path string) string {
+    root_len := str.len(root)
+    path_len := str.len(path)
+    start := 0
+    matches := root_len > 0 && path_len >= root_len
+    i := 0
+    for (; matches && i < root_len; i++) {
+        if root[i] != path[i] { matches = false }
+    }
+    if matches {
+        start = root_len
+        for (; start < path_len && path[start] == '/'; start++) {}
+    }
+    count := path_len - start
+    out: string := mem.calloc(count + 1, 1)
+    if out != none && count > 0 { mem.copy(out, path + start, count) }
+    return out
+}
+
+fn import_path(relative string) string {
+    n := str.len(relative)
+    start := 0
+    if n >= 4 && relative[0] == 's' && relative[1] == 'r' && relative[2] == 'c' && relative[3] == '/' {
+        start = 4
+    }
+    end := n
+    if end - start >= 3 && relative[end - 3] == '.' && relative[end - 2] == 'y' && relative[end - 1] == 'c' {
+        end -= 3
+    }
+    if end - start >= 6 && relative[end - 6] == '/' && relative[end - 5] == 'i' && relative[end - 4] == 'n' && relative[end - 3] == 'd' && relative[end - 2] == 'e' && relative[end - 1] == 'x' {
+        end -= 6
+    }
+    count := end - start
+    out: string := mem.calloc(count + 1, 1)
+    if out != none && count > 0 { mem.copy(out, relative + start, count) }
+    return out
+}
+
+fn retain_file(result ProjectAstResult, root string, path string, program ProgramAst) ProjectAstResult {
+    if result.files >= result.file_cap {
+        next_cap := result.file_cap * 2
+        if next_cap < 16 { next_cap = 16 }
+        next: *ProjectFile := mem.realloc(result.file_nodes, next_cap * mem.sizeof(ProjectFile))
+        if next == none {
+            result.ok = false
+            result.file = path
+            result.message = "failed to grow project AST"
+            return result
+        }
+        result.file_nodes = mem.keep(next)
+        result.file_cap = next_cap
+    }
+    slot: *ProjectFile := result.file_nodes + result.files
+    slot.id = result.files
+    slot.path = mem.keep(path)
+    slot.relative_path = mem.keep(relative_path(root, path))
+    slot.import_path = mem.keep(import_path(slot.relative_path))
+    slot.module_name = mem.keep(program.module_name)
+    slot.program = program
+    return result
+}
+
+pub fn file_at(result ProjectAstResult, file_id i32) *ProjectFile {
+    if file_id < 0 || file_id >= result.files || result.file_nodes == none { return none }
+    return result.file_nodes + file_id
+}
+
+pub fn program_at(result ProjectAstResult, file_id i32) ProgramAst {
+    file: *ProjectFile := file_at(result, file_id)
+    return file.program
+}
+
+pub fn path_at(result ProjectAstResult, file_id i32) string {
+    file: *ProjectFile := file_at(result, file_id)
+    return file.path
+}
+
+pub fn import_path_at(result ProjectAstResult, file_id i32) string {
+    file: *ProjectFile := file_at(result, file_id)
+    return file.import_path
 }
 
 fn add_decl_kinds(result ProjectAstResult, program ProgramAst) ProjectAstResult {
@@ -48,43 +139,126 @@ fn add_decl_kinds(result ProjectAstResult, program ProgramAst) ProjectAstResult 
     return result
 }
 
+fn empty_project(capacity i32) ProjectAstResult {
+    cap := capacity
+    if cap < 16 { cap = 16 }
+    storage: *ProjectFile := mem.calloc(cap, mem.sizeof(ProjectFile))
+    if storage == none { return fail("", 1, 1, "failed to allocate project AST") }
+    storage = mem.keep(storage)
+    return ProjectAstResult{ok: true, file: "", message: "", line: 1, col: 1, files: 0, decls: 0, types: 0, stmts: 0, exprs: 0, fields: 0, params: 0, imports: 0, functions: 0, structs: 0, enums: 0, aliases: 0, digest: 17, file_nodes: storage, file_cap: cap}
+}
+
+fn append_path(result ProjectAstResult, relative_root string, path string) ProjectAstResult {
+    loaded := source.load(path)
+    if !loaded.ok {
+        result.ok = false
+        result.file = path
+        result.line = 1
+        result.col = 1
+        result.message = "could not read source file"
+        return result
+    }
+    program := parser.parse_ast_with_file(path, loaded.text, result.files)
+    if !program.ok {
+        result.ok = false
+        result.file = path
+        result.line = program.error_line
+        result.col = program.error_col
+        result.message = program.message
+        return result
+    }
+    result = retain_file(result, relative_root, path, program)
+    if !result.ok { return result }
+
+    decls := ast.decl_count(program.arena)
+    types := ast.type_count(program.arena)
+    stmts := ast.stmt_count(program.arena)
+    exprs := ast.expr_count(program.arena)
+    result.files += 1
+    result.decls += decls
+    result.types += types
+    result.stmts += stmts
+    result.exprs += exprs
+    result.fields += ast.field_count(program.arena)
+    result.params += ast.param_count(program.arena)
+    result = add_decl_kinds(result, program)
+    result.digest = result.digest * 31 + decls
+    result.digest = result.digest * 31 + types
+    result.digest = result.digest * 31 + stmts
+    result.digest = result.digest * 31 + exprs
+    return result
+}
+
+fn append_path_lines(result ProjectAstResult, relative_root string, paths string) ProjectAstResult {
+    if paths == none { return result }
+    start := 0
+    i := 0
+    for (; paths[i] != 0; i++) {
+        if paths[i] == 10 {
+            if i > start {
+                count := i - start
+                path: string := mem.calloc(count + 1, 1)
+                if path == none {
+                    result.ok = false
+                    result.message = "failed to allocate source path"
+                    return result
+                }
+                mem.copy(path, paths + start, count)
+                result = append_path(result, relative_root, path)
+                if !result.ok { return result }
+            }
+            start = i + 1
+        }
+    }
+    if i > start {
+        count := i - start
+        path: string := mem.calloc(count + 1, 1)
+        if path == none {
+            result.ok = false
+            result.message = "failed to allocate source path"
+            return result
+        }
+        mem.copy(path, paths + start, count)
+        result = append_path(result, relative_root, path)
+    }
+    return result
+}
+
 pub fn parse_project(root string) ProjectAstResult {
     sources := resolver.discover_sources(root)
     if !sources.ok {
         return fail(root, 1, 1, sources.message)
     }
 
-    result := ProjectAstResult{ok: true, file: "", message: "", line: 1, col: 1, files: 0, decls: 0, types: 0, stmts: 0, exprs: 0, fields: 0, params: 0, imports: 0, functions: 0, structs: 0, enums: 0, aliases: 0, digest: 17}
+    result := empty_project(sources.count)
+    if !result.ok { return fail(root, 1, 1, result.message) }
     i := 0
     for (; i < sources.count; i++) {
         path := resolver.source_path_at(sources, i)
-        loaded := source.load(path)
-        if !loaded.ok {
-            return fail(path, 1, 1, "could not read source file")
-        }
-        program := parser.parse_ast(path, loaded.text)
-        if !program.ok {
-            return fail(path, program.error_line, program.error_col, program.message)
-        }
-
-        decls := ast.decl_count(program.arena)
-        types := ast.type_count(program.arena)
-        stmts := ast.stmt_count(program.arena)
-        exprs := ast.expr_count(program.arena)
-        fields := ast.field_count(program.arena)
-        params := ast.param_count(program.arena)
-        result.files += 1
-        result.decls += decls
-        result.types += types
-        result.stmts += stmts
-        result.exprs += exprs
-        result.fields += fields
-        result.params += params
-        result = add_decl_kinds(result, program)
-        result.digest = result.digest * 31 + decls
-        result.digest = result.digest * 31 + types
-        result.digest = result.digest * 31 + stmts
-        result.digest = result.digest * 31 + exprs
+        result = append_path(result, root, path)
+        if !result.ok { return result }
     }
     return result
+}
+
+// Load the canonical project AST plus all C/std modules made available to a
+// normal compiler invocation. Paths are retained in independently sorted
+// groups and file ids are assigned once in that stable order.
+pub fn parse_compilation(root string, stl_root string) ProjectAstResult {
+    result := parse_project(root)
+    if !result.ok { return result }
+    if str.len(stl_root) == 0 { return result }
+
+    std_root := stl_root
+    if stl_root[str.len(stl_root) - 1] == '/' {
+        std_root = stl_root
+    }
+    std_paths := runtime.find_yc_files_in(std_root)
+    if std_paths == none {
+        result.ok = false
+        result.file = stl_root
+        result.message = "failed to discover standard library sources"
+        return result
+    }
+    return append_path_lines(result, stl_root, std_paths)
 }

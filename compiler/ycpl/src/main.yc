@@ -4,15 +4,18 @@ import "codegen/irgen" as irgen
 import "lexer/lexer" as lexer
 import "parser/parser" as parser
 import "resolver/resolver" as resolver
+import "resolver/semantic" as semantic
 import "source/source" as source
 import "lexer/token" as tok
 import "ast/nodes" as astnodes
 import "ast/project" as astproject
 import "std/fmt" as fmt
 import "std/str" as str
+import "std/fs" as fs
+import "std/os" as os
 
 fn usage() {
-    fmt.println("usage: ycc-ycpl <lex|parse|check|build|build-ir|build-ir-self> [options] <file.yc | dir>")
+    fmt.println("usage: ycc-ycpl <lex|parse|resolve|check|build|build-ir|build-ir-self> [options] <file.yc | dir>")
     fmt.println("       ycc-ycpl build compiler/ycpl -o build/self")
     fmt.println("       ycc-ycpl build-ir compiler/ycpl -o build/self")
     fmt.println("options for build/build-ir:")
@@ -70,7 +73,35 @@ fn run_parse_ast_project(path string) i32 {
         fmt.printf("%s:%d:%d: %s\n", result.file, result.line, result.col, result.message)
         return 1
     }
-    fmt.printf("ast project ok: files=%d decls=%d types=%d stmts=%d exprs=%d fields=%d params=%d imports=%d funcs=%d structs=%d enums=%d aliases=%d digest=%d\n", result.files, result.decls, result.types, result.stmts, result.exprs, result.fields, result.params, result.imports, result.functions, result.structs, result.enums, result.aliases, result.digest)
+    resolved := semantic.collect(result)
+    if !resolved.ok {
+        fmt.printf("%s:%d:%d: %s\n", resolved.file, resolved.line, resolved.col, resolved.message)
+        return 1
+    }
+    fmt.printf("ast project ok: files=%d decls=%d types=%d stmts=%d exprs=%d fields=%d params=%d imports=%d funcs=%d structs=%d enums=%d aliases=%d symbols=%d digest=%d\n", result.files, result.decls, result.types, result.stmts, result.exprs, result.fields, result.params, result.imports, result.functions, result.structs, result.enums, result.aliases, resolved.symbol_len, result.digest)
+    return 0
+}
+
+fn standard_library_root() string {
+    explicit := os.getenv("YCPL_STL_ROOT")
+    if explicit != none && str.len(explicit) > 0 { return explicit }
+    if fs.exists("stl") { return "stl" }
+    if fs.exists("../../stl") { return "../../stl" }
+    return ""
+}
+
+fn run_resolve_project(path string) i32 {
+    stl_root := standard_library_root()
+    if str.len(stl_root) == 0 {
+        fmt.println("standard library root not found; set YCPL_STL_ROOT")
+        return 1
+    }
+    result := semantic.load(path, stl_root)
+    if !result.ok {
+        fmt.printf("%s:%d:%d: %s\n", result.file, result.line, result.col, result.message)
+        return 1
+    }
+    fmt.printf("resolve ok: files=%d symbols=%d decls=%d exprs=%d\n", result.syntax.files, result.symbol_len, result.syntax.decls, result.syntax.exprs)
     return 0
 }
 
@@ -304,6 +335,9 @@ fn main(argc i32, argv *string) i32 {
         }
         if str.eq(mode, "check") {
             return run_check_project(path)
+        }
+        if str.eq(mode, "resolve") {
+            return run_resolve_project(path)
         }
     }
 
