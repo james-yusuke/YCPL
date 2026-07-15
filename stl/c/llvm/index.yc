@@ -1,0 +1,119 @@
+module c.llvm
+
+// LLVM 22 C API. This module intentionally exposes the raw foreign boundary;
+// compiler-specific type construction and lowering live under compiler/ycpl.
+pub extern fn context_create() *byte as "LLVMContextCreate"
+pub extern fn context_dispose(ctx *byte) as "LLVMContextDispose"
+pub extern fn module_create(name string, ctx *byte) *byte as "LLVMModuleCreateWithNameInContext"
+pub extern fn module_dispose(mod *byte) as "LLVMDisposeModule"
+pub extern fn module_to_string(mod *byte) string as "LLVMPrintModuleToString"
+pub extern fn module_to_file_raw(mod *byte, path string, error *string) i32 as "LLVMPrintModuleToFile"
+pub extern fn dispose_message(message string) as "LLVMDisposeMessage"
+pub extern fn verify_module_raw(mod *byte, action i32, message *string) i32 as "LLVMVerifyModule"
+
+pub extern fn builder_create(ctx *byte) *byte as "LLVMCreateBuilderInContext"
+pub extern fn builder_dispose(builder *byte) as "LLVMDisposeBuilder"
+pub extern fn position_at_end(builder *byte, block *byte) as "LLVMPositionBuilderAtEnd"
+pub extern fn insert_block(builder *byte) *byte as "LLVMGetInsertBlock"
+pub extern fn block_terminator(block *byte) *byte as "LLVMGetBasicBlockTerminator"
+pub extern fn append_block(ctx *byte, function *byte, name string) *byte as "LLVMAppendBasicBlockInContext"
+
+pub extern fn void_type(ctx *byte) *byte as "LLVMVoidTypeInContext"
+pub extern fn i1_type(ctx *byte) *byte as "LLVMInt1TypeInContext"
+pub extern fn i8_type(ctx *byte) *byte as "LLVMInt8TypeInContext"
+pub extern fn i32_type(ctx *byte) *byte as "LLVMInt32TypeInContext"
+pub extern fn i64_type(ctx *byte) *byte as "LLVMInt64TypeInContext"
+pub extern fn float_type(ctx *byte) *byte as "LLVMFloatTypeInContext"
+pub extern fn double_type(ctx *byte) *byte as "LLVMDoubleTypeInContext"
+pub extern fn pointer_type(element *byte, address_space i32) *byte as "LLVMPointerType"
+pub extern fn array_type(element *byte, count i64) *byte as "LLVMArrayType2"
+pub extern fn struct_type(ctx *byte, fields *byte, count i32, packed i32) *byte as "LLVMStructTypeInContext"
+pub extern fn named_struct(ctx *byte, name string) *byte as "LLVMStructCreateNamed"
+pub extern fn set_struct_body(typ *byte, fields *byte, count i32, packed i32) as "LLVMStructSetBody"
+pub extern fn function_type(result *byte, params *byte, count i32, variadic i32) *byte as "LLVMFunctionType"
+
+pub extern fn add_function(mod *byte, name string, typ *byte) *byte as "LLVMAddFunction"
+pub extern fn named_function(mod *byte, name string) *byte as "LLVMGetNamedFunction"
+pub extern fn get_param(function *byte, index i32) *byte as "LLVMGetParam"
+pub extern fn type_of(value *byte) *byte as "LLVMTypeOf"
+pub extern fn set_value_name(value *byte, name string, length i64) as "LLVMSetValueName2"
+pub extern fn add_global(mod *byte, typ *byte, name string) *byte as "LLVMAddGlobal"
+pub extern fn set_initializer(global *byte, value *byte) as "LLVMSetInitializer"
+pub extern fn set_global_constant(global *byte, value i32) as "LLVMSetGlobalConstant"
+
+pub extern fn const_int(typ *byte, value i64, sign_extend i32) *byte as "LLVMConstInt"
+pub extern fn const_real(typ *byte, value double) *byte as "LLVMConstReal"
+pub extern fn const_null(typ *byte) *byte as "LLVMConstNull"
+pub extern fn const_pointer_null(typ *byte) *byte as "LLVMConstPointerNull"
+
+pub extern fn build_alloca(builder *byte, typ *byte, name string) *byte as "LLVMBuildAlloca"
+pub extern fn build_load(builder *byte, typ *byte, address *byte, name string) *byte as "LLVMBuildLoad2"
+pub extern fn build_store(builder *byte, value *byte, address *byte) *byte as "LLVMBuildStore"
+pub extern fn build_ret(builder *byte, value *byte) *byte as "LLVMBuildRet"
+pub extern fn build_ret_void(builder *byte) *byte as "LLVMBuildRetVoid"
+pub extern fn build_add(builder *byte, left *byte, right *byte, name string) *byte as "LLVMBuildAdd"
+pub extern fn build_sub(builder *byte, left *byte, right *byte, name string) *byte as "LLVMBuildSub"
+pub extern fn build_mul(builder *byte, left *byte, right *byte, name string) *byte as "LLVMBuildMul"
+pub extern fn build_sdiv(builder *byte, left *byte, right *byte, name string) *byte as "LLVMBuildSDiv"
+pub extern fn build_srem(builder *byte, left *byte, right *byte, name string) *byte as "LLVMBuildSRem"
+pub extern fn build_fadd(builder *byte, left *byte, right *byte, name string) *byte as "LLVMBuildFAdd"
+pub extern fn build_fsub(builder *byte, left *byte, right *byte, name string) *byte as "LLVMBuildFSub"
+pub extern fn build_fmul(builder *byte, left *byte, right *byte, name string) *byte as "LLVMBuildFMul"
+pub extern fn build_fdiv(builder *byte, left *byte, right *byte, name string) *byte as "LLVMBuildFDiv"
+pub extern fn build_and(builder *byte, left *byte, right *byte, name string) *byte as "LLVMBuildAnd"
+pub extern fn build_or(builder *byte, left *byte, right *byte, name string) *byte as "LLVMBuildOr"
+pub extern fn build_xor(builder *byte, left *byte, right *byte, name string) *byte as "LLVMBuildXor"
+pub extern fn build_shl(builder *byte, left *byte, right *byte, name string) *byte as "LLVMBuildShl"
+pub extern fn build_ashr(builder *byte, left *byte, right *byte, name string) *byte as "LLVMBuildAShr"
+pub extern fn build_neg(builder *byte, value *byte, name string) *byte as "LLVMBuildNeg"
+pub extern fn build_not(builder *byte, value *byte, name string) *byte as "LLVMBuildNot"
+pub extern fn build_sext(builder *byte, value *byte, typ *byte, name string) *byte as "LLVMBuildSExt"
+pub extern fn build_zext(builder *byte, value *byte, typ *byte, name string) *byte as "LLVMBuildZExt"
+pub extern fn build_trunc(builder *byte, value *byte, typ *byte, name string) *byte as "LLVMBuildTrunc"
+pub extern fn build_sitofp(builder *byte, value *byte, typ *byte, name string) *byte as "LLVMBuildSIToFP"
+pub extern fn build_fptosi(builder *byte, value *byte, typ *byte, name string) *byte as "LLVMBuildFPToSI"
+pub extern fn build_bitcast(builder *byte, value *byte, typ *byte, name string) *byte as "LLVMBuildBitCast"
+pub extern fn build_pointer_cast(builder *byte, value *byte, typ *byte, name string) *byte as "LLVMBuildPointerCast"
+pub extern fn build_ptr_to_int(builder *byte, value *byte, typ *byte, name string) *byte as "LLVMBuildPtrToInt"
+pub extern fn build_int_to_ptr(builder *byte, value *byte, typ *byte, name string) *byte as "LLVMBuildIntToPtr"
+pub extern fn build_icmp(builder *byte, predicate i32, left *byte, right *byte, name string) *byte as "LLVMBuildICmp"
+pub extern fn build_fcmp(builder *byte, predicate i32, left *byte, right *byte, name string) *byte as "LLVMBuildFCmp"
+pub extern fn build_br(builder *byte, destination *byte) *byte as "LLVMBuildBr"
+pub extern fn build_cond_br(builder *byte, condition *byte, yes *byte, no *byte) *byte as "LLVMBuildCondBr"
+pub extern fn build_switch(builder *byte, value *byte, otherwise *byte, count i32) *byte as "LLVMBuildSwitch"
+pub extern fn add_case(switch_value *byte, value *byte, destination *byte) as "LLVMAddCase"
+pub extern fn build_unreachable(builder *byte) *byte as "LLVMBuildUnreachable"
+pub extern fn build_call(builder *byte, typ *byte, function *byte, args *byte, count i32, name string) *byte as "LLVMBuildCall2"
+pub extern fn build_struct_gep(builder *byte, typ *byte, address *byte, index i32, name string) *byte as "LLVMBuildStructGEP2"
+pub extern fn build_gep(builder *byte, typ *byte, address *byte, indices *byte, count i32, name string) *byte as "LLVMBuildGEP2"
+pub extern fn build_global_string(builder *byte, value string, name string) *byte as "LLVMBuildGlobalStringPtr"
+pub extern fn build_phi(builder *byte, typ *byte, name string) *byte as "LLVMBuildPhi"
+pub extern fn add_incoming(phi *byte, values *byte, blocks *byte, count i32) as "LLVMAddIncoming"
+pub extern fn build_extract_value(builder *byte, value *byte, index i32, name string) *byte as "LLVMBuildExtractValue"
+pub extern fn build_insert_value(builder *byte, aggregate *byte, value *byte, index i32, name string) *byte as "LLVMBuildInsertValue"
+
+pub fn verify_module(mod *byte) bool {
+    message: string := none
+    ok := verify_module_raw(mod, 2, &message) == 0
+    if message != none { dispose_message(message) }
+    return ok
+}
+
+pub fn write_module(mod *byte, path string) bool {
+    message: string := none
+    ok := module_to_file_raw(mod, path, &message) == 0
+    if message != none { dispose_message(message) }
+    return ok
+}
+
+pub fn block_has_terminator(builder *byte) bool {
+    block := insert_block(builder)
+    return block != none && block_terminator(block) != none
+}
+
+pub fn int_eq() i32 { return 32 }
+pub fn int_ne() i32 { return 33 }
+pub fn int_sgt() i32 { return 38 }
+pub fn int_sge() i32 { return 39 }
+pub fn int_slt() i32 { return 40 }
+pub fn int_sle() i32 { return 41 }
