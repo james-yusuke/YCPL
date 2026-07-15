@@ -48,6 +48,33 @@ pub struct SemanticProject {
     import_cap i32
 }
 
+struct TypeRef {
+    file_id i32
+    type_id i32
+}
+
+struct LocalBinding {
+    name string
+    symbol_id i32
+    type_file i32
+    type_id i32
+    depth i32
+    flags i32
+}
+
+struct ResolveState {
+    ok bool
+    semantic SemanticProject
+    program ProgramAst
+    file_id i32
+    module_name string
+    locals *LocalBinding
+    local_len i32
+    local_cap i32
+    depth i32
+    result_type TypeRef
+}
+
 fn has_flag(flags i32, flag i32) bool {
     return (flags / flag) % 2 == 1
 }
@@ -120,7 +147,7 @@ pub fn find_in_module(result SemanticProject, module_name string, name string) i
     i := 0
     for (; i < result.symbol_len; i++) {
         symbol: *Symbol := result.symbols + i
-        if str.eq(symbol.module_name, module_name) && str.eq(symbol.name, name) { return i }
+        if symbol.kind < 100 && str.eq(symbol.module_name, module_name) && str.eq(symbol.name, name) { return i }
     }
     return ast.invalid_id()
 }
@@ -342,6 +369,324 @@ pub fn resolve_types(result SemanticProject) SemanticProject {
     return result
 }
 
+fn builtin_ref(kind i32) TypeRef {
+    return TypeRef{file_id: ast.invalid_id(), type_id: -100 - kind}
+}
+
+fn invalid_ref() TypeRef {
+    return TypeRef{file_id: ast.invalid_id(), type_id: ast.invalid_id()}
+}
+
+fn state_fail(state ResolveState, span Span, message string) ResolveState {
+    state.ok = false
+    state.semantic = fail(state.semantic, project.path_at(state.semantic.syntax, state.file_id), span.line, span.col, message)
+    return state
+}
+
+fn grow_locals(state ResolveState) ResolveState {
+    if state.local_len < state.local_cap { return state }
+    next_cap := state.local_cap * 2
+    if next_cap < 32 { next_cap = 32 }
+    next: *LocalBinding := mem.realloc(state.locals, next_cap * mem.sizeof(LocalBinding))
+    if next == none { return state_fail(state, ast.empty_span(), "failed to grow local symbol arena") }
+    state.locals = mem.keep(next)
+    state.local_cap = next_cap
+    return state
+}
+
+fn add_local_symbol(state ResolveState, name string, node_id i32, kind i32, typ TypeRef, flags i32) ResolveState {
+    state.semantic = grow_symbols(state.semantic)
+    if !state.semantic.ok {
+        state.ok = false
+        return state
+    }
+    state = grow_locals(state)
+    if !state.ok { return state }
+    symbol_id := state.semantic.symbol_len
+    symbol: *Symbol := state.semantic.symbols + symbol_id
+    symbol.id = symbol_id
+    symbol.kind = kind
+    symbol.file_id = state.file_id
+    symbol.node_id = node_id
+    symbol.name = mem.keep(name)
+    symbol.module_name = mem.keep(state.module_name)
+    symbol.import_path = mem.keep(project.import_path_at(state.semantic.syntax, state.file_id))
+    symbol.link_name = ""
+    symbol.flags = flags
+    symbol.type_file = typ.file_id
+    symbol.type_id = typ.type_id
+    state.semantic.symbol_len += 1
+
+    local: *LocalBinding := state.locals + state.local_len
+    local.name = mem.keep(name)
+    local.symbol_id = symbol_id
+    local.type_file = typ.file_id
+    local.type_id = typ.type_id
+    local.depth = state.depth
+    local.flags = flags
+    state.local_len += 1
+    return state
+}
+
+fn find_local(state ResolveState, name string) i32 {
+    i := state.local_len - 1
+    for (; i >= 0; i--) {
+        local: *LocalBinding := state.locals + i
+        if str.eq(local.name, name) { return i }
+    }
+    return ast.invalid_id()
+}
+
+fn symbol_result_type(state ResolveState, symbol_id i32) TypeRef {
+    symbol: *Symbol := symbol_at(state.semantic, symbol_id)
+    if symbol == none { return invalid_ref() }
+    if symbol.kind == ast.decl_function() {
+        program: ProgramAst := project.program_at(state.semantic.syntax, symbol.file_id)
+        decl: *DeclNode := program.arena.decls + symbol.node_id
+        if decl.type_id == ast.invalid_id() { return builtin_ref(ast.type_void()) }
+        return TypeRef{file_id: symbol.file_id, type_id: decl.type_id}
+    }
+    return TypeRef{file_id: symbol.type_file, type_id: symbol.type_id}
+}
+
+fn imported_symbol(state ResolveState, alias string, name string) i32 {
+    binding: *ImportBinding := import_for_alias(state.semantic, state.file_id, alias)
+    if binding == none { return ast.invalid_id() }
+    return find_by_import(state.semantic, binding.path, name)
+}
+
+fn resolve_expr(state ResolveState, expr_id i32) ResolveState {
+    if !state.ok || expr_id == ast.invalid_id() {
+        state.result_type = invalid_ref()
+        return state
+    }
+    node: *ExprNode := state.program.arena.exprs + expr_id
+
+    if node.kind == ast.expr_int() {
+        state.result_type = builtin_ref(ast.type_i32())
+    } else if node.kind == ast.expr_float() { state.result_type = builtin_ref(ast.type_double())
+    } else if node.kind == ast.expr_char() { state.result_type = builtin_ref(ast.type_char())
+    } else if node.kind == ast.expr_string() { state.result_type = builtin_ref(ast.type_string())
+    } else if node.kind == ast.expr_bool() { state.result_type = builtin_ref(ast.type_bool())
+    } else if node.kind == ast.expr_none() { state.result_type = builtin_ref(ast.type_none())
+    } else if node.kind == ast.expr_type() { state.result_type = builtin_ref(ast.type_meta())
+    } else if node.kind == ast.expr_ident() {
+        local_id := find_local(state, node.name)
+        if local_id != ast.invalid_id() {
+            local: *LocalBinding := state.locals + local_id
+            node.symbol_file = state.file_id
+            node.symbol_id = local.symbol_id
+            state.result_type = TypeRef{file_id: local.type_file, type_id: local.type_id}
+        } else {
+            symbol_id := find_in_module(state.semantic, state.module_name, node.name)
+            if symbol_id == ast.invalid_id() {
+                binding: *ImportBinding := import_for_alias(state.semantic, state.file_id, node.name)
+                if binding != none {
+                    node.symbol_file = binding.target_file
+                    node.symbol_id = ast.invalid_id()
+                    state.result_type = invalid_ref()
+                } else {
+                    state = state_fail(state, node.span, "unknown symbol")
+                    return state
+                }
+            } else {
+                symbol: *Symbol := symbol_at(state.semantic, symbol_id)
+                node.symbol_file = symbol.file_id
+                node.symbol_id = symbol_id
+                state.result_type = symbol_result_type(state, symbol_id)
+            }
+        }
+    } else if node.kind == ast.expr_member() {
+        left: *ExprNode := state.program.arena.exprs + node.left
+        if left.kind == ast.expr_ident() {
+            symbol_id := imported_symbol(state, left.name, node.name)
+            if symbol_id != ast.invalid_id() {
+                symbol: *Symbol := symbol_at(state.semantic, symbol_id)
+                if !has_flag(symbol.flags, ast.flag_public()) {
+                    state = state_fail(state, node.span, "imported symbol is private")
+                    return state
+                }
+                left.symbol_file = symbol.file_id
+                left.symbol_id = ast.invalid_id()
+                node.symbol_file = symbol.file_id
+                node.symbol_id = symbol_id
+                state.result_type = symbol_result_type(state, symbol_id)
+            } else {
+                state = resolve_expr(state, node.left)
+                if !state.ok { return state }
+                state.result_type = invalid_ref()
+            }
+        } else {
+            state = resolve_expr(state, node.left)
+            if !state.ok { return state }
+            state.result_type = invalid_ref()
+        }
+    } else if node.kind == ast.expr_call() {
+        state = resolve_expr(state, node.left)
+        if !state.ok { return state }
+        callee: *ExprNode := state.program.arena.exprs + node.left
+        node.symbol_file = callee.symbol_file
+        node.symbol_id = callee.symbol_id
+        result_type := state.result_type
+        i := 0
+        for (; i < node.arg_count; i++) {
+            arg_id := state.program.arena.children[node.first_arg + i]
+            state = resolve_expr(state, arg_id)
+            if !state.ok { return state }
+        }
+        state.result_type = result_type
+    } else if node.kind == ast.expr_unary() || node.kind == ast.expr_postfix() {
+        state = resolve_expr(state, node.left)
+    } else if node.kind == ast.expr_binary() {
+        state = resolve_expr(state, node.left)
+        if !state.ok { return state }
+        left_type := state.result_type
+        if !str.eq(node.text, ":") {
+            state = resolve_expr(state, node.right)
+            if !state.ok { return state }
+        }
+        if str.eq(node.text, "==") || str.eq(node.text, "!=") || str.eq(node.text, "<") || str.eq(node.text, "<=") || str.eq(node.text, ">") || str.eq(node.text, ">=") || str.eq(node.text, "&&") || str.eq(node.text, "||") {
+            state.result_type = builtin_ref(ast.type_bool())
+        } else { state.result_type = left_type }
+    } else if node.kind == ast.expr_index() {
+        state = resolve_expr(state, node.left)
+        if !state.ok { return state }
+        state = resolve_expr(state, node.right)
+        state.result_type = invalid_ref()
+    } else if node.kind == ast.expr_array() {
+        state.result_type = invalid_ref()
+        i := 0
+        for (; i < node.arg_count; i++) {
+            arg_id := state.program.arena.children[node.first_arg + i]
+            state = resolve_expr(state, arg_id)
+            if !state.ok { return state }
+        }
+    } else if node.kind == ast.expr_struct() {
+        symbol_id := find_type_in_module(state.semantic, state.module_name, node.name)
+        if symbol_id == ast.invalid_id() { symbol_id = find_imported_type(state.semantic, state.file_id, node.name) }
+        if symbol_id == ast.invalid_id() { return state_fail(state, node.span, "unknown struct type") }
+        symbol: *Symbol := symbol_at(state.semantic, symbol_id)
+        node.symbol_file = symbol.file_id
+        node.symbol_id = symbol_id
+        state.result_type = TypeRef{file_id: symbol.file_id, type_id: symbol.node_id}
+        i := 0
+        for (; i < node.arg_count; i++) {
+            init_id := state.program.arena.children[node.first_arg + i]
+            state = resolve_expr(state, init_id)
+            if !state.ok { return state }
+        }
+    } else if node.kind == ast.expr_cast() {
+        state = resolve_expr(state, node.left)
+        state.result_type = TypeRef{file_id: state.file_id, type_id: node.type_id}
+    } else { state.result_type = invalid_ref() }
+
+    node.type_file = state.result_type.file_id
+    node.type_id = state.result_type.type_id
+    return state
+}
+
+fn resolve_stmt(state ResolveState, stmt_id i32) ResolveState {
+    if !state.ok || stmt_id == ast.invalid_id() { return state }
+    node: *StmtNode := state.program.arena.stmts + stmt_id
+    if node.kind == ast.stmt_block() {
+        saved := state.local_len
+        state.depth += 1
+        i := 0
+        for (; i < node.child_count; i++) {
+            child := state.program.arena.children[node.first_child + i]
+            state = resolve_stmt(state, child)
+            if !state.ok { return state }
+        }
+        state.local_len = saved
+        state.depth -= 1
+    } else if node.kind == ast.stmt_local() {
+        state = resolve_expr(state, node.a)
+        if !state.ok { return state }
+        typ_file := state.result_type.file_id
+        typ_id := state.result_type.type_id
+        if node.b != ast.invalid_id() {
+            typ_file = state.file_id
+            typ_id = node.b
+        }
+        typ := TypeRef{file_id: typ_file, type_id: typ_id}
+        state = add_local_symbol(state, node.name, stmt_id, 100, typ, node.flags)
+        if state.ok {
+            local: *LocalBinding := state.locals + state.local_len - 1
+            node.symbol_file = state.file_id
+            node.symbol_id = local.symbol_id
+        }
+    } else if node.kind == ast.stmt_assign() {
+        state = resolve_expr(state, node.a)
+        if !state.ok { return state }
+        state = resolve_expr(state, node.b)
+    } else if node.kind == ast.stmt_expr() || node.kind == ast.stmt_return() { state = resolve_expr(state, node.a)
+    } else if node.kind == ast.stmt_if() {
+        state = resolve_expr(state, node.a)
+        state = resolve_stmt(state, node.b)
+        state = resolve_stmt(state, node.c)
+    } else if node.kind == ast.stmt_for() {
+        saved := state.local_len
+        state.depth += 1
+        state = resolve_stmt(state, node.a)
+        state = resolve_expr(state, node.b)
+        state = resolve_stmt(state, node.first_child)
+        state = resolve_stmt(state, node.c)
+        state.local_len = saved
+        state.depth -= 1
+    } else if node.kind == ast.stmt_for_in() {
+        state = resolve_expr(state, node.a)
+        saved := state.local_len
+        state.depth += 1
+        state = add_local_symbol(state, node.name, stmt_id, 100, invalid_ref(), 0)
+        state = resolve_stmt(state, node.b)
+        state.local_len = saved
+        state.depth -= 1
+    } else if node.kind == ast.stmt_switch() {
+        state = resolve_expr(state, node.a)
+        if node.child_count > 0 {
+            i := 0
+            for (; i < node.child_count; i++) { state = resolve_stmt(state, state.program.arena.children[node.first_child + i]) }
+        } else { state = resolve_stmt(state, node.b) }
+    } else if node.kind == ast.stmt_defer() || node.kind == ast.stmt_scope() { state = resolve_stmt(state, node.a) }
+    return state
+}
+
+fn resolve_function(state ResolveState, decl_id i32) ResolveState {
+    decl: *DeclNode := state.program.arena.decls + decl_id
+    if decl.kind != ast.decl_function() || decl.body == ast.invalid_id() { return state }
+    state.local_len = 0
+    state.depth = 0
+    i := 0
+    for (; i < decl.param_count; i++) {
+        param_id := decl.first_param + i
+        param: *ParamNode := state.program.arena.params + param_id
+        param_type := TypeRef{file_id: state.file_id, type_id: param.type_id}
+        state = add_local_symbol(state, param.name, param_id, 101, param_type, param.flags)
+        if !state.ok { return state }
+    }
+    return resolve_stmt(state, decl.body)
+}
+
+pub fn resolve_bodies(result SemanticProject) SemanticProject {
+    file_id := 0
+    for (; file_id < result.syntax.files; file_id++) {
+        program: ProgramAst := project.program_at(result.syntax, file_id)
+        local_cap := program.arena.stmt_len + program.arena.param_len
+        if local_cap < 32 { local_cap = 32 }
+        locals: *LocalBinding := mem.calloc(local_cap, mem.sizeof(LocalBinding))
+        if locals == none { return fail(result, project.path_at(result.syntax, file_id), 1, 1, "failed to allocate local symbol arena") }
+        locals = mem.keep(locals)
+        state := ResolveState{ok: true, semantic: result, program: program, file_id: file_id, module_name: default_module(program, project.import_path_at(result.syntax, file_id)), locals: locals, local_len: 0, local_cap: local_cap, depth: 0, result_type: invalid_ref()}
+        decl_id := 0
+        for (; decl_id < program.arena.decl_len; decl_id++) {
+            state = resolve_function(state, decl_id)
+            if !state.ok { return state.semantic }
+        }
+        result = state.semantic
+    }
+    return result
+}
+
 pub fn load(root string, stl_root string) SemanticProject {
     syntax := project.parse_compilation(root, stl_root)
     if !syntax.ok {
@@ -353,5 +698,7 @@ pub fn load(root string, stl_root string) SemanticProject {
     if !result.ok { return result }
     result = resolve_imports(result)
     if !result.ok { return result }
-    return resolve_types(result)
+    result = resolve_types(result)
+    if !result.ok { return result }
+    return resolve_bodies(result)
 }

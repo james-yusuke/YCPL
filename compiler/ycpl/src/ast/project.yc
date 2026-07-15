@@ -82,6 +82,22 @@ fn import_path(relative string) string {
     return out
 }
 
+fn is_yc_file(path string) bool {
+    n := str.len(path)
+    return n >= 3 && path[n - 3] == '.' && path[n - 2] == 'y' && path[n - 1] == 'c'
+}
+
+fn parent_dir(path string) string {
+    n := str.len(path)
+    end := 0
+    i := 0
+    for (; i < n; i++) { if path[i] == '/' { end = i } }
+    if end == 0 { return "." }
+    out: string := mem.calloc(end + 1, 1)
+    if out != none { mem.copy(out, path, end) }
+    return out
+}
+
 fn retain_file(result ProjectAstResult, root string, path string, program ProgramAst) ProjectAstResult {
     if result.files >= result.file_cap {
         next_cap := result.file_cap * 2
@@ -245,7 +261,12 @@ pub fn parse_project(root string) ProjectAstResult {
 // normal compiler invocation. Paths are retained in independently sorted
 // groups and file ids are assigned once in that stable order.
 pub fn parse_compilation(root string, stl_root string) ProjectAstResult {
-    result := parse_project(root)
+    result := empty_project(64)
+    if is_yc_file(root) {
+        result = append_path(result, parent_dir(root), root)
+    } else {
+        result = parse_project(root)
+    }
     if !result.ok { return result }
     if str.len(stl_root) == 0 { return result }
 

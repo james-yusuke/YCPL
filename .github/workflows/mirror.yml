@@ -22,4 +22,7 @@ jobs:
           CODEBERG_TOKEN: ${{ secrets.CODEBERG_TOKEN }}
         run: |
           git remote add codeberg https://${CODEBERG_TOKEN}@codeberg.org/james-yusuke/YCPL.git
-          git push --mirror codeberg
+
+          git push codeberg --all
+
+          git push codeberg --tags
