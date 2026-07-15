@@ -1,0 +1,10 @@
+module c.string
+
+pub extern fn memcpy(dst *byte, src *byte, size size_t) *byte as "memcpy"
+pub extern fn memset(dst *byte, value i32, size size_t) *byte as "memset"
+pub extern fn memcmp(a *byte, b *byte, size size_t) i32 as "memcmp"
+
+pub extern fn strlen(s string) size_t as "strlen"
+pub extern fn strcmp(a string, b string) i32 as "strcmp"
+pub extern fn strcpy(dst string, src string) string as "strcpy"
+pub extern fn strstr(haystack string, needle string) string as "strstr"

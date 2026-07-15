@@ -12,6 +12,7 @@ extern fn c_mkdir(path string, mode i32) i32 as "mkdir"
 extern fn c_popen(command string, mode string) *byte as "popen"
 extern fn c_pclose(file *byte) i32 as "pclose"
 extern fn c_fgets(buf string, size i32, file *byte) string as "fgets"
+extern fn runtime_find_yc_files(root string) string as "yc_fs_find_yc_files"
 
 pub struct CommandOutput {
     ok bool
@@ -134,11 +135,11 @@ pub fn command_output(command string) CommandOutput {
 }
 
 pub fn find_yc_files(root string) CommandOutput {
-    if !safe_project_path(root) {
-        return command_fail("unsafe project path for source traversal", 1)
+    files := runtime_find_yc_files(root)
+    if files == none {
+        return command_fail("failed to traverse project sources", 1)
     }
-    command := build_find_yc_command(root)
-    return command_output(command)
+    return command_ok(files, 0)
 }
 
 pub fn exists(path string) bool {

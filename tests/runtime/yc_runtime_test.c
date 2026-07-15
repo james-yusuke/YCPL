@@ -2,6 +2,10 @@
 
 #include <assert.h>
 #include <stddef.h>
+#include <stdio.h>
+#include <string.h>
+#include <sys/stat.h>
+#include <unistd.h>
 
 static void test_selective_escape_and_unbounded_children(void) {
     yc_runtime_init();
@@ -63,9 +67,75 @@ static void test_unmanaged_pointer_is_ignored(void) {
     yc_runtime_shutdown();
 }
 
+static void test_portable_compiler_support(void) {
+    char root[256];
+    char src[280];
+    char nested[304];
+    char first[336];
+    char second[336];
+    snprintf(root, sizeof(root), "/tmp/yc_runtime_test_%ld", (long)getpid());
+    snprintf(src, sizeof(src), "%s/src", root);
+    snprintf(nested, sizeof(nested), "%s/nested", src);
+    snprintf(first, sizeof(first), "%s/a.yc", src);
+    snprintf(second, sizeof(second), "%s/b.yc", nested);
+
+    assert(mkdir(root, 0700) == 0);
+    assert(mkdir(src, 0700) == 0);
+    assert(mkdir(nested, 0700) == 0);
+    FILE *file = fopen(second, "w");
+    assert(file != NULL);
+    fputs("fn b() {}\n", file);
+    fclose(file);
+    file = fopen(first, "w");
+    assert(file != NULL);
+    fputs("fn a() {}\n", file);
+    fclose(file);
+
+    yc_runtime_init();
+    yc_frame_push();
+    char *files = yc_fs_find_yc_files(root);
+    assert(files != NULL);
+    char expected[700];
+    snprintf(expected, sizeof(expected), "%s\n%s\n", first, second);
+    assert(strcmp(files, expected) == 0);
+
+    const char *capture_args[] = {"YCPL"};
+    int status = -1;
+    char *captured = yc_process_capture("printf", capture_args, 1, &status);
+    assert(status == 0);
+    assert(captured != NULL);
+    assert(strcmp(captured, "YCPL") == 0);
+
+    const char *run_args[] = {"-c", "exit 7"};
+    assert(yc_process_run("sh", run_args, 2) == 7);
+    const char packed_args[] = {'Y', 'C', 'P', 'L', '\0'};
+    status = -1;
+    captured = yc_process_capture_packed("printf", packed_args, sizeof(packed_args), &status);
+    assert(status == 0);
+    assert(captured != NULL);
+    assert(strcmp(captured, "YCPL") == 0);
+
+    const char packed_many[] = {'%', 's', '/', '%', 's', '\0', 'l', 'e', 'f', 't', '\0', 'r', 'i', 'g', 'h', 't', '\0'};
+    status = -1;
+    captured = yc_process_capture_packed("printf", packed_many, sizeof(packed_many), &status);
+    assert(status == 0);
+    assert(captured != NULL);
+    assert(strcmp(captured, "left/right") == 0);
+    yc_frame_pop();
+    assert(yc_runtime_live_allocations() == 0);
+    yc_runtime_shutdown();
+
+    assert(unlink(first) == 0);
+    assert(unlink(second) == 0);
+    assert(rmdir(nested) == 0);
+    assert(rmdir(src) == 0);
+    assert(rmdir(root) == 0);
+}
+
 int main(void) {
     test_selective_escape_and_unbounded_children();
     test_nested_owner_graph();
     test_unmanaged_pointer_is_ignored();
+    test_portable_compiler_support();
     return 0;
 }

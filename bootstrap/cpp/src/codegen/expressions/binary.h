@@ -261,17 +261,26 @@ Value *CodeGen::codegen_binary(const ast::BinaryExpr *be)
         }
         else if (type->isPointerTy())
         {
+            // LLVM opaque pointers do not retain their pointee type. Recover
+            // it from the YCPL expression type so `*T + n` scales by
+            // sizeof(T), rather than silently becoming byte arithmetic.
+            Type *elementType = nullptr;
+            TypeShape pointerShape = parse_type_shape(infer_expr_type_name(be->left.get()));
+            if (pointerShape.is_pointer_only())
+                elementType = resolve_llvm_type_name(pointerShape.base);
+            if (!elementType)
+                elementType = builder.getInt8Ty();
             if (be->op == "+")
             {
                 if (R->getType()->isIntegerTy())
-                    return builder.CreateGEP(builder.getInt8Ty(), L, R, "ptraddtmp");
+                    return builder.CreateGEP(elementType, L, R, "ptraddtmp");
                 else
                     error("pointer addition requires integer");
             }
             else if (be->op == "-")
             {
                 if (R->getType()->isIntegerTy())
-                    return builder.CreateGEP(builder.getInt8Ty(), L, builder.CreateNeg(R), "ptrsubtmp");
+                    return builder.CreateGEP(elementType, L, builder.CreateNeg(R), "ptrsubtmp");
                 else
                     error("pointer subtraction requires integer");
             }

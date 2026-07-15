@@ -1,0 +1,3 @@
+module c.fcntl
+
+pub extern fn open(path string, flags i32, mode i32) i32 as "open"

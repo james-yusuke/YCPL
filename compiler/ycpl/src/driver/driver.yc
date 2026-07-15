@@ -19,6 +19,130 @@ struct Command {
     ok bool
 }
 
+struct ArgList {
+    data string
+    len i32
+    cap i32
+    ok bool
+}
+
+fn args_new(cap i32) ArgList {
+    initial := cap
+    if initial < 8 {
+        initial = 8
+    }
+    data: string := mem.calloc(initial, 1)
+    return ArgList{data: data, len: 0, cap: initial, ok: data != none}
+}
+
+fn args_push(args ArgList, value string) ArgList {
+    if !args.ok {
+        return args
+    }
+    value_len := str.len(value)
+    needed := args.len + value_len + 1
+    if needed > args.cap {
+        next_cap := args.cap * 2
+        for (; next_cap < needed; ) {
+            next_cap = next_cap * 2
+        }
+        next: string := mem.realloc(args.data, next_cap)
+        if next == none {
+            args.ok = false
+            return args
+        }
+        args.data = next
+        args.cap = next_cap
+    }
+    if value_len > 0 {
+        mem.copy(args.data + args.len, value, value_len)
+    }
+    args.len += value_len
+    args.data[args.len] = 0
+    args.len += 1
+    return args
+}
+
+// Keep compiler argument tokenization in the packed argv buffer.  Constructing
+// an intermediate YCPL string for every llvm-config flag used to exercise the
+// general string/index lowering path and could corrupt long linker flags.
+fn args_push_range(args ArgList, text string, start i32, end i32) ArgList {
+    if !args.ok {
+        return args
+    }
+    value_len := end - start
+    needed := args.len + value_len + 1
+    if needed > args.cap {
+        next_cap := args.cap * 2
+        for (; next_cap < needed; ) {
+            next_cap = next_cap * 2
+        }
+        next: string := mem.realloc(args.data, next_cap)
+        if next == none {
+            args.ok = false
+            return args
+        }
+        args.data = next
+        args.cap = next_cap
+    }
+    if value_len > 0 {
+        mem.copy(args.data + args.len, text + start, value_len)
+    }
+    args.len += value_len
+    args.data[args.len] = 0
+    args.len += 1
+    return args
+}
+
+fn whitespace(ch i32) bool {
+    return ch == ' ' || ch == '\n' || ch == '\r' || ch == '\t'
+}
+
+fn copy_range(text string, start i32, end i32) string {
+    len := end - start
+    out: string := mem.calloc(len + 1, 1)
+    if out == none {
+        return none
+    }
+    if len > 0 {
+        mem.copy(out, text + start, len)
+    }
+    return out
+}
+
+fn args_push_words(args ArgList, text string) ArgList {
+    if text == none {
+        return args
+    }
+    i := 0
+    n := str.len(text)
+    for (; i < n; ) {
+        for (; i < n && whitespace(text[i]); i++) {
+        }
+        if i >= n {
+            break
+        }
+        start := i
+        for (; i < n && !whitespace(text[i]); i++) {
+        }
+        args = args_push_range(args, text, start, i)
+    }
+    return args
+}
+
+fn trim_space(text string) string {
+    if text == none {
+        return ""
+    }
+    start := 0
+    end := str.len(text)
+    for (; start < end && whitespace(text[start]); start++) {
+    }
+    for (; end > start && whitespace(text[end - 1]); end--) {
+    }
+    return copy_range(text, start, end)
+}
+
 fn command_new(cap i32) Command {
     data: string := mem.calloc(cap + 1, 1)
     return Command{data: data, len: 0, cap: cap, ok: true}
@@ -156,6 +280,58 @@ fn find_tool(env_name string, tool string) string {
     return tool
 }
 
+fn find_llvm_config() string {
+    explicit := env_or_empty("LLVM_CONFIG")
+    if !is_empty(explicit) {
+        return explicit
+    }
+
+    bindir := env_or_empty("LLVM_BINDIR")
+    if !is_empty(bindir) {
+        candidate := join_path(bindir, "llvm-config")
+        if fs.exists(candidate) {
+            return candidate
+        }
+    }
+
+    candidate := "/opt/homebrew/opt/llvm@22/bin/llvm-config"
+    if fs.exists(candidate) { return candidate }
+    candidate = "/opt/homebrew/opt/llvm/bin/llvm-config"
+    if fs.exists(candidate) { return candidate }
+    candidate = "/usr/local/opt/llvm@22/bin/llvm-config"
+    if fs.exists(candidate) { return candidate }
+    candidate = "/usr/local/opt/llvm/bin/llvm-config"
+    if fs.exists(candidate) { return candidate }
+    candidate = "/usr/lib/llvm-22/bin/llvm-config"
+    if fs.exists(candidate) { return candidate }
+    return "llvm-config"
+}
+
+fn find_runtime_source() string {
+    explicit := env_or_empty("YCPL_RUNTIME_SRC")
+    if !is_empty(explicit) {
+        return explicit
+    }
+    if fs.exists("bootstrap/cpp/runtime/yc_runtime.c") {
+        return "bootstrap/cpp/runtime/yc_runtime.c"
+    }
+    if fs.exists("../../bootstrap/cpp/runtime/yc_runtime.c") {
+        return "../../bootstrap/cpp/runtime/yc_runtime.c"
+    }
+    return ""
+}
+
+fn run_argv(program string, args ArgList, message string) DriverResult {
+    if !args.ok {
+        return DriverResult{ok: false, code: 1, message: "failed to allocate compiler arguments", command: program}
+    }
+    code := os.run_packed(program, args.data, args.len)
+    if code != 0 {
+        return DriverResult{ok: false, code: code, message: message, command: program}
+    }
+    return DriverResult{ok: true, code: 0, message: "", command: program}
+}
+
 fn run_command(cmd Command, message string) DriverResult {
     if !cmd.ok {
         return DriverResult{ok: false, code: 1, message: "compiler command is too long", command: cmd.data}
@@ -238,33 +414,37 @@ pub fn build_native_from_ir(out_dir string) DriverResult {
     ll_file := join_path(out_dir, "merged.ll")
     obj_file := join_path(out_dir, "merged.o")
     bin_file := join_path(out_dir, "merged")
+    runtime_obj := join_path(out_dir, "yc_runtime.o")
+    runtime_source := find_runtime_source()
+    if is_empty(runtime_source) {
+        return DriverResult{ok: false, code: 1, message: "YCPL runtime source not found; set YCPL_RUNTIME_SRC", command: ""}
+    }
 
-    cmd := command_new(8192)
-    cmd = append_shell_quoted(cmd, llc)
-    cmd = append_space(cmd)
-    cmd = append_text(cmd, "-filetype=obj")
-    cmd = append_space(cmd)
-    cmd = append_shell_quoted(cmd, ll_file)
-    cmd = append_space(cmd)
-    cmd = append_text(cmd, "-o")
-    cmd = append_space(cmd)
-    cmd = append_shell_quoted(cmd, obj_file)
-    result := run_command(cmd, "llc failed")
+    args := args_new(4)
+    args = args_push(args, "-filetype=obj")
+    args = args_push(args, ll_file)
+    args = args_push(args, "-o")
+    args = args_push(args, obj_file)
+    result := run_argv(llc, args, "llc failed")
     if !result.ok {
         return result
     }
 
-    cmd = command_new(8192)
-    cmd = append_shell_quoted(cmd, clang)
-    if !is_empty(linkflags) {
-        cmd = append_space(cmd)
-        cmd = append_text(cmd, linkflags)
+    args = args_new(5)
+    args = args_push(args, "-std=c11")
+    args = args_push(args, "-c")
+    args = args_push(args, runtime_source)
+    args = args_push(args, "-o")
+    args = args_push(args, runtime_obj)
+    result = run_argv(clang, args, "YCPL runtime compile failed")
+    if !result.ok {
+        return result
     }
-    cmd = append_space(cmd)
-    cmd = append_shell_quoted(cmd, obj_file)
-    cmd = append_space(cmd)
-    cmd = append_text(cmd, "-o")
-    cmd = append_space(cmd)
-    cmd = append_shell_quoted(cmd, bin_file)
-    return run_command(cmd, "clang link failed")
+
+    llvm_config := find_llvm_config()
+    code := os.native_link(clang, llvm_config, linkflags, obj_file, runtime_obj, bin_file)
+    if code != 0 {
+        return DriverResult{ok: false, code: code, message: "clang link failed", command: clang}
+    }
+    return DriverResult{ok: true, code: 0, message: "", command: clang}
 }

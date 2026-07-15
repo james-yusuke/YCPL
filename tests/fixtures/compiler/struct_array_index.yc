@@ -1,0 +1,14 @@
+import "std/array" as array
+import "std/fmt" as fmt
+
+struct Pair {
+    left i32
+    right i32
+}
+
+fn main() {
+    pairs := array.new([]Pair, 1)
+    pairs = array.append(pairs, Pair{left: 3, right: 4})
+    value := pairs[0]
+    fmt.println(value.left + value.right)
+}

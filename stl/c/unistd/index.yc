@@ -1,0 +1,5 @@
+module c.unistd
+
+pub extern fn close(fd i32) i32 as "close"
+pub extern fn read(fd i32, buf *byte, count size_t) i64 as "read"
+pub extern fn write(fd i32, buf *byte, count size_t) i64 as "write"
