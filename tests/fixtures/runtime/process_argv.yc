@@ -1,0 +1,18 @@
+import "std/mem" as mem
+import "std/os" as os
+import "std/fmt" as fmt
+
+fn main() i32 {
+    args: string := mem.calloc(8, 1)
+    args[0] = '-'
+    args[1] = 'c'
+    args[2] = 0
+    args[3] = 'e'
+    args[4] = 'x'
+    args[5] = 'i'
+    args[6] = 't'
+    args[7] = 0
+    status := os.run_packed("sh", args, 8)
+    fmt.println(status)
+    return 0
+}

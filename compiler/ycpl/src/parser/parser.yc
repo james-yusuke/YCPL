@@ -3,6 +3,7 @@ module compiler.ycpl.parser
 import "ast/ast" as ast
 import "ast/shape" as astshape
 import "parser/body" as body
+import "parser/real" as real
 import "lexer/lexer" as lexer
 import "lexer/token" as tok
 import "std/str" as str
@@ -19,6 +20,11 @@ pub struct ParseResult {
     imports i32
     max_depth i32
     program Program
+}
+
+pub fn parse_ast(path string, source string) ProgramAst {
+    result := real.parse(path, source)
+    return result
 }
 
 fn fail(line i32, col i32, message string) ParseResult {

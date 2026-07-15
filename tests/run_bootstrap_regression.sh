@@ -572,11 +572,13 @@ compile_run_and_verify "$ROOT_DIR/tests/fixtures/compat/109_map_runtime_api.yc" 
 compile_run_and_verify "$ROOT_DIR/tests/fixtures/compiler/34_std_lsp_foundation.yc" $'42\n1\n4\ninitialize\n6\n1\n1\n1\n1\nfn main() {}'
 compile_run_and_verify "$ROOT_DIR/tests/fixtures/compiler/100_retired_keywords_as_identifiers.yc" "42"
 compile_run_and_verify "$ROOT_DIR/tests/fixtures/compiler/108_map_type_syntax.yc" "13" "@std__map__put_i32" "%SymbolTable"
+compile_run_and_verify "$ROOT_DIR/tests/fixtures/compiler/struct_array_index.yc" "7" "load_struct_value_dyn"
 compile_run_and_verify "$ROOT_DIR/tests/fixtures/runtime/107_slice_pointer_extern_abi.yc" $'strap\nstr\n1\n5' "@std__text__slice" "@std__mem__copy" "@memcmp"
 compile_run_and_verify "$ROOT_DIR/tests/fixtures/runtime/111_managed_frame_cleanup.yc" $'12\n0\n6\n1' "@yc_runtime_live_allocations" "@yc_frame_pop" "@yc_move_to_ancestor"
 compile_run_and_verify "$ROOT_DIR/tests/fixtures/runtime/112_managed_child_destructors.yc" $'2\n2' "@yc_attach_child" "@yc_replace_child" "@yc_release"
 compile_run_and_verify "$ROOT_DIR/tests/fixtures/runtime/113_managed_value_roots.yc" $'2\n2\n2' "@yc_attach_child" "@yc_replace_child" "@yc_release"
 compile_run_and_verify "$ROOT_DIR/tests/fixtures/runtime/scope_escape_cleanup.yc" $'scope escape\n0\n0' "@yc_move_to_ancestor" "@yc_frame_push" "@yc_frame_pop"
+compile_run_and_verify "$ROOT_DIR/tests/fixtures/runtime/process_argv.yc" "0" "@yc_process_run_packed"
 
 echo ""
 echo "--- Project Tests ---"

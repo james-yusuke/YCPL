@@ -6,6 +6,8 @@ import "parser/parser" as parser
 import "resolver/resolver" as resolver
 import "source/source" as source
 import "lexer/token" as tok
+import "ast/nodes" as astnodes
+import "ast/project" as astproject
 import "std/fmt" as fmt
 import "std/str" as str
 
@@ -36,6 +38,13 @@ fn run_lex(path string, text string) i32 {
 }
 
 fn run_parse(path string, text string) i32 {
+    // Keep the legacy summary stable for callers during the migration, but do
+    // not let it accept a program the real typed AST frontend cannot retain.
+    parsed_ast := parser.parse_ast(path, text)
+    if !parsed_ast.ok {
+        fmt.printf("%s:%d:%d: %s\n", path, parsed_ast.error_line, parsed_ast.error_col, parsed_ast.message)
+        return 1
+    }
     result := parser.parse(path, text)
     if !result.ok {
         fmt.printf("%s:%d:%d: %s\n", path, result.line, result.col, result.message)
@@ -45,7 +54,32 @@ fn run_parse(path string, text string) i32 {
     return 0
 }
 
+fn run_parse_ast(path string, text string) i32 {
+    result := parser.parse_ast(path, text)
+    if !result.ok {
+        fmt.printf("%s:%d:%d: %s\n", path, result.error_line, result.error_col, result.message)
+        return 1
+    }
+    fmt.printf("ast ok: decls=%d types=%d stmts=%d exprs=%d fields=%d params=%d\n", astnodes.decl_count(result.arena), astnodes.type_count(result.arena), astnodes.stmt_count(result.arena), astnodes.expr_count(result.arena), astnodes.field_count(result.arena), astnodes.param_count(result.arena))
+    return 0
+}
+
+fn run_parse_ast_project(path string) i32 {
+    result := astproject.parse_project(path)
+    if !result.ok {
+        fmt.printf("%s:%d:%d: %s\n", result.file, result.line, result.col, result.message)
+        return 1
+    }
+    fmt.printf("ast project ok: files=%d decls=%d types=%d stmts=%d exprs=%d fields=%d params=%d imports=%d funcs=%d structs=%d enums=%d aliases=%d digest=%d\n", result.files, result.decls, result.types, result.stmts, result.exprs, result.fields, result.params, result.imports, result.functions, result.structs, result.enums, result.aliases, result.digest)
+    return 0
+}
+
 fn run_parse_project(path string) i32 {
+    parsed_ast := astproject.parse_project(path)
+    if !parsed_ast.ok {
+        fmt.printf("%s:%d:%d: %s\n", parsed_ast.file, parsed_ast.line, parsed_ast.col, parsed_ast.message)
+        return 1
+    }
     result := resolver.parse_project(path)
     if !result.ok {
         fmt.printf("%s:%d:%d: %s\n", result.file, result.line, result.col, result.message)
@@ -262,6 +296,9 @@ fn main(argc i32, argv *string) i32 {
 
     path := argv[2]
     if resolver.is_compiler_project(path) {
+        if str.eq(mode, "parse-ast") {
+            return run_parse_ast_project(path)
+        }
         if str.eq(mode, "parse") {
             return run_parse_project(path)
         }
@@ -281,6 +318,9 @@ fn main(argc i32, argv *string) i32 {
     }
     if str.eq(mode, "parse") {
         return run_parse(path, src.text)
+    }
+    if str.eq(mode, "parse-ast") {
+        return run_parse_ast(path, src.text)
     }
     if str.eq(mode, "check") {
         return run_check(path, src.text)

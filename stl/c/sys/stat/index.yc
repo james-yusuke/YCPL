@@ -1,0 +1,3 @@
+module c.sys.stat
+
+pub extern fn mkdir(path string, mode i32) i32 as "mkdir"

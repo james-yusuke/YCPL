@@ -1,0 +1,6 @@
+module c.math
+
+pub extern fn pow(base double, exponent double) double as "pow"
+pub extern fn sin(value double) double as "sin"
+pub extern fn cos(value double) double as "cos"
+pub extern fn sqrt(value double) double as "sqrt"
