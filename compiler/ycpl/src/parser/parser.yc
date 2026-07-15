@@ -1,6 +1,7 @@
 module compiler.ycpl.parser
 
 import "ast/ast" as ast
+import "ast/nodes" as astnodes
 import "ast/shape" as astshape
 import "parser/body" as body
 import "parser/real" as real
@@ -25,6 +26,11 @@ pub struct ParseResult {
 pub fn parse_ast(path string, source string) ProgramAst {
     result := real.parse(path, source)
     return result
+}
+
+pub fn parse_ast_with_file(path string, source string, file_id i32) ProgramAst {
+    result := real.parse(path, source)
+    return astnodes.assign_file_id(result, file_id)
 }
 
 fn fail(line i32, col i32, message string) ParseResult {
