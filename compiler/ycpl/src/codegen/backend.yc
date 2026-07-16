@@ -218,6 +218,19 @@ fn coerce(backend *Backend, value *byte, from *byte, to *byte) *byte {
     return value
 }
 
+fn promote_variadic_argument(backend *Backend, value *byte) *byte {
+    if value == none { return value }
+    typ := llvm.type_of(value)
+    i32_type := llvm.i32_type(backend.ctx)
+    if typ == llvm.i1_type(backend.ctx) {
+        return llvm.build_zext(backend.builder, value, i32_type, "vararg.bool.i32")
+    }
+    if typ == llvm.i8_type(backend.ctx) {
+        return llvm.build_sext(backend.builder, value, i32_type, "vararg.byte.i32")
+    }
+    return value
+}
+
 fn next_block_name(backend *Backend, prefix string) string {
     // LLVM uniquifies repeated readable names deterministically in insertion order.
     backend.block_id += 1
@@ -411,14 +424,19 @@ fn declare_functions(backend *Backend) {
             param_count := decl_param_count(program, symbol.node_id)
             params := ref_slots(param_count)
             variadic := 0
+            fixed_param_count := param_count
             param_id := 0
             for (; param_id < param_count; param_id++) {
-                ref_set(params, param_id, type_for(backend, symbol.file_id, program.arena.param_type_ids[first_param + param_id]))
-                if (program.arena.param_flags[first_param + param_id] / ast.flag_variadic()) % 2 == 1 { variadic = 1 }
+                if (program.arena.param_flags[first_param + param_id] / ast.flag_variadic()) % 2 == 1 {
+                    variadic = 1
+                    fixed_param_count = param_id
+                } else {
+                    ref_set(params, param_id, type_for(backend, symbol.file_id, program.arena.param_type_ids[first_param + param_id]))
+                }
             }
             result := type_for(backend, symbol.file_id, decl_type_id(program, symbol.node_id))
             if str.eq(symbol.name, "main") { result = llvm.i32_type(backend.ctx) }
-            typ := llvm.function_type_refs(result, params, param_count, variadic)
+            typ := llvm.function_type_refs(result, params, fixed_param_count, variadic)
             ref_set(backend.function_types, i, typ)
             function := llvm.named_function(backend.mod, symbol.link_name)
             if function == none { function = llvm.add_function(backend.mod, symbol.link_name, typ) }
@@ -1465,6 +1483,7 @@ fn lower_expr(backend *Backend, program ProgramAst, expr_id i32) {
                 i := 0
                 for (; i < node.arg_count; i++) {
                     lower_expr(backend, program, program.arena.children[node.first_arg + i])
+                    if i > 0 { backend.value = promote_variadic_argument(backend, backend.value) }
                     ref_set(args, i, backend.value)
                 }
                 backend.value = llvm.build_call_refs(backend.builder, printf_type, printf_fn, args, node.arg_count, "printed")
@@ -1478,6 +1497,7 @@ fn lower_expr(backend *Backend, program ProgramAst, expr_id i32) {
                 format := "%d"
                 typ := llvm.type_of(backend.value)
                 if typ == backend.ptr_type { format = "%s" }
+                if typ == llvm.i1_type(backend.ctx) { backend.value = llvm.build_zext(backend.builder, backend.value, llvm.i32_type(backend.ctx), "bool.i32") }
                 if typ == llvm.i8_type(backend.ctx) { backend.value = llvm.build_sext(backend.builder, backend.value, llvm.i32_type(backend.ctx), "char.i32") }
                 if typ == llvm.i64_type(backend.ctx) { format = "%lld" }
                 if typ == llvm.double_type(backend.ctx) { format = "%f" }
@@ -1496,6 +1516,13 @@ fn lower_expr(backend *Backend, program ProgramAst, expr_id i32) {
             function_program: ProgramAst := project.program_at(backend.semantic.syntax, symbol.file_id)
             first_param := decl_first_param(function_program, symbol.node_id)
             param_count := decl_param_count(function_program, symbol.node_id)
+            fixed_param_count := param_count
+            param_index := 0
+            for (; param_index < param_count; param_index++) {
+                if (function_program.arena.param_flags[first_param + param_index] / ast.flag_variadic()) % 2 == 1 {
+                    fixed_param_count = param_index
+                }
+            }
             implicit_owner := false
             callee: *ExprNode := &program.arena.exprs[node.left]
             if callee.kind == ast.expr_member() {
@@ -1509,7 +1536,7 @@ fn lower_expr(backend *Backend, program ProgramAst, expr_id i32) {
             if implicit_owner {
                 lower_expr(backend, program, callee.left)
                 argument := backend.value
-                if param_count > 0 {
+                if fixed_param_count > 0 {
                     target := type_for(backend, symbol.file_id, function_program.arena.param_type_ids[first_param])
                     argument = coerce(backend, argument, llvm.type_of(argument), target)
                 }
@@ -1521,9 +1548,11 @@ fn lower_expr(backend *Backend, program ProgramAst, expr_id i32) {
                 if implicit_owner { source_index -= 1 }
                 lower_expr(backend, program, program.arena.children[node.first_arg + source_index])
                 argument := backend.value
-                if i < param_count {
+                if i < fixed_param_count {
                     target := type_for(backend, symbol.file_id, function_program.arena.param_type_ids[first_param + i])
                     argument = coerce(backend, argument, llvm.type_of(argument), target)
+                } else if fixed_param_count < param_count {
+                    argument = promote_variadic_argument(backend, argument)
                 }
                 ref_set(args, i, argument)
             }

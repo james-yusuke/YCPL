@@ -27,6 +27,7 @@ Value *CodeGen::codegen_printf_call(const ast::CallExpr *ce)
         Value *v = codegen_expr(ce->args[i].get());
         if (!v)
             return nullptr;
+        v = promote_variadic_argument(v, "printf.vararg");
         argsV.push_back(v);
     }
     FunctionCallee printfFn = get_printf();

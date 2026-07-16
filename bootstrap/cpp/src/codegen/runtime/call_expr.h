@@ -157,6 +157,10 @@ Value *CodeGen::codegen_call(const ast::CallExpr *ce)
                     argv = builder.CreateIntToPtr(argv, cast<PointerType>(paramTy), "call.arg.inttoptr");
             }
         }
+        else if (calleeType->isVarArg())
+        {
+            argv = promote_variadic_argument(argv, "call.vararg");
+        }
         argsV.push_back(argv);
     }
 

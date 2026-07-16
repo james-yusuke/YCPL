@@ -64,6 +64,7 @@ Value *CodeGen::codegen_sprintf_call(const ast::CallExpr *ce)
         Value *v = codegen_expr(ce->args[i].get());
         if (!v)
             return nullptr;
+        v = promote_variadic_argument(v, "sprintf.vararg");
         argsV.push_back(v);
     }
 

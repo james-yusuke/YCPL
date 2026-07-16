@@ -1,0 +1,7 @@
+import "std/fmt" as fmt
+
+fn main() {
+    flag := true
+    small: byte := -1
+    fmt.printf("%d %d\n", flag, small)
+}
