@@ -66,6 +66,18 @@ jobs:
           } > "$CLANG_WRAPPER"
           chmod +x "$CLANG_WRAPPER"
           "$CLANG_WRAPPER" --version
+          LLVM_ENV="$RUNNER_TEMP/ycpl-llvm-env.sh"
+          {
+            echo '#!/usr/bin/env bash'
+            printf 'export LLVM_CONFIG=%q\n' "$LLVM_CONFIG"
+            printf 'export LLVM_BINDIR=%q\n' "$LLVM_BINDIR"
+            printf 'export LLVM_DIR=%q\n' "$LLVM_DIR"
+            printf 'export LLC=%q\n' "$LLVM_BINDIR/llc"
+            printf 'export CLANG=%q\n' "$CLANG_WRAPPER"
+            printf 'export LINKFLAGS=%q\n' '-no-pie -fuse-ld=lld'
+            printf 'export PATH=%q\n' "$LLVM_BINDIR:$PATH"
+          } > "$LLVM_ENV"
+          chmod +x "$LLVM_ENV"
           {
             echo "LLVM_CONFIG=$LLVM_CONFIG"
             echo "LLVM_BINDIR=$LLVM_BINDIR"
@@ -73,6 +85,7 @@ jobs:
             echo "LLC=$LLVM_BINDIR/llc"
             echo "CLANG=$CLANG_WRAPPER"
             echo "LINKFLAGS=-no-pie -fuse-ld=lld"
+            echo "YCPL_LLVM_ENV=$LLVM_ENV"
           } >> "$GITHUB_ENV"
           echo "$LLVM_BINDIR" >> "$GITHUB_PATH"
 
@@ -112,6 +125,9 @@ jobs:
 
       - name: Build bootstrap and self-host stages
         run: |
+          source "$RUNNER_TEMP/ycpl-llvm-env.sh"
+          test -n "$CLANG"
+          test -x "$CLANG"
           bazel build \
             --action_env=PATH="$PATH" \
             --action_env=LLVM_CONFIG="$LLVM_CONFIG" \
@@ -131,6 +147,7 @@ jobs:
       - name: Verify promoted compiler
         run: |
           set -euo pipefail
+          source "$RUNNER_TEMP/ycpl-llvm-env.sh"
           cmp bazel-bin/ycc bazel-bin/ycc-ycpl
           bazel-bin/ycc check compiler/ycpl
           YCPL_STL_ROOT="$PWD/stl" \
@@ -144,6 +161,9 @@ jobs:
 
       - name: Test with Bazel
         run: |
+          source "$RUNNER_TEMP/ycpl-llvm-env.sh"
+          test -n "$CLANG"
+          test -x "$CLANG"
           bazel test \
             --action_env=PATH="$PATH" \
             --action_env=LLVM_CONFIG="$LLVM_CONFIG" \
@@ -163,7 +183,9 @@ jobs:
             //...
 
       - name: Run C++ bootstrap regression
-        run: tests/run_bootstrap_regression.sh
+        run: |
+          source "$RUNNER_TEMP/ycpl-llvm-env.sh"
+          tests/run_bootstrap_regression.sh
 
       - name: Install VSCode extension dependencies
         run: |
@@ -176,7 +198,9 @@ jobs:
           npm run check --prefix editors/vscode/language-server
 
       - name: Run LSP protocol tests
-        run: tools/lsp/run_tests.sh
+        run: |
+          source "$RUNNER_TEMP/ycpl-llvm-env.sh"
+          tools/lsp/run_tests.sh
 
       - name: Summarize verification
         if: always()
