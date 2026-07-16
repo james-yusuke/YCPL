@@ -36,7 +36,8 @@ let workspaceRoots: string[] = [];
 
 connection.onInitialize((params: InitializeParams): InitializeResult => {
   workspaceRoots = workspaceRootPaths(params);
-  providers = new YcplProviders(index, new StandardLibraryIndex(workspaceRoots[0]), compiler);
+  const options = params.initializationOptions as { stlRoot?: string } | undefined;
+  providers = new YcplProviders(index, new StandardLibraryIndex(workspaceRoots[0], options?.stlRoot), compiler);
 
   return {
     capabilities: {

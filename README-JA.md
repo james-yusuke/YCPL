@@ -30,6 +30,7 @@ stl/std/                YCPL標準ライブラリ
 examples/               言語、stdlib、project examples
 tests/                  conformance、negative、project、runtime fixtures
 tools/lsp/              YCPLで実装したLSP
+editors/vscode/         VS Code拡張とportable TypeScript LSP
 ```
 
 YCPLはearly alphaであり、production用途にはまだ適していません。コンパイラは
@@ -155,6 +156,23 @@ conformance suiteは全examples、stdlib、`c/*` FFI、project/module build、ru
 ownership、negative fixtureの終了分類・位置・診断messageを検査します。Bazelの
 fixed-point testはstage2/stage3実行環境からseed/fallback変数とbootstrap binaryも
 取り除きます。
+
+## VS Code
+
+VS Code拡張は、設定された`YCPL-lsp`、workspaceでbuildされたnative LSP、
+PATH上の`YCPL-lsp`の順にYCPL製serverを探し、見つからない場合はVSIX同梱の
+TypeScript LSPへfallbackします。セルフホスト版`ycc`も自動検出し、check、
+build、build-ir、runとeditor diagnosticsを提供します。
+
+```sh
+npm ci --prefix editors/vscode/language-server
+npm run check --prefix editors/vscode/language-server
+npm ci --prefix editors/vscode/extension
+npm run check --prefix editors/vscode/extension
+npm run package --prefix editors/vscode/extension
+```
+
+詳細は[VS Code拡張ガイド](editors/vscode/extension/README.md)を参照してください。
 
 ## ドキュメント
 

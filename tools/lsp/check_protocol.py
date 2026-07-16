@@ -198,7 +198,7 @@ def main():
 
     print("YCPL LSP protocol tests")
     case(binary, "initialize", [initialize], lambda _raw, obj: "semanticTokensProvider" in obj.get("result", {}).get("capabilities", {}) and obj["result"]["capabilities"].get("definitionProvider") is True and obj["result"]["capabilities"].get("declarationProvider") is True and obj["result"]["capabilities"].get("typeDefinitionProvider") is True and obj["result"]["capabilities"].get("workspaceSymbolProvider") is True and obj["result"]["capabilities"].get("renameProvider", {}).get("prepareProvider") is True, "initialize rich capabilities")
-    case(binary, "completion", [completion], lambda raw, _obj: '"array.append"' in raw and '"insertTextFormat":2' in raw, "snippet-aware completion")
+    case(binary, "completion", [completion], lambda raw, _obj: '"label":"Vec"' in raw and '"std/utf8"' in raw and '"insertTextFormat":2' in raw, "managed and stdlib completion")
     case(binary, "hover", [hover], lambda raw, _obj: '"YCPL symbol"' in raw, "hover content")
     case(binary, "symbols", [did_open + document_symbol], lambda raw, _obj: '"name":"main"' in raw, "main documentSymbol")
     case(binary, "semantic_tokens", [did_open + semantic_tokens], lambda _raw, obj: len(obj.get("result", {}).get("data", [])) >= 10, "semantic token data")

@@ -20,7 +20,7 @@ export interface StandardLibraryParameter {
   typeName?: string;
 }
 
-const hiddenModules = new Set(["std/mem"]);
+const hiddenModules = new Set(["std/mem", "std/unsafe/mem"]);
 const hiddenCompatibilitySymbols = new Set([
   "std/array:new",
   "std/array:append",
@@ -58,7 +58,10 @@ const hiddenCompatibilitySymbols = new Set([
 export class StandardLibraryIndex {
   private symbols: StandardLibrarySymbol[] | undefined;
 
-  constructor(private readonly workspaceRoot: string | undefined) {}
+  constructor(
+    private readonly workspaceRoot: string | undefined,
+    private readonly configuredStlRoot?: string
+  ) {}
 
   /** Returns known stdlib completion symbols. */
   async completionItems(): Promise<StandardLibrarySymbol[]> {
@@ -70,10 +73,10 @@ export class StandardLibraryIndex {
   }
 
   private async scan(): Promise<StandardLibrarySymbol[]> {
-    if (!this.workspaceRoot) {
+    const stlRoot = this.configuredStlRoot ?? (this.workspaceRoot ? path.join(this.workspaceRoot, "stl") : undefined);
+    if (!stlRoot) {
       return fallbackStdlib();
     }
-    const stlRoot = path.join(this.workspaceRoot, "stl");
     try {
       const files = await collectYcFiles(stlRoot);
       const symbols: StandardLibrarySymbol[] = [];
@@ -122,6 +125,26 @@ export class StandardLibraryIndex {
             symbolName: match[1],
             detail: `${match[1]} struct - ${uri}`,
             kind: CompletionItemKind.Struct
+          });
+        }
+        for (const match of text.matchAll(/\bpub\s+enum\s+([A-Za-z_][A-Za-z0-9_]*)\b/g)) {
+          symbols.push({
+            label: `${moduleAlias}.${match[1]}`,
+            modulePath,
+            moduleAlias,
+            symbolName: match[1],
+            detail: `${match[1]} enum - ${uri}`,
+            kind: CompletionItemKind.Enum
+          });
+        }
+        for (const match of text.matchAll(/\bpub\s+type\s+([A-Za-z_][A-Za-z0-9_]*)\b/g)) {
+          symbols.push({
+            label: `${moduleAlias}.${match[1]}`,
+            modulePath,
+            moduleAlias,
+            symbolName: match[1],
+            detail: `${match[1]} type alias - ${uri}`,
+            kind: CompletionItemKind.TypeParameter
           });
         }
       }
@@ -178,15 +201,19 @@ function normalizeTypeName(typeName: string): string {
 }
 
 function fallbackStdlib(): StandardLibrarySymbol[] {
+  const modules = [
+    "fmt", "array", "io", "bytes", "text", "str", "math", "map", "fs", "os",
+    "json", "jsonrpc", "hex", "base32", "base64", "hash", "utf8", "strconv",
+    "path", "sort", "time", "random"
+  ].map((name) => ({
+    label: `std/${name}`,
+    modulePath: `std/${name}`,
+    moduleAlias: name,
+    detail: "YCPL standard library module",
+    kind: CompletionItemKind.Module
+  }));
   return [
-    { label: "std/fmt", modulePath: "std/fmt", moduleAlias: "fmt", detail: "YCPL standard library module", kind: CompletionItemKind.Module },
-    { label: "std/array", modulePath: "std/array", moduleAlias: "array", detail: "YCPL standard library module", kind: CompletionItemKind.Module },
-    { label: "std/io", modulePath: "std/io", moduleAlias: "io", detail: "YCPL standard library module", kind: CompletionItemKind.Module },
-    { label: "std/bytes", modulePath: "std/bytes", moduleAlias: "bytes", detail: "YCPL standard library module", kind: CompletionItemKind.Module },
-    { label: "std/hex", modulePath: "std/hex", moduleAlias: "hex", detail: "YCPL standard library module", kind: CompletionItemKind.Module },
-    { label: "std/base64", modulePath: "std/base64", moduleAlias: "base64", detail: "YCPL standard library module", kind: CompletionItemKind.Module },
-    { label: "std/hash", modulePath: "std/hash", moduleAlias: "hash", detail: "YCPL standard library module", kind: CompletionItemKind.Module },
-    { label: "std/base32", modulePath: "std/base32", moduleAlias: "base32", detail: "YCPL standard library module", kind: CompletionItemKind.Module },
+    ...modules,
     { label: "fmt.println", modulePath: "std/fmt", moduleAlias: "fmt", symbolName: "println", detail: "println(value string)", signature: "println(value string)", parameters: [{ name: "value", typeName: "string" }], kind: CompletionItemKind.Function },
     { label: "array.make", modulePath: "std/array", moduleAlias: "array", symbolName: "make", detail: "make(typ Type) []T", signature: "make(typ Type) []T", returnType: "[]T", parameters: [{ name: "typ", typeName: "Type" }], kind: CompletionItemKind.Function },
     { label: "array.push", modulePath: "std/array", moduleAlias: "array", symbolName: "push", detail: "push(xs []T, value T) []T", signature: "push(xs []T, value T) []T", returnType: "[]T", parameters: [{ name: "xs", typeName: "[]T" }, { name: "value", typeName: "T" }], kind: CompletionItemKind.Function },
@@ -207,6 +234,12 @@ function fallbackStdlib(): StandardLibrarySymbol[] {
     { label: "hash.crc32", modulePath: "std/hash", moduleAlias: "hash", symbolName: "crc32", detail: "crc32(b Bytes) i64", signature: "crc32(b Bytes) i64", returnType: "i64", parameters: [{ name: "b", typeName: "Bytes" }], kind: CompletionItemKind.Function },
     { label: "bytes.eq", modulePath: "std/bytes", moduleAlias: "bytes", symbolName: "eq", detail: "eq(a Bytes, b Bytes) bool", signature: "eq(a Bytes, b Bytes) bool", returnType: "bool", parameters: [{ name: "a", typeName: "Bytes" }, { name: "b", typeName: "Bytes" }], kind: CompletionItemKind.Function },
     { label: "base32.encode", modulePath: "std/base32", moduleAlias: "base32", symbolName: "encode", detail: "encode(b Bytes) string", signature: "encode(b Bytes) string", returnType: "string", parameters: [{ name: "b", typeName: "Bytes" }], kind: CompletionItemKind.Function },
-    { label: "base32.decode", modulePath: "std/base32", moduleAlias: "base32", symbolName: "decode", detail: "decode(text string) Bytes", signature: "decode(text string) Bytes", returnType: "Bytes", parameters: [{ name: "text", typeName: "string" }], kind: CompletionItemKind.Function }
+    { label: "base32.decode", modulePath: "std/base32", moduleAlias: "base32", symbolName: "decode", detail: "decode(text string) Bytes", signature: "decode(text string) Bytes", returnType: "Bytes", parameters: [{ name: "text", typeName: "string" }], kind: CompletionItemKind.Function },
+    { label: "utf8.valid", modulePath: "std/utf8", moduleAlias: "utf8", symbolName: "valid", detail: "valid(value string) bool", signature: "valid(value string) bool", returnType: "bool", parameters: [{ name: "value", typeName: "string" }], kind: CompletionItemKind.Function },
+    { label: "strconv.parse_i32", modulePath: "std/strconv", moduleAlias: "strconv", symbolName: "parse_i32", detail: "parse_i32(value string) ParseI32Result", signature: "parse_i32(value string) ParseI32Result", returnType: "ParseI32Result", parameters: [{ name: "value", typeName: "string" }], kind: CompletionItemKind.Function },
+    { label: "path.join", modulePath: "std/path", moduleAlias: "path", symbolName: "join", detail: "join(left string, right string) string", signature: "join(left string, right string) string", returnType: "string", parameters: [{ name: "left", typeName: "string" }, { name: "right", typeName: "string" }], kind: CompletionItemKind.Function },
+    { label: "sort.sort_i32", modulePath: "std/sort", moduleAlias: "sort", symbolName: "sort_i32", detail: "sort_i32(values Vec<i32>)", signature: "sort_i32(values Vec<i32>)", parameters: [{ name: "values", typeName: "Vec<i32>" }], kind: CompletionItemKind.Function },
+    { label: "time.monotonic_now", modulePath: "std/time", moduleAlias: "time", symbolName: "monotonic_now", detail: "monotonic_now() Instant", signature: "monotonic_now() Instant", returnType: "Instant", parameters: [], kind: CompletionItemKind.Function },
+    { label: "random.seeded", modulePath: "std/random", moduleAlias: "random", symbolName: "seeded", detail: "seeded(seed i64) Rng", signature: "seeded(seed i64) Rng", returnType: "Rng", parameters: [{ name: "seed", typeName: "i64" }], kind: CompletionItemKind.Function }
   ];
 }

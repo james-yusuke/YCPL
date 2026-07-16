@@ -2,12 +2,28 @@
   "name": "ycpl-vscode",
   "displayName": "YCPL",
   "description": "YCPL language support powered by the YCPL Language Server.",
-  "version": "0.1.0",
-  "publisher": "YCPL",
-  "private": true,
+  "version": "0.2.0",
+  "publisher": "ycpl",
+  "license": "MIT",
+  "icon": "images/icon.png",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/james-yusuke/YCPL.git"
+  },
+  "homepage": "https://github.com/james-yusuke/YCPL",
+  "bugs": {
+    "url": "https://github.com/james-yusuke/YCPL/issues"
+  },
+  "keywords": [
+    "ycpl",
+    "language-server",
+    "compiler",
+    "llvm",
+    "self-hosting"
+  ],
   "type": "module",
   "engines": {
-    "vscode": "^1.85.0"
+    "vscode": "^1.91.0"
   },
   "categories": [
     "Programming Languages"
@@ -17,12 +33,24 @@
   ],
   "activationEvents": [
     "onLanguage:ycpl",
-    "onCommand:YCPL.restartLanguageServer"
+    "onCommand:YCPL.restartLanguageServer",
+    "onCommand:YCPL.check",
+    "onCommand:YCPL.build",
+    "onCommand:YCPL.buildIR",
+    "onCommand:YCPL.run"
   ],
-  "main": "./dist/extension.js",
+  "main": "./dist/extension.cjs",
   "scripts": {
-    "build": "tsc -p tsconfig.json",
-    "check": "npm run build"
+    "clean": "node scripts/clean.mjs",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "bundle": "node scripts/bundle.mjs",
+    "build": "npm run clean && npm run typecheck && npm run bundle",
+    "test": "node --test test/*.test.mjs",
+    "package": "npm run build && node scripts/prepare-package.mjs && vsce package --out artifacts/ycpl-vscode.vsix",
+    "check-package": "node scripts/check-package.mjs artifacts/ycpl-vscode.vsix",
+    "test:extension": "npm run package && node test/run-extension-tests.mjs",
+    "test:extension:native": "npm run package && node test/run-native-extension-tests.mjs",
+    "check": "npm run build && npm test"
   },
   "contributes": {
     "languages": [
@@ -56,6 +84,31 @@
         "command": "YCPL.restartLanguageServer",
         "title": "Restart Language Server",
         "category": "YCPL"
+      },
+      {
+        "command": "YCPL.check",
+        "title": "Check Current File or Project",
+        "category": "YCPL"
+      },
+      {
+        "command": "YCPL.build",
+        "title": "Build Current File or Project",
+        "category": "YCPL"
+      },
+      {
+        "command": "YCPL.buildIR",
+        "title": "Build LLVM IR",
+        "category": "YCPL"
+      },
+      {
+        "command": "YCPL.run",
+        "title": "Run Current File or Project",
+        "category": "YCPL"
+      },
+      {
+        "command": "YCPL.showOutput",
+        "title": "Show Output",
+        "category": "YCPL"
       }
     ],
     "configuration": {
@@ -64,7 +117,56 @@
         "YCPL.server.path": {
           "type": "string",
           "default": "",
-          "description": "Path to a ycpl-language-server executable. Leave empty to use the bundled workspace server."
+          "scope": "resource",
+          "description": "Path to a native YCPL-lsp executable. Relative paths are resolved from the workspace."
+        },
+        "YCPL.server.mode": {
+          "type": "string",
+          "enum": [
+            "auto",
+            "native",
+            "typescript"
+          ],
+          "default": "auto",
+          "description": "Select the native YCPL server automatically, require it, or use the bundled TypeScript fallback."
+        },
+        "YCPL.compiler.path": {
+          "type": "string",
+          "default": "",
+          "scope": "resource",
+          "description": "Path to the self-hosted ycc executable."
+        },
+        "YCPL.checkOnSave": {
+          "type": "boolean",
+          "default": true,
+          "description": "Run ycc check 300ms after saving a YCPL source file."
+        },
+        "YCPL.stlRoot": {
+          "type": "string",
+          "default": "",
+          "scope": "resource",
+          "description": "YCPL standard-library root passed as YCPL_STL_ROOT."
+        },
+        "YCPL.runtimeSource": {
+          "type": "string",
+          "default": "",
+          "scope": "resource",
+          "description": "Optional yc_runtime.c path passed as YCPL_RUNTIME_SRC."
+        },
+        "YCPL.outputDirectory": {
+          "type": "string",
+          "default": ".ycpl/build",
+          "scope": "resource",
+          "description": "Build output directory, relative to the current YCPL project."
+        },
+        "YCPL.run.arguments": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "scope": "resource",
+          "description": "Arguments passed to the program after -- by YCPL: Run."
         },
         "YCPL.trace.server": {
           "type": "string",
@@ -105,6 +207,9 @@
   "devDependencies": {
     "@types/node": "^26.1.1",
     "@types/vscode": "^1.85.0",
+    "@vscode/test-electron": "^2.5.2",
+    "@vscode/vsce": "^3.7.1",
+    "esbuild": "^0.25.0",
     "typescript": "^7.0.2"
   }
 }

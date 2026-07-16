@@ -85,6 +85,18 @@ test("stdlib completion supports std modules and UFCS methods", async () => {
   assert.equal(base32.additionalTextEdits?.[0].newText, "import \"std/base32\" as base32\n");
 });
 
+test("fallback stdlib includes expanded managed modules", async () => {
+  const parser = new YcplParser();
+  const index = new WorkspaceIndex();
+  const document = parser.parse("file:///expanded-stdlib.yc", 1, "fn main() i32 {\n    \n    return 0\n}");
+  index.update(document);
+  const providers = new YcplProviders(index, new StandardLibraryIndex(undefined), new NullCompilerBridge());
+  const items = await providers.completion({ textDocument: { uri: document.uri }, position: Position.create(1, 4) });
+  for (const label of ["utf8.valid", "strconv.parse_i32", "path.join", "sort.sort_i32", "time.monotonic_now", "random.seeded"]) {
+    assert.ok(items.some((item) => item.label === label), `missing ${label}`);
+  }
+});
+
 test("hover, definition, rename, symbols, and semantic tokens work", () => {
   const { document, providers } = fixture();
   const hover = providers.hover({ textDocument: { uri: document.uri }, position: Position.create(1, 4) });

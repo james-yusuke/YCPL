@@ -90,6 +90,8 @@ coverage/
 # Package / distribution
 # ------------------------
 dist/
+editors/vscode/extension/artifacts/
+editors/vscode/extension/server/
 build-*/
 _deps/
 _deb/
@@ -105,6 +107,8 @@ wheelhouse/
 !.vscode/launch.json
 !.vscode/tasks.json
 .history/
+.vscode-test/
+.ycpl/
 # JetBrains
 .idea/
 *.iml

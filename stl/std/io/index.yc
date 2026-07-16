@@ -1,6 +1,7 @@
 module std.io
 
 import "c/unistd" as unistd
+import "c/stdio" as stdio
 import "std/bytes" as bytes
 import "std/fmt" as fmt
 import "std/mem" as mem
@@ -49,7 +50,9 @@ pub fn read_stdin_all(cap i32) string {
 
 pub fn write_stdout(text string) i32 { return write_str(1, text) }
 pub fn write_stderr(text string) i32 { return write_str(2, text) }
+pub fn flush() i32 { return stdio.fflush(none) }
 
 pub fn send_lsp_body(body string) {
     fmt.printf("Content-Length: %lld\r\n\r\n%s", str.len(body), body)
+    flush()
 }

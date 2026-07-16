@@ -1,6 +1,8 @@
 # YCPL LSP
 
-This is the v0.4 YCPL language server written in YCPL.
+This is the native v0.4 YCPL language server written in YCPL and built with the
+self-hosted `ycc`. The VS Code extension prefers it when available and falls
+back to its bundled TypeScript server otherwise.
 
 Build the native binary:
 
@@ -18,8 +20,9 @@ The server speaks JSON-RPC over stdio with `Content-Length` framing and supports
 initialize, shutdown, full-text document sync notifications, diagnostics, hover,
 snippet-aware completion, documentSymbol, semantic tokens, formatting, range
 formatting, folding ranges, signature help, definition, declaration,
-typeDefinition, references, document highlight, prepareRename, rename,
-selectionRange, and workspace/symbol responses.
+typeDefinition, implementation, references, document highlight, prepareRename,
+rename, selectionRange, workspace/symbol, inlay hints, quick fixes, reference
+code lenses, and call hierarchy responses.
 
 v0.4 keeps the implementation lightweight but editor-complete enough for daily
 YCPL editing:
@@ -42,6 +45,8 @@ YCPL editing:
   type to the corresponding struct declaration;
 - references, rename, and workspace/symbol scan every currently open YCPL
   document tracked by the LSP.
+- `check_common_protocol.py` applies the same capability fixture to the native
+  server and the portable TypeScript server.
 
 Full semantic project analysis, unopened-file indexing, import graph indexing,
 formatting through a full AST, and type-aware rename are reserved for the next

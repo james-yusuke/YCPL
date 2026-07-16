@@ -3,8 +3,20 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
 PROJECT_DIR="${YCPL_LSP_PROJECT_DIR:-$ROOT_DIR/tools/lsp}"
-YCC="${YCC:-$ROOT_DIR/build/ycc}"
 OUT_DIR="${YCPL_LSP_OUT_DIR:-$PROJECT_DIR/build}"
+
+if [ -z "${YCC:-}" ]; then
+  if [ -x "$ROOT_DIR/bazel-bin/ycc" ]; then
+    YCC="$ROOT_DIR/bazel-bin/ycc"
+  elif [ -x "$ROOT_DIR/build/ycc" ]; then
+    YCC="$ROOT_DIR/build/ycc"
+  elif command -v ycc >/dev/null 2>&1; then
+    YCC="$(command -v ycc)"
+  else
+    printf 'Self-hosted ycc was not found. Build //:ycc or set YCC.\n' >&2
+    exit 1
+  fi
+fi
 
 if [ -z "${LINKFLAGS+x}" ]; then
   case "$(uname -s)" in
@@ -63,7 +75,10 @@ RUNTIME_SRC="${YCPL_RUNTIME_SRC:-$ROOT_DIR/bootstrap/cpp/runtime/yc_runtime.c}"
 mkdir -p "$OUT_DIR"
 (cd "$PROJECT_DIR" && "$YCC" build-ir)
 
-LL_FILE="$(find "$OUT_DIR" -name '*.ll' | head -1)"
+LL_FILE="$OUT_DIR/merged.ll"
+if [ ! -f "$LL_FILE" ]; then
+  LL_FILE="$(find "$OUT_DIR" -name '*.ll' -print | sort | head -1)"
+fi
 if [ -z "$LL_FILE" ]; then
   printf 'No LLVM IR generated in %s\n' "$OUT_DIR" >&2
   exit 1
