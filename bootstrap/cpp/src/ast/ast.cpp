@@ -59,6 +59,16 @@ namespace ast
         os << "]\n";
     }
 
+    void VecType::print(std::ostream &os, int indent) const
+    {
+        print_indent(os, indent);
+        os << "VecType[\n";
+        if (elem)
+            elem->print(os, indent + 2);
+        print_indent(os, indent);
+        os << "]\n";
+    }
+
     void FuncType::print(std::ostream &os, int indent) const
     {
         print_indent(os, indent);
@@ -295,6 +305,18 @@ namespace ast
                     init.value->print(os, indent + 6);
             }
         }
+    }
+
+    void VecLiteral::print(std::ostream &os, int indent) const
+    {
+        print_indent(os, indent);
+        os << "VecLiteral[\n";
+        if (elem_type)
+            elem_type->print(os, indent + 2);
+        if (capacity)
+            capacity->print(os, indent + 2);
+        print_indent(os, indent);
+        os << "]\n";
     }
 
     void ExprStmt::print(std::ostream &os, int indent) const

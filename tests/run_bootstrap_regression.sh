@@ -572,11 +572,14 @@ compile_run_and_verify "$ROOT_DIR/tests/fixtures/compat/109_map_runtime_api.yc" 
 compile_run_and_verify "$ROOT_DIR/tests/fixtures/compiler/34_std_lsp_foundation.yc" $'42\n1\n4\ninitialize\n6\n1\n1\n1\n1\nfn main() {}'
 compile_run_and_verify "$ROOT_DIR/tests/fixtures/compiler/100_retired_keywords_as_identifiers.yc" "42"
 compile_run_and_verify "$ROOT_DIR/tests/fixtures/compiler/108_map_type_syntax.yc" "13" "@std__map__put_i32" "%SymbolTable"
+compile_run_and_verify "$ROOT_DIR/tests/fixtures/compiler/109_vec_builtin.yc" $'0\n1\n2\n3\n16\n60\n30\n9\n0\n7\n2\n8' "%YCPLArrayHeader" "@yc_attach_child" "@yc_replace_child"
+compile_run_and_verify "$ROOT_DIR/tests/fixtures/compiler/110_dynamic_limits.yc" $'160\n48\n64' "f64\"" "dynamic_limits__many"
 compile_run_and_verify "$ROOT_DIR/tests/fixtures/compiler/struct_array_index.yc" "7" "load_struct_value_dyn"
 compile_run_and_verify "$ROOT_DIR/tests/fixtures/runtime/107_slice_pointer_extern_abi.yc" $'strap\nstr\n1\n5' "@std__text__slice" "@std__mem__copy" "@memcmp"
 compile_run_and_verify "$ROOT_DIR/tests/fixtures/runtime/111_managed_frame_cleanup.yc" $'12\n0\n6\n1' "@yc_runtime_live_allocations" "@yc_frame_pop" "@yc_move_to_ancestor"
 compile_run_and_verify "$ROOT_DIR/tests/fixtures/runtime/112_managed_child_destructors.yc" $'2\n2' "@yc_attach_child" "@yc_replace_child" "@yc_release"
 compile_run_and_verify "$ROOT_DIR/tests/fixtures/runtime/113_managed_value_roots.yc" $'2\n2\n2' "@yc_attach_child" "@yc_replace_child" "@yc_release"
+compile_run_and_verify "$ROOT_DIR/tests/fixtures/runtime/114_vec_managed_ownership.yc" $'2\n2\n2\n2' "@yc_attach_child" "@yc_release" "vec.clear" "vec.replace"
 compile_run_and_verify "$ROOT_DIR/tests/fixtures/runtime/scope_escape_cleanup.yc" $'scope escape\n0\n0' "@yc_move_to_ancestor" "@yc_frame_push" "@yc_frame_pop"
 compile_run_and_verify "$ROOT_DIR/tests/fixtures/runtime/process_argv.yc" "0" "@yc_process_run_packed"
 
@@ -627,6 +630,13 @@ compile_expect_failure "$ROOT_DIR/tests/fixtures/negative/49_malformed_extern_fa
 compile_expect_failure "$ROOT_DIR/tests/fixtures/negative/50_malformed_intrinsic_failure.yc" "expected function or method name"
 compile_expect_failure "$ROOT_DIR/tests/fixtures/negative/51_malformed_struct_literal_failure.yc" "expected '}' to close struct literal"
 compile_expect_failure "$ROOT_DIR/tests/fixtures/negative/52_misplaced_else_failure.yc" "unexpected token in expression"
+
+echo ""
+echo "--- Negative Vec Tests ---"
+compile_expect_failure "$ROOT_DIR/tests/fixtures/negative/53_vec_capacity_type_failure.yc" "Vec capacity must be an integer"
+compile_expect_failure "$ROOT_DIR/tests/fixtures/negative/54_vec_push_type_failure.yc" "Vec.push value type does not match element type"
+compile_expect_failure "$ROOT_DIR/tests/fixtures/negative/55_vec_raw_pointer_failure.yc" "Vec value cannot initialize a different declared type"
+compile_run_expect_failure "$ROOT_DIR/tests/fixtures/negative/56_vec_index_oob_abort.yc"
 
 echo ""
 echo "========================================"

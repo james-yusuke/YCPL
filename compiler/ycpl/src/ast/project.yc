@@ -5,8 +5,8 @@ import "parser/parser" as parser
 import "resolver/resolver" as resolver
 import "source/source" as source
 import "c/yc_runtime" as runtime
-import "std/mem" as mem
 import "std/str" as str
+import "std/text" as text
 
 pub struct ProjectFile {
     id i32
@@ -36,12 +36,11 @@ pub struct ProjectAstResult {
     enums i32
     aliases i32
     digest i32
-    file_nodes *ProjectFile
-    file_cap i32
+    file_nodes Vec<ProjectFile>
 }
 
 fn fail(file string, line i32, col i32, message string) ProjectAstResult {
-    return ProjectAstResult{ok: false, file: file, message: message, line: line, col: col, files: 0, decls: 0, types: 0, stmts: 0, exprs: 0, fields: 0, params: 0, imports: 0, functions: 0, structs: 0, enums: 0, aliases: 0, digest: 17, file_nodes: none, file_cap: 0}
+    return ProjectAstResult{ok: false, file: file, message: message, line: line, col: col, files: 0, decls: 0, types: 0, stmts: 0, exprs: 0, fields: 0, params: 0, imports: 0, functions: 0, structs: 0, enums: 0, aliases: 0, digest: 17, file_nodes: Vec<ProjectFile>{}}
 }
 
 fn relative_path(root string, path string) string {
@@ -58,9 +57,7 @@ fn relative_path(root string, path string) string {
         for (; start < path_len && path[start] == '/'; start++) {}
     }
     count := path_len - start
-    out: string := mem.calloc(count + 1, 1)
-    if out != none && count > 0 { mem.copy(out, path + start, count) }
-    return out
+    return text.slice(path, start, count)
 }
 
 fn import_path(relative string) string {
@@ -77,9 +74,7 @@ fn import_path(relative string) string {
         end -= 6
     }
     count := end - start
-    out: string := mem.calloc(count + 1, 1)
-    if out != none && count > 0 { mem.copy(out, relative + start, count) }
-    return out
+    return text.slice(relative, start, count)
 }
 
 fn is_yc_file(path string) bool {
@@ -93,58 +88,42 @@ fn parent_dir(path string) string {
     i := 0
     for (; i < n; i++) { if path[i] == '/' { end = i } }
     if end == 0 { return "." }
-    out: string := mem.calloc(end + 1, 1)
-    if out != none { mem.copy(out, path, end) }
-    return out
+    return text.slice(path, 0, end)
 }
 
 fn retain_file(result ProjectAstResult, root string, path string, program ProgramAst) ProjectAstResult {
-    if result.files >= result.file_cap {
-        next_cap := result.file_cap * 2
-        if next_cap < 16 { next_cap = 16 }
-        next: *ProjectFile := mem.realloc(result.file_nodes, next_cap * mem.sizeof(ProjectFile))
-        if next == none {
-            result.ok = false
-            result.file = path
-            result.message = "failed to grow project AST"
-            return result
-        }
-        result.file_nodes = mem.keep(next)
-        result.file_cap = next_cap
-    }
-    slot: *ProjectFile := result.file_nodes + result.files
+    result.file_nodes.push(ProjectFile{id: result.files, path: path, relative_path: relative_path(root, path), import_path: "", module_name: program.module_name, program: program})
+    slot: *ProjectFile := &result.file_nodes[result.files]
     slot.id = result.files
-    slot.path = mem.keep(path)
-    slot.relative_path = mem.keep(relative_path(root, path))
-    slot.import_path = mem.keep(import_path(slot.relative_path))
-    slot.module_name = mem.keep(program.module_name)
+    slot.path = path
+    slot.relative_path = relative_path(root, path)
+    slot.import_path = import_path(slot.relative_path)
+    slot.module_name = program.module_name
     slot.program.ok = program.ok
-    slot.program.message = mem.keep(program.message)
+    slot.program.message = program.message
     slot.program.error_line = program.error_line
     slot.program.error_col = program.error_col
     slot.program.file_id = program.file_id
-    slot.program.file = mem.keep(program.file)
-    slot.program.module_name = mem.keep(program.module_name)
+    slot.program.file = program.file
+    slot.program.module_name = program.module_name
+    slot.program.arena.file_id = program.arena.file_id
     slot.program.arena.types = program.arena.types
     slot.program.arena.type_kinds = program.arena.type_kinds
     slot.program.arena.type_bases = program.arena.type_bases
     slot.program.arena.type_resolved_files = program.arena.type_resolved_files
     slot.program.arena.type_resolved_ids = program.arena.type_resolved_ids
     slot.program.arena.type_len = program.arena.type_len
-    slot.program.arena.type_cap = program.arena.type_cap
     slot.program.arena.params = program.arena.params
     slot.program.arena.param_name_ids = program.arena.param_name_ids
     slot.program.arena.param_type_ids = program.arena.param_type_ids
     slot.program.arena.param_flags = program.arena.param_flags
     slot.program.arena.param_len = program.arena.param_len
-    slot.program.arena.param_cap = program.arena.param_cap
     slot.program.arena.fields = program.arena.fields
     slot.program.arena.field_names = program.arena.field_names
     slot.program.arena.field_name_ids = program.arena.field_name_ids
     slot.program.arena.field_type_ids = program.arena.field_type_ids
     slot.program.arena.field_values = program.arena.field_values
     slot.program.arena.field_len = program.arena.field_len
-    slot.program.arena.field_cap = program.arena.field_cap
     slot.program.arena.decls = program.arena.decls
     slot.program.arena.decl_names = program.arena.decl_names
     slot.program.arena.decl_module_names = program.arena.decl_module_names
@@ -158,51 +137,46 @@ fn retain_file(result ProjectAstResult, root string, path string, program Progra
     slot.program.arena.decl_field_counts = program.arena.decl_field_counts
     slot.program.arena.decl_flags = program.arena.decl_flags
     slot.program.arena.decl_len = program.arena.decl_len
-    slot.program.arena.decl_cap = program.arena.decl_cap
     slot.program.arena.stmts = program.arena.stmts
     slot.program.arena.stmt_name_ids = program.arena.stmt_name_ids
     slot.program.arena.stmt_len = program.arena.stmt_len
-    slot.program.arena.stmt_cap = program.arena.stmt_cap
     slot.program.arena.exprs = program.arena.exprs
     slot.program.arena.expr_names = program.arena.expr_names
     slot.program.arena.expr_name_ids = program.arena.expr_name_ids
     slot.program.arena.expr_int_values = program.arena.expr_int_values
     slot.program.arena.expr_syntax_type_ids = program.arena.expr_syntax_type_ids
     slot.program.arena.expr_len = program.arena.expr_len
-    slot.program.arena.expr_cap = program.arena.expr_cap
     slot.program.arena.children = program.arena.children
     slot.program.root_decls = program.root_decls
     return result
 }
 
 pub fn file_at(result ProjectAstResult, file_id i32) *ProjectFile {
-    if file_id < 0 || file_id >= result.files || result.file_nodes == none { return none }
-    return result.file_nodes + file_id
+    if file_id < 0 || file_id >= result.files { return none }
+    return &result.file_nodes[file_id]
 }
 
 pub fn program_at(result ProjectAstResult, file_id i32) ProgramAst {
     file: *ProjectFile := file_at(result, file_id)
     arena := AstArena{
+        file_id: file.program.arena.file_id,
         types: file.program.arena.types,
         type_kinds: file.program.arena.type_kinds,
         type_bases: file.program.arena.type_bases,
         type_resolved_files: file.program.arena.type_resolved_files,
         type_resolved_ids: file.program.arena.type_resolved_ids,
         type_len: file.program.arena.type_len,
-        type_cap: file.program.arena.type_cap,
         params: file.program.arena.params,
         param_name_ids: file.program.arena.param_name_ids,
         param_type_ids: file.program.arena.param_type_ids,
         param_flags: file.program.arena.param_flags,
         param_len: file.program.arena.param_len,
-        param_cap: file.program.arena.param_cap,
         fields: file.program.arena.fields,
         field_names: file.program.arena.field_names,
         field_name_ids: file.program.arena.field_name_ids,
         field_type_ids: file.program.arena.field_type_ids,
         field_values: file.program.arena.field_values,
         field_len: file.program.arena.field_len,
-        field_cap: file.program.arena.field_cap,
         decls: file.program.arena.decls,
         decl_names: file.program.arena.decl_names,
         decl_module_names: file.program.arena.decl_module_names,
@@ -216,18 +190,15 @@ pub fn program_at(result ProjectAstResult, file_id i32) ProgramAst {
         decl_field_counts: file.program.arena.decl_field_counts,
         decl_flags: file.program.arena.decl_flags,
         decl_len: file.program.arena.decl_len,
-        decl_cap: file.program.arena.decl_cap,
         stmts: file.program.arena.stmts,
         stmt_name_ids: file.program.arena.stmt_name_ids,
         stmt_len: file.program.arena.stmt_len,
-        stmt_cap: file.program.arena.stmt_cap,
         exprs: file.program.arena.exprs,
         expr_names: file.program.arena.expr_names,
         expr_name_ids: file.program.arena.expr_name_ids,
         expr_int_values: file.program.arena.expr_int_values,
         expr_syntax_type_ids: file.program.arena.expr_syntax_type_ids,
         expr_len: file.program.arena.expr_len,
-        expr_cap: file.program.arena.expr_cap,
         children: file.program.arena.children,
     }
     return ProgramAst{ok: file.program.ok, message: file.program.message, error_line: file.program.error_line, error_col: file.program.error_col, file_id: file.program.file_id, file: file.program.file, module_name: file.program.module_name, arena: arena, root_decls: file.program.root_decls}
@@ -246,7 +217,7 @@ pub fn import_path_at(result ProjectAstResult, file_id i32) string {
 fn add_decl_kinds(result ProjectAstResult, program ProgramAst) ProjectAstResult {
     i := 0
     for (; i < ast.decl_count(program.arena); i++) {
-        node: *DeclNode := program.arena.decls + i
+        node: *DeclNode := &program.arena.decls[i]
         if node.kind == ast.decl_import() { result.imports += 1 }
         if node.kind == ast.decl_function() { result.functions += 1 }
         if node.kind == ast.decl_struct() { result.structs += 1 }
@@ -259,10 +230,7 @@ fn add_decl_kinds(result ProjectAstResult, program ProgramAst) ProjectAstResult 
 fn empty_project(capacity i32) ProjectAstResult {
     cap := capacity
     if cap < 16 { cap = 16 }
-    storage: *ProjectFile := mem.calloc(cap, mem.sizeof(ProjectFile))
-    if storage == none { return fail("", 1, 1, "failed to allocate project AST") }
-    storage = mem.keep(storage)
-    return ProjectAstResult{ok: true, file: "", message: "", line: 1, col: 1, files: 0, decls: 0, types: 0, stmts: 0, exprs: 0, fields: 0, params: 0, imports: 0, functions: 0, structs: 0, enums: 0, aliases: 0, digest: 17, file_nodes: storage, file_cap: cap}
+    return ProjectAstResult{ok: true, file: "", message: "", line: 1, col: 1, files: 0, decls: 0, types: 0, stmts: 0, exprs: 0, fields: 0, params: 0, imports: 0, functions: 0, structs: 0, enums: 0, aliases: 0, digest: 17, file_nodes: Vec<ProjectFile>{capacity: cap}}
 }
 
 fn append_path(result ProjectAstResult, relative_root string, path string) ProjectAstResult {
@@ -276,7 +244,7 @@ fn append_path(result ProjectAstResult, relative_root string, path string) Proje
         return result
     }
     program := parser.parse_ast(path, loaded.text)
-    program.file_id = result.files
+    program = ast.assign_file_id(program, result.files)
     if !program.ok {
         result.ok = false
         result.file = path
@@ -315,13 +283,7 @@ fn append_path_lines(result ProjectAstResult, relative_root string, paths string
         if paths[i] == 10 {
             if i > start {
                 count := i - start
-                path: string := mem.calloc(count + 1, 1)
-                if path == none {
-                    result.ok = false
-                    result.message = "failed to allocate source path"
-                    return result
-                }
-                mem.copy(path, paths + start, count)
+                path := text.slice(paths, start, count)
                 result = append_path(result, relative_root, path)
                 if !result.ok { return result }
             }
@@ -330,13 +292,7 @@ fn append_path_lines(result ProjectAstResult, relative_root string, paths string
     }
     if i > start {
         count := i - start
-        path: string := mem.calloc(count + 1, 1)
-        if path == none {
-            result.ok = false
-            result.message = "failed to allocate source path"
-            return result
-        }
-        mem.copy(path, paths + start, count)
+        path := text.slice(paths, start, count)
         result = append_path(result, relative_root, path)
     }
     return result

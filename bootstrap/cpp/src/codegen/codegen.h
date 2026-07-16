@@ -54,6 +54,7 @@ namespace codegen
 
         // Function and loop state shared by expression/statement lowering.
         std::map<std::string, llvm::Function *> function_protos;
+        std::map<std::string, std::string> function_return_types;
 
         std::vector<llvm::BasicBlock *> break_targets;
         std::vector<llvm::BasicBlock *> continue_targets;
@@ -140,6 +141,8 @@ namespace codegen
         llvm::Value *codegen_string_intrinsic_call(const std::string &name, const ast::CallExpr *ce);
         llvm::Value *codegen_math_intrinsic_call(const std::string &name, const ast::CallExpr *ce);
         llvm::Value *codegen_array(const ast::ArrayLiteral *alit);
+        llvm::Value *codegen_vec_literal(const ast::VecLiteral *literal);
+        llvm::Value *codegen_vec_method(const ast::MemberExpr *member, const ast::CallExpr *call);
         llvm::Value *codegen_index(const ast::IndexExpr *ie);
         llvm::Value *codegen_postfix(const ast::PostfixExpr *pe);
         llvm::Value *codegen_index_addr(const ast::IndexExpr *ie);
@@ -150,6 +153,7 @@ namespace codegen
         llvm::Value *codegen_for_loop(const ast::ForStmt *forStmt);
         llvm::Value *codegen_for_in_loop(const ast::ForInStmt *forInStmt);
         llvm::Value *codegen_append_call(const ast::CallExpr *ce);
+        llvm::Value *codegen_append_value(const ast::Expr *arrayExpr, const ast::Expr *elementExpr, bool returnIndex);
         llvm::Value *codegen_print_call(const ast::CallExpr *ce);
         llvm::Value *codegen_println_call(const ast::CallExpr *ce);
         llvm::Value *codegen_printf_call(const ast::CallExpr *ce);

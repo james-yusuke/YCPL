@@ -45,6 +45,12 @@ llvm::Type *CodeGen::resolve_type_from_ast_local(const ast::Type *astType)
         return codegen::detail::getPtrTy(context);
     }
 
+    if (auto vecType = dynamic_cast<const ast::VecType *>(astType))
+    {
+        (void)vecType;
+        return codegen::detail::getPtrTy(context);
+    }
+
     if (auto funcTypeAst = dynamic_cast<const ast::FuncType *>(astType))
     {
         std::vector<llvm::Type *> paramTypes;
@@ -80,6 +86,11 @@ void CodeGen::predeclare_functions(const std::vector<const ast::FuncDecl *> &fun
 
         std::string llvmName = funcDecl->link_name.empty() ? funcDecl->name : funcDecl->link_name;
         bool is_main = (llvmName == "main");
+        std::string returnTypeName;
+        if (funcDecl->ret_type)
+            returnTypeName = resolve_type_name(const_cast<ast::Type *>(funcDecl->ret_type.get()));
+        function_return_types[funcDecl->name] = returnTypeName;
+        function_return_types[llvmName] = returnTypeName;
 
         if (function_protos.find(llvmName) != function_protos.end())
             continue;

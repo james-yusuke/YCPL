@@ -9,6 +9,7 @@
 #include "../arrays/access.h"
 #include "../arrays/index_address.h"
 #include "../arrays/append_intrinsic.h"
+#include "../arrays/vec.h"
 #include "../arrays/array_literal.h"
 #include "../arrays/index_value.h"
 #include "../arrays/std_intrinsics.h"

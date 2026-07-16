@@ -70,6 +70,14 @@ namespace ast
         void print(std::ostream &os, int indent = 0) const override;
     };
 
+    struct VecType : Type
+    {
+        std::unique_ptr<Type> elem;
+
+        explicit VecType(std::unique_ptr<Type> e) : elem(std::move(e)) {}
+        void print(std::ostream &os, int indent = 0) const override;
+    };
+
     struct FuncType : Type
     {
         std::vector<std::unique_ptr<Type>> params;
@@ -277,6 +285,17 @@ namespace ast
         std::unique_ptr<Type> type;
         std::vector<StructFieldInit> inits;
         StructLiteral(std::unique_ptr<Type> t, std::vector<StructFieldInit> i) : type(std::move(t)), inits(std::move(i)) {}
+
+        void print(std::ostream &os, int indent = 0) const override;
+    };
+
+    struct VecLiteral : Expr
+    {
+        std::unique_ptr<Type> elem_type;
+        std::unique_ptr<Expr> capacity;
+
+        VecLiteral(std::unique_ptr<Type> elem, std::unique_ptr<Expr> cap)
+            : elem_type(std::move(elem)), capacity(std::move(cap)) {}
 
         void print(std::ostream &os, int indent = 0) const override;
     };

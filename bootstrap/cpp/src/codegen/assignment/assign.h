@@ -151,6 +151,9 @@ Value *CodeGen::codegen_assign(const ast::AssignStmt *as)
                 return elemTy;
         }
 
+        if (pt.is_vec_type())
+            return resolve_llvm_type_name(pt.vec_element);
+
         return nullptr;
     };
 
@@ -496,6 +499,60 @@ Value *CodeGen::codegen_assign(const ast::AssignStmt *as)
                 storeVal->getType()->print(rss);
                 error(msg + "lhs=" + lss.str() + " rhs=" + rss.str());
                 return nullptr;
+            }
+        }
+
+        if (as->op == "=")
+        {
+            if (auto index = dynamic_cast<const ast::IndexExpr *>(e))
+            {
+                TypeShape collectionShape = parse_type_shape(infer_expr_type_name(index->collection.get()));
+                if (collectionShape.is_vec_type())
+                {
+                    Value *parent = array_header_ptr_from_expr(index->collection.get(), "vec.replace.parent");
+                    Value *oldValue = builder.CreateLoad(destElemTy, storePtr, "vec.replace.old");
+                    Function *release = get_or_declare_c_function("yc_release");
+                    Function *attach = get_or_declare_c_function("yc_attach_child");
+                    std::function<void(Value *, Value *)> replaceManagedChildren =
+                        [&](Value *oldChild, Value *newChild)
+                    {
+                        if (!oldChild || !newChild || !release || !attach)
+                            return;
+                        Type *valueType = oldChild->getType();
+                        if (valueType->isPointerTy())
+                        {
+                            Function *function = builder.GetInsertBlock()->getParent();
+                            BasicBlock *changed = BasicBlock::Create(context, "vec.replace.changed", function);
+                            BasicBlock *done = BasicBlock::Create(context, "vec.replace.done", function);
+                            builder.CreateCondBr(builder.CreateICmpEQ(oldChild, newChild, "vec.replace.same"), done, changed);
+                            builder.SetInsertPoint(changed);
+                            builder.CreateCall(release, {builder.CreatePointerCast(oldChild, get_i8ptr_type(), "vec.replace.old.child")});
+                            builder.CreateCall(attach, {
+                                builder.CreatePointerCast(parent, get_i8ptr_type(), "vec.replace.parent.child"),
+                                builder.CreatePointerCast(newChild, get_i8ptr_type(), "vec.replace.new.child"),
+                            });
+                            builder.CreateBr(done);
+                            builder.SetInsertPoint(done);
+                            return;
+                        }
+                        if (auto *structType = dyn_cast<StructType>(valueType))
+                        {
+                            for (unsigned field = 0; field < structType->getNumElements(); ++field)
+                                replaceManagedChildren(
+                                    builder.CreateExtractValue(oldChild, {field}, "vec.replace.old.field"),
+                                    builder.CreateExtractValue(newChild, {field}, "vec.replace.new.field"));
+                            return;
+                        }
+                        if (auto *arrayType = dyn_cast<ArrayType>(valueType))
+                        {
+                            for (uint64_t item = 0; item < arrayType->getNumElements(); ++item)
+                                replaceManagedChildren(
+                                    builder.CreateExtractValue(oldChild, {static_cast<unsigned>(item)}, "vec.replace.old.item"),
+                                    builder.CreateExtractValue(newChild, {static_cast<unsigned>(item)}, "vec.replace.new.item"));
+                        }
+                    };
+                    replaceManagedChildren(oldValue, storeVal);
+                }
             }
         }
 

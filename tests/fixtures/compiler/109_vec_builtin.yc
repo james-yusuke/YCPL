@@ -1,0 +1,52 @@
+struct Pair {
+    left i32
+    right i32
+}
+
+struct Holder {
+    values Vec<i32>
+}
+
+fn append_value(values Vec<i32>, value i32) i32 {
+    return values.push(value)
+}
+
+fn make_values() Vec<i32> {
+    values := Vec<i32>{}
+    values.push(7)
+    return values
+}
+
+fn main() i32 {
+    values := Vec<i32>{capacity: 1}
+    first := values.push(10)
+    second := values.push(20)
+    alias := values
+    third := alias.push(30)
+    values.reserve(16)
+
+    println(first)
+    println(second)
+    println(third)
+    println(values.len())
+    println(values.capacity())
+    println(values[0] + values[1] + values[2])
+
+    view := values.as_slice()
+    println(view[2])
+
+    pairs := Vec<Pair>{}
+    pairs.push(Pair{left: 4, right: 5})
+    println(pairs[0].left + pairs[0].right)
+
+    values.clear()
+    println(alias.len())
+
+    returned := make_values()
+    println(returned[0])
+    holder := Holder{values: returned}
+    append_value(holder.values, 8)
+    println(returned.len())
+    println(returned[1])
+    return 0
+}

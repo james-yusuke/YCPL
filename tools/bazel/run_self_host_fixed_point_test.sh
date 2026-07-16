@@ -63,12 +63,18 @@ if ! LLVM_BINDIR="$llvm_bindir" YCPL_STL_ROOT="$RUNFILES_ROOT/stl" \
   cat "$work/stage3-conformance.log" >&2
   exit 1
 fi
-grep -q 'Results:.*70/70 passed' "$work/stage2-conformance.log"
-grep -q 'Results:.*70/70 passed' "$work/stage3-conformance.log"
+stage2_result="$(grep -Eo '[0-9]+/[0-9]+ passed' "$work/stage2-conformance.log" | tail -n 1)"
+stage3_result="$(grep -Eo '[0-9]+/[0-9]+ passed' "$work/stage3-conformance.log" | tail -n 1)"
+test -n "$stage2_result"
+test "$stage2_result" = "$stage3_result"
+stage_passed="${stage2_result%%/*}"
+stage_total="${stage2_result#*/}"
+stage_total="${stage_total%% *}"
+test "$stage_passed" = "$stage_total"
 
 if strings "$PROMOTED" | grep -E 'YCPL_BOOTSTRAP_YCC|YCPL_NO_BOOTSTRAP|YCPL_SELFHOST_STRICT|--bootstrap|compiler-smoke' >/dev/null; then
   printf 'promoted ycc still contains a bootstrap/fallback route\n' >&2
   exit 1
 fi
 
-printf 'stage2/stage3 fixed point and 70-case conformance verified\n'
+printf 'stage2/stage3 fixed point and %s-case conformance verified\n' "$stage_total"

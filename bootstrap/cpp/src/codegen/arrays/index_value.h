@@ -123,6 +123,25 @@ Value *CodeGen::codegen_index(const ast::IndexExpr *ie)
     if (!elemPtrI8)
         return nullptr;
 
+    TypeShape typedCollection = parse_type_shape(infer_expr_type_name(ie->collection.get()));
+    if (typedCollection.is_vec_type())
+    {
+        Type *elementType = resolve_llvm_type_name(typedCollection.vec_element);
+        if (!elementType)
+        {
+            error("index: cannot resolve Vec element type");
+            return nullptr;
+        }
+        if (elementType->isStructTy())
+            return builder.CreatePointerCast(elemPtrI8, detail::getPtrTy(context), "vec.index.struct");
+        Value *loaded = builder.CreateLoad(elementType, builder.CreatePointerCast(elemPtrI8, detail::getPtrTy(context)), "vec.index.load");
+        if (elementType->isIntegerTy(1))
+            return builder.CreateZExt(loaded, builder.getInt32Ty(), "vec.index.bool");
+        if (elementType->isIntegerTy(8))
+            return builder.CreateZExt(loaded, builder.getInt32Ty(), "vec.index.byte");
+        return loaded;
+    }
+
     Type *i64Ty = detail::getI64Ty(context);
     PointerType *i8PtrTy = detail::getPtrTy(context);
     Function *F = builder.GetInsertBlock()->getParent();

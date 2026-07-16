@@ -1,7 +1,7 @@
 module compiler.ycpl.resolver
 
 import "std/fs" as fs
-import "std/mem" as mem
+import "std/text" as text
 
 pub struct SourceList {
     ok bool
@@ -44,9 +44,7 @@ pub fn source_path_at(sources SourceList, index i32) string {
         if sources.text[i] == 10 {
             if current == index {
                 count := i - start
-                out: string := mem.calloc(count + 1, 1)
-                mem.copy(out, sources.text + start, count)
-                return out
+                return text.slice(sources.text, start, count)
             }
             current += 1
             start = i + 1
@@ -54,9 +52,7 @@ pub fn source_path_at(sources SourceList, index i32) string {
     }
     if current == index && i > start {
         count := i - start
-        out: string := mem.calloc(count + 1, 1)
-        mem.copy(out, sources.text + start, count)
-        return out
+        return text.slice(sources.text, start, count)
     }
     return ""
 }

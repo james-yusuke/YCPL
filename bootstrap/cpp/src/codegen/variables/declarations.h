@@ -38,6 +38,13 @@ std::string CodeGen::resolve_type_name(ast::Type *tp)
             return shape.full_name();
         }
 
+        if (auto *vt = dynamic_cast<ast::VecType *>(tp))
+        {
+            std::string elemName = resolve_type_name(vt->elem.get());
+            shape.base = "Vec<" + elemName + ">";
+            return shape.full_name();
+        }
+
         if (auto *pt = dynamic_cast<ast::PointerType *>(tp))
         {
             shape.pointer_depth++;
@@ -129,8 +136,25 @@ Value *CodeGen::codegen_vardecl(const ast::VarDecl *vd)
             if (!initV)
                 return nullptr;
 
+            if (hasExplicitType)
+            {
+                const TypeShape declaredShape = parse_type_shape(t);
+                const TypeShape initialShape = parse_type_shape(infer_expr_type_name(vd->init.get()));
+                if ((declaredShape.is_vec_type() || initialShape.is_vec_type()) &&
+                    declaredShape.full_name() != initialShape.full_name())
+                {
+                    error("Vec value cannot initialize a different declared type");
+                    return nullptr;
+                }
+            }
+
             if (!hasExplicitType)
             {
+                std::string inferredType = infer_expr_type_name(vd->init.get());
+                if (!inferredType.empty())
+                    t = inferredType;
+                if (auto vec = dynamic_cast<const ast::VecLiteral *>(vd->init.get()))
+                    t = "Vec<" + resolve_type_name(vec->elem_type.get()) + ">";
                 if (auto call = dynamic_cast<const ast::CallExpr *>(vd->init.get()))
                 {
                     if (auto callee = dynamic_cast<const ast::Ident *>(call->callee.get()))
@@ -140,6 +164,12 @@ Value *CodeGen::codegen_vardecl(const ast::VarDecl *vd)
                             if (auto typeExpr = dynamic_cast<const ast::TypeExpr *>(call->args[0].get()))
                                 t = resolve_type_name(typeExpr->type.get());
                         }
+                    }
+                    if (auto member = dynamic_cast<const ast::MemberExpr *>(call->callee.get()))
+                    {
+                        TypeShape objectShape = parse_type_shape(infer_expr_type_name(member->object.get()));
+                        if (objectShape.is_vec_type() && member->member == "as_slice")
+                            t = parse_type_shape(objectShape.vec_element).full_name() + "[]";
                     }
                 }
             }

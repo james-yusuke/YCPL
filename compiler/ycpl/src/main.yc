@@ -8,7 +8,6 @@ import "source/source" as source
 import "ast/nodes" as ast
 import "c/yc_runtime" as runtime
 import "std/fmt" as fmt
-import "std/mem" as mem
 import "std/str" as str
 import "std/fs" as fs
 import "std/os" as os
@@ -66,9 +65,7 @@ fn source_stem(path string) string {
     end := n
     if end - start >= 3 && path[end - 3] == '.' && path[end - 2] == 'y' && path[end - 1] == 'c' { end -= 3 }
     count := end - start
-    result: string := mem.calloc(count + 1, 1)
-    if result != none && count > 0 { mem.copy(result, path + start, count) }
-    return result
+    return text.slice(path, start, count)
 }
 
 fn run_lex(path string, source_text string) i32 {

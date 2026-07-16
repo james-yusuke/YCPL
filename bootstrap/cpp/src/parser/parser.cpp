@@ -144,6 +144,23 @@ namespace path
         return Token{t, "", cur.start, cur.end};
     }
 
+    Token Parser::expect_type_gt(const std::string &msg)
+    {
+        if (check(TokenType::GT))
+            return expect(TokenType::GT, msg);
+        if (check(TokenType::SHR))
+        {
+            Token got = cur;
+            got.type = TokenType::GT;
+            got.lexeme = ">";
+            cur.type = TokenType::GT;
+            cur.lexeme = ">";
+            return got;
+        }
+        emit_error(cur, msg);
+        return Token{TokenType::GT, "", cur.start, cur.end};
+    }
+
     void Parser::emit_error(const Token &at, const std::string &msg)
     {
         if (error_cb)
@@ -1126,6 +1143,35 @@ namespace path
 
             std::unique_ptr<Expr> result;
 
+            if (id.lexeme == "Vec" && check(TokenType::LT))
+            {
+                advance();
+                auto elemType = parse_type();
+                expect_type_gt("expected '>' after Vec element type");
+                expect(TokenType::LBRACE, "expected '{' after Vec<T>");
+                skip_newlines();
+
+                std::unique_ptr<Expr> capacity;
+                if (!check(TokenType::RBRACE))
+                {
+                    Token field = expect(TokenType::IDENT, "expected 'capacity' in Vec literal");
+                    if (field.lexeme != "capacity")
+                        emit_error(field, "Vec literal only supports the 'capacity' field");
+                    expect(TokenType::COLON, "expected ':' after Vec capacity");
+                    capacity = parse_expression();
+                    skip_newlines();
+                    if (match(TokenType::COMMA))
+                    {
+                        skip_newlines();
+                        if (!check(TokenType::RBRACE))
+                            emit_error(cur, "Vec literal accepts only one capacity field");
+                    }
+                }
+                expect(TokenType::RBRACE, "expected '}' to close Vec literal");
+                result = std::make_unique<ast::VecLiteral>(std::move(elemType), std::move(capacity));
+                return parse_postfix(std::move(result));
+            }
+
             if (check(TokenType::LPAREN))
             {
                 advance();
@@ -1428,8 +1474,16 @@ namespace path
             auto keyType = parse_type();
             expect(TokenType::COMMA, "expected ',' between Map key and value types");
             auto valueType = parse_type();
-            expect(TokenType::GT, "expected '>' after Map value type");
+            expect_type_gt("expected '>' after Map value type");
             base = std::make_unique<ast::MapType>(std::move(keyType), std::move(valueType));
+        }
+        else if (check(TokenType::IDENT) && cur.lexeme == "Vec" && lexer.peek(1).type == TokenType::LT)
+        {
+            advance();
+            expect(TokenType::LT, "expected '<' after Vec");
+            auto elemType = parse_type();
+            expect_type_gt("expected '>' after Vec element type");
+            base = std::make_unique<ast::VecType>(std::move(elemType));
         }
         else if (check(TokenType::KW_BYTE) || (check(TokenType::IDENT) && cur.lexeme == "byte"))
         {

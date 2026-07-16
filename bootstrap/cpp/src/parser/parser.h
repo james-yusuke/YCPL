@@ -29,6 +29,7 @@ namespace path
         bool check(TokenType t) const;
         bool match(TokenType t);
         Token expect(TokenType t, const std::string &msg);
+        Token expect_type_gt(const std::string &msg);
         void emit_error(const Token &at, const std::string &msg);
 
         void skip_newlines();

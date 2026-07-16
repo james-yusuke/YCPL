@@ -89,6 +89,18 @@ Value *CodeGen::codegen_index_addr(const ast::IndexExpr *ie)
     if (!elemPtrI8)
         return nullptr;
 
+    TypeShape typedCollection = parse_type_shape(infer_expr_type_name(ie->collection.get()));
+    if (typedCollection.is_vec_type())
+    {
+        Type *elementType = resolve_llvm_type_name(typedCollection.vec_element);
+        if (!elementType)
+        {
+            error("index address: cannot resolve Vec element type");
+            return nullptr;
+        }
+        return builder.CreatePointerCast(elemPtrI8, detail::getPtrTy(context), "vec.index.addr");
+    }
+
     auto staticElementShape = infer_array_literal_element_shape(ie->collection.get());
     bool staticElemIsArrayStruct = staticElementShape.first;
     bool staticElemIsArrayPtr = staticElementShape.second;

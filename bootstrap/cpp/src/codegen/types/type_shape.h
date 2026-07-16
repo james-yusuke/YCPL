@@ -11,8 +11,10 @@ struct TypeShape
     int array_rank = 0;
     int pointer_depth = 0;
     bool is_map = false;
+    bool is_vec = false;
     std::string map_key;
     std::string map_value;
+    std::string vec_element;
 
     bool is_array() const
     {
@@ -27,6 +29,11 @@ struct TypeShape
     bool is_map_type() const
     {
         return is_map;
+    }
+
+    bool is_vec_type() const
+    {
+        return is_vec;
     }
 
     bool is_pointer_only() const
@@ -118,6 +125,14 @@ inline bool parse_map_inner_types(const std::string &base, std::string &key, std
     return false;
 }
 
+inline bool parse_vec_element_type(const std::string &base, std::string &element)
+{
+    if (base.rfind("Vec<", 0) != 0 || base.size() < 6 || base.back() != '>')
+        return false;
+    element = base.substr(4, base.size() - 5);
+    return !element.empty();
+}
+
 inline TypeShape parse_type_shape(const std::string &name)
 {
     TypeShape shape;
@@ -144,6 +159,7 @@ inline TypeShape parse_type_shape(const std::string &name)
     }
 
     shape.is_map = parse_map_inner_types(shape.base, shape.map_key, shape.map_value);
+    shape.is_vec = parse_vec_element_type(shape.base, shape.vec_element);
 
     return shape;
 }

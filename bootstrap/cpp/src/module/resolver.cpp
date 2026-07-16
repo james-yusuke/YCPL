@@ -74,6 +74,11 @@ namespace module
                module_name.rfind("std.", 0) == 0 || module_name.rfind("std/", 0) == 0;
     }
 
+    static bool is_internal_intrinsic_module(const std::string &module_name)
+    {
+        return is_std_module_name(module_name) || module_name == "c.llvm";
+    }
+
     static std::vector<std::string> member_path(const ast::Expr *expr)
     {
         if (auto id = dynamic_cast<const ast::Ident *>(expr))
@@ -512,9 +517,9 @@ namespace module
                     emit_error((fn->is_extern ? "extern" : "intrinsic") + std::string(" function cannot have a body: ") + fn->name);
                     ok = false;
                 }
-                if (fn->is_intrinsic && !is_std_module_name(module_name))
+                if (fn->is_intrinsic && !is_internal_intrinsic_module(module_name))
                 {
-                    emit_error("intrinsic functions are only allowed in std modules: " + fn->name);
+                    emit_error("intrinsic functions are only allowed in std modules or c.llvm: " + fn->name);
                     ok = false;
                 }
 
