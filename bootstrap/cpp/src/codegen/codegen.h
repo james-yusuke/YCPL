@@ -104,6 +104,7 @@ namespace codegen
         llvm::Value *coerce_to_i32(llvm::Value *value, const std::string &label);
         llvm::Value *coerce_to_double(llvm::Value *value, const std::string &label);
         llvm::Value *coerce_to_i8ptr(llvm::Value *value, const std::string &label);
+        llvm::Value *promote_variadic_argument(llvm::Value *value, const std::string &label);
 
         llvm::Value *array_header_ptr_from_value(llvm::Value *value, const std::string &label);
         llvm::Value *array_header_ptr_from_storage_or_value(llvm::Value *value, const std::string &label);

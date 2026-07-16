@@ -580,6 +580,7 @@ compile_run_and_verify "$ROOT_DIR/tests/fixtures/compiler/115_std_foundation_exp
 compile_run_and_verify "$ROOT_DIR/tests/fixtures/compiler/118_std_text_expanded.yc" $'3\na|b|c\nYCPL\na+b'
 compile_run_and_verify "$ROOT_DIR/tests/fixtures/compiler/119_std_path_expanded.yc" $'/tmp/b\n../../a\n/tmp/b'
 compile_run_and_verify "$ROOT_DIR/tests/fixtures/compiler/120_std_utf8_expanded.yc" $'1\n3\n3\n😀'
+compile_run_and_verify "$ROOT_DIR/tests/fixtures/compiler/121_variadic_promotion.yc" "1 -1" "zext i1" "sext i8"
 compile_run_and_verify "$ROOT_DIR/tests/fixtures/compiler/struct_array_index.yc" "7" "load_struct_value_dyn"
 compile_run_and_verify "$ROOT_DIR/tests/fixtures/runtime/107_slice_pointer_extern_abi.yc" $'strap\nstr\n1\n5' "@std__text__slice" "@std__mem__copy" "@memcmp"
 compile_run_and_verify "$ROOT_DIR/tests/fixtures/runtime/111_managed_frame_cleanup.yc" $'12\n0\n6\n1' "@yc_runtime_live_allocations" "@yc_frame_pop" "@yc_move_to_ancestor"

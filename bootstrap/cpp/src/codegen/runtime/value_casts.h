@@ -36,10 +36,27 @@ Value *CodeGen::coerce_to_i32(Value *value, const std::string &label)
     if (value->getType()->isIntegerTy(32))
         return value;
     if (value->getType()->isIntegerTy())
-        return builder.CreateSExtOrTrunc(value, i32Ty, label);
+        return value->getType()->isIntegerTy(1)
+                   ? builder.CreateZExtOrTrunc(value, i32Ty, label)
+                   : builder.CreateSExtOrTrunc(value, i32Ty, label);
     if (value->getType()->isFloatingPointTy())
         return builder.CreateFPToSI(value, i32Ty, label);
 
+    return value;
+}
+
+Value *CodeGen::promote_variadic_argument(Value *value, const std::string &label)
+{
+    if (!value)
+        return nullptr;
+
+    Type *type = value->getType();
+    if (type->isIntegerTy(1))
+        return builder.CreateZExt(value, get_int_type(), label + ".bool.i32");
+    if (type->isIntegerTy() && type->getIntegerBitWidth() < 32)
+        return builder.CreateSExt(value, get_int_type(), label + ".int.i32");
+    if (type->isFloatTy())
+        return builder.CreateFPExt(value, get_double_type(), label + ".double");
     return value;
 }
 
