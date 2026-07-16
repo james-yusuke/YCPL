@@ -25,5 +25,4 @@ fn main() {
 
     fmt.println(hash.fnv1a32(b))
     fmt.println(hash.crc32(b))
-
 }

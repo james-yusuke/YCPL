@@ -65,6 +65,7 @@ jobs:
             printf 'exec %q -D_POSIX_C_SOURCE=200809L -no-pie -fuse-ld=lld "$@"\n' "$LLVM_BINDIR/clang"
           } > "$CLANG_WRAPPER"
           chmod +x "$CLANG_WRAPPER"
+          "$CLANG_WRAPPER" --version
           {
             echo "LLVM_CONFIG=$LLVM_CONFIG"
             echo "LLVM_BINDIR=$LLVM_BINDIR"
@@ -112,12 +113,12 @@ jobs:
       - name: Build bootstrap and self-host stages
         run: |
           bazel build \
-            --action_env=PATH \
-            --action_env=LLVM_CONFIG \
-            --action_env=LLVM_BINDIR \
-            --action_env=LLC \
-            --action_env=CLANG \
-            --action_env=LINKFLAGS \
+            --action_env=PATH="$PATH" \
+            --action_env=LLVM_CONFIG="$LLVM_CONFIG" \
+            --action_env=LLVM_BINDIR="$LLVM_BINDIR" \
+            --action_env=LLC="$LLC" \
+            --action_env=CLANG="$CLANG" \
+            --action_env=LINKFLAGS="$LINKFLAGS" \
             --linkopt=-fuse-ld=lld \
             --host_linkopt=-fuse-ld=lld \
             //:ycc-bootstrap \
@@ -144,17 +145,17 @@ jobs:
       - name: Test with Bazel
         run: |
           bazel test \
-            --action_env=PATH \
-            --action_env=LLVM_CONFIG \
-            --action_env=LLVM_BINDIR \
-            --action_env=LLC \
-            --action_env=CLANG \
-            --action_env=LINKFLAGS \
-            --test_env=LLVM_CONFIG \
-            --test_env=LLVM_BINDIR \
-            --test_env=LLC \
-            --test_env=CLANG \
-            --test_env=LINKFLAGS \
+            --action_env=PATH="$PATH" \
+            --action_env=LLVM_CONFIG="$LLVM_CONFIG" \
+            --action_env=LLVM_BINDIR="$LLVM_BINDIR" \
+            --action_env=LLC="$LLC" \
+            --action_env=CLANG="$CLANG" \
+            --action_env=LINKFLAGS="$LINKFLAGS" \
+            --test_env=LLVM_CONFIG="$LLVM_CONFIG" \
+            --test_env=LLVM_BINDIR="$LLVM_BINDIR" \
+            --test_env=LLC="$LLC" \
+            --test_env=CLANG="$CLANG" \
+            --test_env=LINKFLAGS="$LINKFLAGS" \
             --linkopt=-fuse-ld=lld \
             --host_linkopt=-fuse-ld=lld \
             --test_timeout=1800 \
