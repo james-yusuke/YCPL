@@ -3,5 +3,6 @@ exports_files([
     "run_examples_test.sh",
     "run_lsp_protocol_test.sh",
     "run_self_host_stage_test.sh",
+    "run_self_host_fixed_point_test.sh",
     "run_ycc_ycpl_test.sh",
 ])

@@ -101,6 +101,7 @@ fn keyword_kind(word string) i32 {
     if str.eq(word, "none") { return tok.none_lit() }
     if str.eq(word, "type") { return tok.kw_type() }
     if str.eq(word, "byte") { return tok.kw_byte() }
+    if str.eq(word, "cast") { return tok.kw_cast() }
     return tok.ident()
 }
 
