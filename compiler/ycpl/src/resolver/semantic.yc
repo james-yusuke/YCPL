@@ -73,6 +73,7 @@ struct ResolveState {
     local_cap i32
     depth i32
     result_type TypeRef
+    function_return TypeRef
 }
 
 fn has_flag(flags i32, flag i32) bool {
@@ -223,8 +224,10 @@ fn grow_imports(result SemanticProject) SemanticProject {
 
 fn collect_import(result SemanticProject, file_id i32, program ProgramAst, decl_id i32) SemanticProject {
     decl: *DeclNode := program.arena.decls + decl_id
-    alias := decl.name
-    if str.len(alias) == 0 { alias = default_alias(decl.link_name) }
+    decl_name := ast.decl_name(program.arena, decl_id)
+    decl_link_name := ast.decl_link_name(program.arena, decl_id)
+    alias := decl_name
+    if str.len(alias) == 0 { alias = default_alias(decl_link_name) }
     i := 0
     for (; i < result.import_len; i++) {
         binding: *ImportBinding := result.imports + i
@@ -232,9 +235,9 @@ fn collect_import(result SemanticProject, file_id i32, program ProgramAst, decl_
             return fail(result, project.path_at(result.syntax, file_id), decl.span.line, decl.span.col, "duplicate import alias")
         }
     }
-    target := target_file_for_path(result.syntax, decl.link_name)
+    target := target_file_for_path(result.syntax, decl_link_name)
     if target == ast.invalid_id() {
-        return fail(result, project.path_at(result.syntax, file_id), decl.span.line, decl.span.col, "module not found")
+        return fail(result, project.path_at(result.syntax, file_id), decl.span.line, decl.span.col, "Cannot resolve import: module not found")
     }
     result = grow_imports(result)
     if !result.ok { return result }
@@ -242,7 +245,7 @@ fn collect_import(result SemanticProject, file_id i32, program ProgramAst, decl_
     slot.file_id = file_id
     slot.decl_id = decl_id
     slot.alias = mem.keep(alias)
-    slot.path = mem.keep(decl.link_name)
+    slot.path = mem.keep(decl_link_name)
     slot.target_file = target
     decl.resolved_file = target
     decl.resolved_id = 0
@@ -261,8 +264,10 @@ pub fn import_for_alias(result SemanticProject, file_id i32, alias string) *Impo
 
 fn add_symbol(result SemanticProject, file_id i32, file_path string, import_path string, program ProgramAst, decl_id i32) SemanticProject {
     decl: *DeclNode := program.arena.decls + decl_id
+    decl_name := ast.decl_name(program.arena, decl_id)
+    explicit_link := ast.decl_link_name(program.arena, decl_id)
     module_name: string := default_module(program, import_path)
-    duplicate := find_in_module(result, module_name, decl.name)
+    duplicate := find_in_module(result, module_name, decl_name)
     if duplicate != ast.invalid_id() {
         return fail(result, file_path, decl.span.line, decl.span.col, "duplicate declaration")
     }
@@ -275,7 +280,8 @@ fn add_symbol(result SemanticProject, file_id i32, file_path string, import_path
         }
     }
     if (has_flag(decl.flags, ast.flag_extern()) || has_flag(decl.flags, ast.flag_intrinsic())) && decl.body != ast.invalid_id() {
-        return fail(result, file_path, decl.span.line, decl.span.col, "extern or intrinsic function cannot have a body")
+        if has_flag(decl.flags, ast.flag_extern()) { return fail(result, file_path, decl.span.line, decl.span.col, "extern function cannot have a body") }
+        return fail(result, file_path, decl.span.line, decl.span.col, "intrinsic function cannot have a body")
     }
 
     result = grow_symbols(result)
@@ -286,10 +292,10 @@ fn add_symbol(result SemanticProject, file_id i32, file_path string, import_path
     slot.kind = decl.kind
     slot.file_id = file_id
     slot.node_id = decl_id
-    slot.name = mem.keep(decl.name)
+    slot.name = mem.keep(decl_name)
     slot.module_name = mem.keep(module_name)
     slot.import_path = mem.keep(import_path)
-    slot.link_name = mem.keep(mangle(module_name, decl.name, decl.flags, decl.link_name))
+    slot.link_name = mem.keep(mangle(module_name, decl_name, decl.flags, explicit_link))
     slot.flags = decl.flags
     slot.type_file = file_id
     slot.type_id = decl.type_id
@@ -352,17 +358,19 @@ pub fn resolve_types(result SemanticProject) SemanticProject {
         type_id := 0
         for (; type_id < program.arena.type_len; type_id++) {
             node: *TypeNode := program.arena.types + type_id
-            if node.kind == ast.type_named() {
+            if program.arena.type_kinds[type_id] == ast.type_named() {
                 symbol_id := find_type_in_module(result, module_name, node.name)
                 if symbol_id == ast.invalid_id() {
                     symbol_id = find_imported_type(result, file_id, node.name)
                 }
                 if symbol_id == ast.invalid_id() {
-                    return fail(result, project.path_at(result.syntax, file_id), node.span.line, node.span.col, "unknown type")
+                    return fail(result, project.path_at(result.syntax, file_id), node.span.line, node.span.col, text.concat3("unknown type: ", node.name, ""))
                 }
                 symbol: *Symbol := symbol_at(result, symbol_id)
                 node.resolved_file = symbol.file_id
                 node.resolved_id = symbol.node_id
+                program.arena.type_resolved_files[type_id] = symbol.file_id
+                program.arena.type_resolved_ids[type_id] = symbol.node_id
             }
         }
     }
@@ -375,6 +383,29 @@ fn builtin_ref(kind i32) TypeRef {
 
 fn invalid_ref() TypeRef {
     return TypeRef{file_id: ast.invalid_id(), type_id: ast.invalid_id()}
+}
+
+fn ref_kind(state ResolveState, typ TypeRef) i32 {
+    if typ.type_id <= -100 { return -100 - typ.type_id }
+    if typ.file_id < 0 || typ.file_id >= state.semantic.syntax.files { return 0 }
+    program: ProgramAst := project.program_at(state.semantic.syntax, typ.file_id)
+    if typ.type_id < 0 || typ.type_id >= program.arena.type_len { return 0 }
+    return program.arena.type_kinds[typ.type_id]
+}
+
+fn stmt_has_return(program ProgramAst, stmt_id i32) bool {
+    if stmt_id == ast.invalid_id() { return false }
+    node: *StmtNode := program.arena.stmts + stmt_id
+    if node.kind == ast.stmt_return() { return true }
+    if node.kind == ast.stmt_if() && (stmt_has_return(program, node.b) || stmt_has_return(program, node.c)) { return true }
+    if node.kind == ast.stmt_for() && stmt_has_return(program, node.c) { return true }
+    if node.kind == ast.stmt_for_in() && stmt_has_return(program, node.b) { return true }
+    if node.kind == ast.stmt_defer() || node.kind == ast.stmt_scope() { return stmt_has_return(program, node.a) }
+    i := 0
+    for (; i < node.child_count; i++) {
+        if stmt_has_return(program, program.arena.children[node.first_child + i]) { return true }
+    }
+    return false
 }
 
 fn state_fail(state ResolveState, span Span, message string) ResolveState {
@@ -442,9 +473,9 @@ fn symbol_result_type(state ResolveState, symbol_id i32) TypeRef {
     if symbol == none { return invalid_ref() }
     if symbol.kind == ast.decl_function() {
         program: ProgramAst := project.program_at(state.semantic.syntax, symbol.file_id)
-        decl: *DeclNode := program.arena.decls + symbol.node_id
-        if decl.type_id == ast.invalid_id() { return builtin_ref(ast.type_void()) }
-        return TypeRef{file_id: symbol.file_id, type_id: decl.type_id}
+        result_type := program.arena.decl_type_ids[symbol.node_id]
+        if result_type == ast.invalid_id() { return builtin_ref(ast.type_void()) }
+        return TypeRef{file_id: symbol.file_id, type_id: result_type}
     }
     return TypeRef{file_id: symbol.type_file, type_id: symbol.type_id}
 }
@@ -453,6 +484,98 @@ fn imported_symbol(state ResolveState, alias string, name string) i32 {
     binding: *ImportBinding := import_for_alias(state.semantic, state.file_id, alias)
     if binding == none { return ast.invalid_id() }
     return find_by_import(state.semantic, binding.path, name)
+}
+
+fn resolve_struct_member(state ResolveState, expr_id i32, node *ExprNode, owner TypeRef) ResolveState {
+    owner_file := owner.file_id
+    owner_id := owner.type_id
+    if owner_file >= 0 && owner_file < state.semantic.syntax.files {
+        owner_program: ProgramAst := project.program_at(state.semantic.syntax, owner_file)
+        for (; owner_id >= 0 && owner_id < owner_program.arena.type_len && owner_program.arena.type_kinds[owner_id] == ast.type_pointer(); ) {
+            owner_id = owner_program.arena.type_bases[owner_id]
+        }
+        if owner_id >= 0 && owner_id < owner_program.arena.type_len && owner_program.arena.type_kinds[owner_id] == ast.type_named() {
+            owner_file = owner_program.arena.type_resolved_files[owner_id]
+            owner_id = owner_program.arena.type_resolved_ids[owner_id]
+        }
+    }
+    symbol_id := 0
+    for (; symbol_id < state.semantic.symbol_len; symbol_id++) {
+        symbol: *Symbol := state.semantic.symbols + symbol_id
+        if (symbol.kind == ast.decl_struct() && symbol.file_id == owner_file && symbol.node_id == owner_id) {
+            program: ProgramAst := project.program_at(state.semantic.syntax, symbol.file_id)
+            first_field := program.arena.decl_first_fields[symbol.node_id]
+            field_count := program.arena.decl_field_counts[symbol.node_id]
+            field_id := 0
+            for (; field_id < field_count; field_id++) {
+                if program.arena.field_name_ids[first_field + field_id] == state.program.arena.expr_name_ids[expr_id] || str.eq(program.arena.field_names[first_field + field_id], state.program.arena.expr_names[expr_id]) {
+                    node.int_value = field_id
+                    state.program.arena.expr_int_values[expr_id] = field_id
+                    state.result_type = TypeRef{file_id: symbol.file_id, type_id: program.arena.field_type_ids[first_field + field_id]}
+                    return state
+                }
+            }
+        }
+    }
+    state.result_type = invalid_ref()
+    return state
+}
+
+fn prelude_symbol(state ResolveState, name string) i32 {
+    symbol_id := find_by_import(state.semantic, "std/fmt", name)
+    if symbol_id != ast.invalid_id() { return symbol_id }
+    return find_by_import(state.semantic, "std/array", name)
+}
+
+fn ufcs_symbol(state ResolveState, owner TypeRef, name string) i32 {
+    owner_file := owner.file_id
+    owner_id := owner.type_id
+    if owner_file < 0 || owner_file >= state.semantic.syntax.files { return ast.invalid_id() }
+    owner_program: ProgramAst := project.program_at(state.semantic.syntax, owner_file)
+    for (; owner_id >= 0 && owner_id < owner_program.arena.type_len && owner_program.arena.type_kinds[owner_id] == ast.type_pointer(); ) {
+        owner_id = owner_program.arena.type_bases[owner_id]
+    }
+    if owner_id < 0 || owner_id >= owner_program.arena.type_len || owner_program.arena.type_kinds[owner_id] != ast.type_named() { return ast.invalid_id() }
+    resolved_file := owner_program.arena.type_resolved_files[owner_id]
+    resolved_id := owner_program.arena.type_resolved_ids[owner_id]
+    symbol_id := 0
+    for (; symbol_id < state.semantic.symbol_len; symbol_id++) {
+        type_symbol: *Symbol := state.semantic.symbols + symbol_id
+        if type_symbol.kind == ast.decl_struct() && type_symbol.file_id == resolved_file && type_symbol.node_id == resolved_id {
+            candidate := find_in_module(state.semantic, type_symbol.module_name, name)
+            if candidate != ast.invalid_id() {
+                called: *Symbol := state.semantic.symbols + candidate
+                if called.kind == ast.decl_function() && has_flag(called.flags, ast.flag_public()) { return candidate }
+            }
+            return ast.invalid_id()
+        }
+    }
+    return ast.invalid_id()
+}
+
+fn resolve_enum_variant(state ResolveState, expr_id i32, node *ExprNode, module_name string) ResolveState {
+    symbol_id := 0
+    for (; symbol_id < state.semantic.symbol_len; symbol_id++) {
+        symbol: *Symbol := state.semantic.symbols + symbol_id
+        if symbol.kind == ast.decl_enum() && str.eq(symbol.module_name, module_name) {
+            program: ProgramAst := project.program_at(state.semantic.syntax, symbol.file_id)
+            first_field := program.arena.decl_first_fields[symbol.node_id]
+            field_count := program.arena.decl_field_counts[symbol.node_id]
+            field_id := 0
+            for (; field_id < field_count; field_id++) {
+                if program.arena.field_name_ids[first_field + field_id] == state.program.arena.expr_name_ids[expr_id] || str.eq(program.arena.field_names[first_field + field_id], state.program.arena.expr_names[expr_id]) {
+                    node.symbol_file = symbol.file_id
+                    node.symbol_id = symbol_id
+                    node.int_value = program.arena.field_values[first_field + field_id]
+                    state.program.arena.expr_int_values[expr_id] = program.arena.field_values[first_field + field_id]
+                    state.result_type = builtin_ref(ast.type_i32())
+                    return state
+                }
+            }
+        }
+    }
+    state.result_type = invalid_ref()
+    return state
 }
 
 fn resolve_expr(state ResolveState, expr_id i32) ResolveState {
@@ -471,16 +594,26 @@ fn resolve_expr(state ResolveState, expr_id i32) ResolveState {
     } else if node.kind == ast.expr_none() { state.result_type = builtin_ref(ast.type_none())
     } else if node.kind == ast.expr_type() { state.result_type = builtin_ref(ast.type_meta())
     } else if node.kind == ast.expr_ident() {
-        local_id := find_local(state, node.name)
+        expr_name := state.program.arena.expr_names[expr_id]
+        local_id := find_local(state, expr_name)
         if local_id != ast.invalid_id() {
             local: *LocalBinding := state.locals + local_id
             node.symbol_file = state.file_id
             node.symbol_id = local.symbol_id
             state.result_type = TypeRef{file_id: local.type_file, type_id: local.type_id}
         } else {
-            symbol_id := find_in_module(state.semantic, state.module_name, node.name)
+            symbol_id := find_in_module(state.semantic, state.module_name, expr_name)
+            if symbol_id == ast.invalid_id() { symbol_id = prelude_symbol(state, expr_name) }
             if symbol_id == ast.invalid_id() {
-                binding: *ImportBinding := import_for_alias(state.semantic, state.file_id, node.name)
+                state = resolve_enum_variant(state, expr_id, node, state.module_name)
+                if node.symbol_id != ast.invalid_id() {
+                    node.type_file = state.result_type.file_id
+                    node.type_id = state.result_type.type_id
+                    return state
+                }
+            }
+            if symbol_id == ast.invalid_id() {
+                binding: *ImportBinding := import_for_alias(state.semantic, state.file_id, expr_name)
                 if binding != none {
                     node.symbol_file = binding.target_file
                     node.symbol_id = ast.invalid_id()
@@ -498,12 +631,24 @@ fn resolve_expr(state ResolveState, expr_id i32) ResolveState {
         }
     } else if node.kind == ast.expr_member() {
         left: *ExprNode := state.program.arena.exprs + node.left
+        left_name := state.program.arena.expr_names[node.left]
+        member_name := state.program.arena.expr_names[expr_id]
         if left.kind == ast.expr_ident() {
-            symbol_id := imported_symbol(state, left.name, node.name)
+            enum_symbol := find_in_module(state.semantic, state.module_name, left_name)
+            if enum_symbol != ast.invalid_id() {
+                enum_ref: *Symbol := state.semantic.symbols + enum_symbol
+                if enum_ref.kind == ast.decl_enum() {
+                    state = resolve_enum_variant(state, expr_id, node, enum_ref.module_name)
+                    node.type_file = state.result_type.file_id
+                    node.type_id = state.result_type.type_id
+                    return state
+                }
+            }
+            symbol_id := imported_symbol(state, left_name, member_name)
             if symbol_id != ast.invalid_id() {
                 symbol: *Symbol := symbol_at(state.semantic, symbol_id)
                 if !has_flag(symbol.flags, ast.flag_public()) {
-                    state = state_fail(state, node.span, "imported symbol is private")
+                    state = state_fail(state, node.span, "no public function or type with that name")
                     return state
                 }
                 left.symbol_file = symbol.file_id
@@ -512,14 +657,37 @@ fn resolve_expr(state ResolveState, expr_id i32) ResolveState {
                 node.symbol_id = symbol_id
                 state.result_type = symbol_result_type(state, symbol_id)
             } else {
+                if import_for_alias(state.semantic, state.file_id, left_name) != none {
+                    return state_fail(state, node.span, "no public function or type with that name")
+                }
                 state = resolve_expr(state, node.left)
                 if !state.ok { return state }
-                state.result_type = invalid_ref()
+                owner := state.result_type
+                state = resolve_struct_member(state, expr_id, node, owner)
+                if state.result_type.type_id == ast.invalid_id() {
+                    symbol_id = ufcs_symbol(state, owner, member_name)
+                    if symbol_id != ast.invalid_id() {
+                        symbol: *Symbol := symbol_at(state.semantic, symbol_id)
+                        node.symbol_file = symbol.file_id
+                        node.symbol_id = symbol_id
+                        state.result_type = symbol_result_type(state, symbol_id)
+                    }
+                }
             }
         } else {
             state = resolve_expr(state, node.left)
             if !state.ok { return state }
-            state.result_type = invalid_ref()
+            owner := state.result_type
+            state = resolve_struct_member(state, expr_id, node, owner)
+            if state.result_type.type_id == ast.invalid_id() {
+                symbol_id := ufcs_symbol(state, owner, member_name)
+                if symbol_id != ast.invalid_id() {
+                    symbol: *Symbol := symbol_at(state.semantic, symbol_id)
+                    node.symbol_file = symbol.file_id
+                    node.symbol_id = symbol_id
+                    state.result_type = symbol_result_type(state, symbol_id)
+                }
+            }
         }
     } else if node.kind == ast.expr_call() {
         state = resolve_expr(state, node.left)
@@ -527,6 +695,17 @@ fn resolve_expr(state ResolveState, expr_id i32) ResolveState {
         callee: *ExprNode := state.program.arena.exprs + node.left
         node.symbol_file = callee.symbol_file
         node.symbol_id = callee.symbol_id
+        if node.symbol_id != ast.invalid_id() {
+            called: *Symbol := state.semantic.symbols + node.symbol_id
+            if str.eq(called.module_name, "std.array") && str.eq(called.name, "new") && node.arg_count > 0 {
+                first_arg_id := state.program.arena.children[node.first_arg]
+                first_arg: *ExprNode := state.program.arena.exprs + first_arg_id
+                syntax_type_id := state.program.arena.expr_syntax_type_ids[first_arg_id]
+                if first_arg.kind != ast.expr_type() || syntax_type_id < 0 || syntax_type_id >= state.program.arena.type_len || state.program.arena.type_kinds[syntax_type_id] != ast.type_slice() {
+                    return state_fail(state, node.span, "array.new first argument must be a slice type")
+                }
+            }
+        }
         result_type := state.result_type
         i := 0
         for (; i < node.arg_count; i++) {
@@ -562,8 +741,9 @@ fn resolve_expr(state ResolveState, expr_id i32) ResolveState {
             if !state.ok { return state }
         }
     } else if node.kind == ast.expr_struct() {
-        symbol_id := find_type_in_module(state.semantic, state.module_name, node.name)
-        if symbol_id == ast.invalid_id() { symbol_id = find_imported_type(state.semantic, state.file_id, node.name) }
+        struct_name := state.program.arena.expr_names[expr_id]
+        symbol_id := find_type_in_module(state.semantic, state.module_name, struct_name)
+        if symbol_id == ast.invalid_id() { symbol_id = find_imported_type(state.semantic, state.file_id, struct_name) }
         if symbol_id == ast.invalid_id() { return state_fail(state, node.span, "unknown struct type") }
         symbol: *Symbol := symbol_at(state.semantic, symbol_id)
         node.symbol_file = symbol.file_id
@@ -572,7 +752,8 @@ fn resolve_expr(state ResolveState, expr_id i32) ResolveState {
         i := 0
         for (; i < node.arg_count; i++) {
             init_id := state.program.arena.children[node.first_arg + i]
-            state = resolve_expr(state, init_id)
+            init: *ExprNode := state.program.arena.exprs + init_id
+            state = resolve_expr(state, init.left)
             if !state.ok { return state }
         }
     } else if node.kind == ast.expr_cast() {
@@ -607,6 +788,13 @@ fn resolve_stmt(state ResolveState, stmt_id i32) ResolveState {
         if node.b != ast.invalid_id() {
             typ_file = state.file_id
             typ_id = node.b
+            if ref_kind(state, state.result_type) == ast.type_none() {
+                declared := TypeRef{file_id: typ_file, type_id: typ_id}
+                declared_kind := ref_kind(state, declared)
+                if declared_kind != ast.type_pointer() && declared_kind != ast.type_string() && declared_kind != ast.type_any() {
+                    return state_fail(state, node.span, "none can only initialize pointer, string, or any")
+                }
+            }
         }
         typ := TypeRef{file_id: typ_file, type_id: typ_id}
         state = add_local_symbol(state, node.name, stmt_id, 100, typ, node.flags)
@@ -616,10 +804,24 @@ fn resolve_stmt(state ResolveState, stmt_id i32) ResolveState {
             node.symbol_id = local.symbol_id
         }
     } else if node.kind == ast.stmt_assign() {
+        target: *ExprNode := state.program.arena.exprs + node.a
+        if target.kind == ast.expr_ident() {
+            target_name := state.program.arena.expr_names[node.a]
+            local_id := find_local(state, target_name)
+            if local_id != ast.invalid_id() {
+                local: *LocalBinding := state.locals + local_id
+                if has_flag(local.flags, ast.flag_const()) { return state_fail(state, node.span, "cannot assign to const") }
+            }
+        }
         state = resolve_expr(state, node.a)
         if !state.ok { return state }
         state = resolve_expr(state, node.b)
-    } else if node.kind == ast.stmt_expr() || node.kind == ast.stmt_return() { state = resolve_expr(state, node.a)
+    } else if node.kind == ast.stmt_expr() { state = resolve_expr(state, node.a)
+    } else if node.kind == ast.stmt_return() {
+        expected_void := ref_kind(state, state.function_return) == ast.type_void()
+        if node.a == ast.invalid_id() && !expected_void { return state_fail(state, node.span, "non-void function requires a return value") }
+        if node.a != ast.invalid_id() && expected_void { return state_fail(state, node.span, "void function cannot return a value") }
+        state = resolve_expr(state, node.a)
     } else if node.kind == ast.stmt_if() {
         state = resolve_expr(state, node.a)
         state = resolve_stmt(state, node.b)
@@ -653,18 +855,28 @@ fn resolve_stmt(state ResolveState, stmt_id i32) ResolveState {
 
 fn resolve_function(state ResolveState, decl_id i32) ResolveState {
     decl: *DeclNode := state.program.arena.decls + decl_id
-    if decl.kind != ast.decl_function() || decl.body == ast.invalid_id() { return state }
+    if state.program.arena.decl_kinds[decl_id] != ast.decl_function() || state.program.arena.decl_bodies[decl_id] == ast.invalid_id() { return state }
     state.local_len = 0
     state.depth = 0
+    return_type_id := state.program.arena.decl_type_ids[decl_id]
+    if return_type_id == ast.invalid_id() { state.function_return = builtin_ref(ast.type_void())
+    } else { state.function_return = TypeRef{file_id: state.file_id, type_id: return_type_id} }
     i := 0
-    for (; i < decl.param_count; i++) {
-        param_id := decl.first_param + i
+    first_param := state.program.arena.decl_first_params[decl_id]
+    param_count := state.program.arena.decl_param_counts[decl_id]
+    for (; i < param_count; i++) {
+        param_id := first_param + i
         param: *ParamNode := state.program.arena.params + param_id
-        param_type := TypeRef{file_id: state.file_id, type_id: param.type_id}
+        param_type := TypeRef{file_id: state.file_id, type_id: state.program.arena.param_type_ids[param_id]}
         state = add_local_symbol(state, param.name, param_id, 101, param_type, param.flags)
         if !state.ok { return state }
     }
-    return resolve_stmt(state, decl.body)
+    body := state.program.arena.decl_bodies[decl_id]
+    state = resolve_stmt(state, body)
+    if state.ok && ref_kind(state, state.function_return) != ast.type_void() && !stmt_has_return(state.program, body) {
+        return state_fail(state, decl.span, "non-void function is missing an explicit return")
+    }
+    return state
 }
 
 pub fn resolve_bodies(result SemanticProject) SemanticProject {
@@ -676,7 +888,7 @@ pub fn resolve_bodies(result SemanticProject) SemanticProject {
         locals: *LocalBinding := mem.calloc(local_cap, mem.sizeof(LocalBinding))
         if locals == none { return fail(result, project.path_at(result.syntax, file_id), 1, 1, "failed to allocate local symbol arena") }
         locals = mem.keep(locals)
-        state := ResolveState{ok: true, semantic: result, program: program, file_id: file_id, module_name: default_module(program, project.import_path_at(result.syntax, file_id)), locals: locals, local_len: 0, local_cap: local_cap, depth: 0, result_type: invalid_ref()}
+        state := ResolveState{ok: true, semantic: result, program: program, file_id: file_id, module_name: default_module(program, project.import_path_at(result.syntax, file_id)), locals: locals, local_len: 0, local_cap: local_cap, depth: 0, result_type: invalid_ref(), function_return: invalid_ref()}
         decl_id := 0
         for (; decl_id < program.arena.decl_len; decl_id++) {
             state = resolve_function(state, decl_id)
@@ -700,5 +912,6 @@ pub fn load(root string, stl_root string) SemanticProject {
     if !result.ok { return result }
     result = resolve_types(result)
     if !result.ok { return result }
-    return resolve_bodies(result)
+    result = resolve_bodies(result)
+    return result
 }

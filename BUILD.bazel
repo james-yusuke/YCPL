@@ -50,7 +50,7 @@ cc_test(
 )
 
 cc_binary(
-    name = "ycc",
+    name = "ycc_bootstrap_bin",
     srcs = [
         "bootstrap/cpp/src/cli/driver.cpp",
         "bootstrap/cpp/src/cli/driver.h",
@@ -66,11 +66,9 @@ cc_binary(
     ],
 )
 
-# Stable stage-0 name. `ycc` remains pointed at it only until the stage3
-# promotion at the end of the self-host transition.
 alias(
     name = "ycc-bootstrap",
-    actual = ":ycc",
+    actual = ":ycc_bootstrap_bin",
 )
 
 cc_binary(
@@ -87,46 +85,96 @@ cc_binary(
 )
 
 genrule(
-    name = "ycc_ycpl_bin",
+    name = "ycc_stage1_bin",
     srcs = glob([
         "compiler/ycpl/**",
         "stl/**",
     ]) + [":yc_runtime_src"],
-    outs = ["ycc-ycpl"],
-    cmd = "YCC=$$(pwd)/$(location :ycc) && OUT_FILE=$$(pwd)/$@ && OUT_DIR=$$(pwd)/$(@D)/ycpl-selfhost && mkdir -p $$OUT_DIR && cd compiler/ycpl && $$YCC build -o $$OUT_DIR >/tmp/ycc-ycpl-build.log 2>&1 && cp $$OUT_DIR/ycc-ycpl $$OUT_FILE",
+    outs = ["ycc-stage1"],
+    cmd = "YCC=$$(pwd)/$(location :ycc-bootstrap) && OUT_FILE=$$(pwd)/$@ && OUT_DIR=$$(pwd)/$(@D)/ycpl-stage1 && mkdir -p $$OUT_DIR && cd compiler/ycpl && $$YCC build -o $$OUT_DIR && cp $$OUT_DIR/ycc $$OUT_FILE",
     executable = True,
-    tools = [":ycc"],
+    tools = [":ycc-bootstrap"],
+)
+
+genrule(
+    name = "ycc_stage2_bin",
+    srcs = glob([
+        "compiler/ycpl/**",
+        "stl/**",
+    ]) + [":yc_runtime_src"],
+    outs = ["ycc-stage2"],
+    cmd = "YCC=$$(pwd)/$(location :ycc-stage1) && OUT_FILE=$$(pwd)/$@ && OUT_DIR=$$(pwd)/$(@D)/ycpl-stage2 && mkdir -p $$OUT_DIR && $$YCC build compiler/ycpl -o $$OUT_DIR && cp $$OUT_DIR/merged $$OUT_FILE",
+    executable = True,
+    tools = [":ycc-stage1"],
+)
+
+genrule(
+    name = "ycc_stage3_bin",
+    srcs = glob([
+        "compiler/ycpl/**",
+        "stl/**",
+    ]) + [":yc_runtime_src"],
+    outs = ["ycc-stage3"],
+    cmd = "YCC=$$(pwd)/$(location :ycc-stage2) && OUT_FILE=$$(pwd)/$@ && OUT_DIR=$$(pwd)/$(@D)/ycpl-stage3 && mkdir -p $$OUT_DIR && $$YCC build compiler/ycpl -o $$OUT_DIR && cp $$OUT_DIR/merged $$OUT_FILE",
+    executable = True,
+    tools = [":ycc-stage2"],
+)
+
+genrule(
+    name = "ycc_bin",
+    outs = ["ycc"],
+    cmd = "cp $(location :ycc-stage3) $@ && chmod +x $@",
+    executable = True,
+    srcs = [":ycc-stage3"],
+)
+
+genrule(
+    name = "ycc_ycpl_alias",
+    outs = ["ycc-ycpl"],
+    cmd = "cp $(location :ycc) $@ && chmod +x $@",
+    executable = True,
+    srcs = [":ycc"],
 )
 
 sh_test(
     name = "ycc_ycpl_test",
-    srcs = ["//tools/bazel:run_ycc_ycpl_test.sh"],
+    srcs = ["//tools/bazel:run_self_host_fixed_point_test.sh"],
     data = [
         ":ycc",
+        ":ycc-stage2",
+        ":ycc-stage3",
         ":ycc-ycpl",
         ":yc_runtime_src",
+        "tests/run_bootstrap_regression.sh",
+        "tests/run_conformance.sh",
     ] + glob([
         "compiler/ycpl/**",
         "examples/**",
         "stl/**",
         "tests/fixtures/**",
     ]),
+    tags = ["exclusive"],
     timeout = "eternal",
 )
 
 sh_test(
     name = "self_host_stage_test",
-    srcs = ["//tools/bazel:run_self_host_stage_test.sh"],
+    srcs = ["//tools/bazel:run_self_host_fixed_point_test.sh"],
     data = [
         ":ycc",
+        ":ycc-stage2",
+        ":ycc-stage3",
         ":ycc-ycpl",
         ":yc_runtime_src",
+        "tests/run_bootstrap_regression.sh",
+        "tests/run_conformance.sh",
     ] + glob([
         "compiler/ycpl/**",
         "examples/**",
         "stl/**",
         "tests/fixtures/**",
     ]),
+    tags = ["exclusive"],
     timeout = "eternal",
 )
 

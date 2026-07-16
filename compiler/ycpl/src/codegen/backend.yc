@@ -1,0 +1,1625 @@
+module compiler.ycpl.codegen.backend
+
+import "ast/nodes" as ast
+import "ast/project" as project
+import "resolver/semantic" as semantic
+import "c/llvm" as llvm
+import "c/stdlib" as cstdlib
+import "std/mem" as mem
+import "std/str" as str
+
+pub struct BackendResult {
+    ok bool
+    file string
+    line i32
+    col i32
+    message string
+    out_file string
+}
+
+struct RefSlot { value *byte }
+
+struct LocalSlot {
+    name string
+    name_id i32
+    address *byte
+    typ *byte
+    element_type *byte
+    nested_element_type *byte
+    aggregate_symbol i32
+    array_length i32
+    runtime_depth i32
+}
+
+struct FieldSlot {
+    symbol_id i32
+    name_id i32
+    index i32
+    typ *byte
+}
+
+struct DeferSlot { stmt_id i32 }
+
+fn ref_get(slots *RefSlot, index i32) *byte {
+    slot: *RefSlot := slots + index
+    return slot.value
+}
+
+fn ref_set(slots *RefSlot, index i32, value *byte) {
+    slot: *RefSlot := slots + index
+    slot.value = value
+}
+
+struct Backend {
+    ok bool
+    message string
+    semantic SemanticProject
+    ctx *byte
+    mod *byte
+    builder *byte
+    ptr_type *byte
+    slice_type *byte
+    array_header_type *byte
+    functions *RefSlot
+    function_types *RefSlot
+    symbol_types *RefSlot
+    symbol_values *RefSlot
+    reachable *byte
+    locals *LocalSlot
+    local_len i32
+    local_cap i32
+    fields *FieldSlot
+    field_len i32
+    field_cap i32
+    defers *DeferSlot
+    defer_len i32
+    defer_cap i32
+    loop_defer_mark i32
+    break_runtime_depth i32
+    continue_runtime_depth i32
+    current_file i32
+    current_function *byte
+    current_return *byte
+    current_main bool
+    runtime_depth i32
+    value *byte
+    address *byte
+    value_type *byte
+    break_block *byte
+    continue_block *byte
+    block_id i32
+    string_id i32
+}
+
+fn fail(message string) BackendResult {
+    return BackendResult{ok: false, file: "", line: 1, col: 1, message: message, out_file: ""}
+}
+
+fn decl_kind(program ProgramAst, id i32) i32 { return program.arena.decl_kinds[id] }
+fn decl_type_id(program ProgramAst, id i32) i32 { return program.arena.decl_type_ids[id] }
+fn decl_body(program ProgramAst, id i32) i32 { return program.arena.decl_bodies[id] }
+fn decl_first_param(program ProgramAst, id i32) i32 { return program.arena.decl_first_params[id] }
+fn decl_param_count(program ProgramAst, id i32) i32 { return program.arena.decl_param_counts[id] }
+fn decl_first_field(program ProgramAst, id i32) i32 { return program.arena.decl_first_fields[id] }
+fn decl_field_count(program ProgramAst, id i32) i32 { return program.arena.decl_field_counts[id] }
+
+fn type_for(backend *Backend, file_id i32, type_id i32) *byte {
+    if type_id <= -100 {
+        kind := -100 - type_id
+        if kind == ast.type_void() { return llvm.void_type(backend.ctx) }
+        if kind == ast.type_bool() { return llvm.i1_type(backend.ctx) }
+        if kind == ast.type_byte() || kind == ast.type_char() { return llvm.i8_type(backend.ctx) }
+        if kind == ast.type_i64() || kind == ast.type_size() { return llvm.i64_type(backend.ctx) }
+        if kind == ast.type_float() { return llvm.float_type(backend.ctx) }
+        if kind == ast.type_double() { return llvm.double_type(backend.ctx) }
+        if kind == ast.type_string() || kind == ast.type_none() || kind == ast.type_any() || kind == ast.type_meta() || kind == ast.type_generic() { return backend.ptr_type }
+        return llvm.i32_type(backend.ctx)
+    }
+    if type_id == ast.invalid_id() { return llvm.void_type(backend.ctx) }
+    if file_id < 0 || file_id >= backend.semantic.syntax.files { return llvm.i32_type(backend.ctx) }
+    program: ProgramAst := project.program_at(backend.semantic.syntax, file_id)
+    if type_id < 0 || type_id >= program.arena.type_len { return llvm.i32_type(backend.ctx) }
+    node: *TypeNode := program.arena.types + type_id
+    kind := program.arena.type_kinds[type_id]
+    if kind == ast.type_void() { return llvm.void_type(backend.ctx) }
+    if kind == ast.type_bool() { return llvm.i1_type(backend.ctx) }
+    if kind == ast.type_byte() || kind == ast.type_char() { return llvm.i8_type(backend.ctx) }
+    if kind == ast.type_i64() || kind == ast.type_size() { return llvm.i64_type(backend.ctx) }
+    if kind == ast.type_float() { return llvm.float_type(backend.ctx) }
+    if kind == ast.type_double() { return llvm.double_type(backend.ctx) }
+    if kind == ast.type_string() || kind == ast.type_none() || kind == ast.type_any() || kind == ast.type_meta() || kind == ast.type_generic() { return backend.ptr_type }
+    if kind == ast.type_pointer() { return backend.ptr_type }
+    if kind == ast.type_slice() { return backend.slice_type }
+    if kind == ast.type_map() { return backend.ptr_type }
+    resolved_file := program.arena.type_resolved_files[type_id]
+    resolved_id := program.arena.type_resolved_ids[type_id]
+    if kind == ast.type_named() && resolved_file != ast.invalid_id() {
+        resolved_program: ProgramAst := project.program_at(backend.semantic.syntax, resolved_file)
+        decl: *DeclNode := resolved_program.arena.decls + resolved_id
+        if decl_kind(resolved_program, resolved_id) == ast.decl_enum() { return llvm.i32_type(backend.ctx) }
+        if decl_kind(resolved_program, resolved_id) == ast.decl_alias() { return type_for(backend, resolved_file, decl_type_id(resolved_program, resolved_id)) }
+        symbol_id := semantic.find_by_import(backend.semantic, project.import_path_at(backend.semantic.syntax, resolved_file), ast.decl_name(resolved_program.arena, resolved_id))
+        if symbol_id != ast.invalid_id() {
+            resolved_symbol: *Symbol := backend.semantic.symbols + symbol_id
+            stored_type := ref_get(backend.symbol_types, symbol_id)
+            if stored_type != none { return stored_type }
+            return llvm.named_type(backend.ctx, resolved_symbol.name)
+        }
+    }
+    return llvm.i32_type(backend.ctx)
+}
+
+fn expression_type(backend *Backend, node *ExprNode) *byte {
+    return type_for(backend, node.type_file, node.type_id)
+}
+
+fn pointee_type(backend *Backend, file_id i32, type_id i32) *byte {
+    if file_id >= 0 && file_id < backend.semantic.syntax.files {
+        program: ProgramAst := project.program_at(backend.semantic.syntax, file_id)
+        if type_id >= 0 && type_id < program.arena.type_len && program.arena.type_kinds[type_id] == ast.type_pointer() {
+            return type_for(backend, file_id, program.arena.type_bases[type_id])
+        }
+    }
+    return llvm.i8_type(backend.ctx)
+}
+
+fn deref_type(backend *Backend, file_id i32, type_id i32) *byte {
+    if file_id >= 0 && file_id < backend.semantic.syntax.files {
+        program: ProgramAst := project.program_at(backend.semantic.syntax, file_id)
+        if type_id >= 0 && type_id < program.arena.type_len && program.arena.type_kinds[type_id] == ast.type_pointer() {
+            base_id := program.arena.type_bases[type_id]
+            if base_id >= 0 && base_id < program.arena.type_len && program.arena.type_kinds[base_id] == ast.type_byte() { return llvm.i32_type(backend.ctx) }
+        }
+    }
+    return pointee_type(backend, file_id, type_id)
+}
+
+fn slice_element_type(backend *Backend, file_id i32, type_id i32) *byte {
+    if file_id >= 0 && file_id < backend.semantic.syntax.files {
+        program: ProgramAst := project.program_at(backend.semantic.syntax, file_id)
+        if type_id >= 0 && type_id < program.arena.type_len && program.arena.type_kinds[type_id] == ast.type_slice() {
+            return type_for(backend, file_id, program.arena.type_bases[type_id])
+        }
+    }
+    return none
+}
+
+fn coerce(backend *Backend, value *byte, from *byte, to *byte) *byte {
+    if value == none || from == to { return value }
+    i1 := llvm.i1_type(backend.ctx)
+    i8 := llvm.i8_type(backend.ctx)
+    i32 := llvm.i32_type(backend.ctx)
+    i64 := llvm.i64_type(backend.ctx)
+    double_type := llvm.double_type(backend.ctx)
+    if from == i64 && (to == i32 || to == i8 || to == i1) { return llvm.build_trunc(backend.builder, value, to, "truncate") }
+    if from == i32 && (to == i8 || to == i1) { return llvm.build_trunc(backend.builder, value, to, "truncate") }
+    if (from == i1 || from == i8 || from == i32) && to == i64 { return llvm.build_sext(backend.builder, value, to, "extend") }
+    if (from == i1 || from == i8) && to == i32 { return llvm.build_sext(backend.builder, value, to, "extend") }
+    if (from == i32 || from == i64) && to == double_type { return llvm.build_sitofp(backend.builder, value, to, "float") }
+    if from == double_type && (to == i32 || to == i64) { return llvm.build_fptosi(backend.builder, value, to, "integer") }
+    return value
+}
+
+fn next_block_name(backend *Backend, prefix string) string {
+    // LLVM uniquifies repeated readable names deterministically in insertion order.
+    backend.block_id += 1
+    return prefix
+}
+
+fn declare_runtime_function(backend *Backend, name string, result *byte, params *RefSlot, count i32, variadic bool) *byte {
+    vararg := 0
+    if variadic { vararg = 1 }
+    typ := llvm.function_type(result, params, count, vararg)
+    return llvm.add_function(backend.mod, name, typ)
+}
+
+fn declare_support_runtime(backend *Backend) {
+    void_type := llvm.void_type(backend.ctx)
+    declare_runtime_function(backend, "yc_runtime_init", void_type, none, 0, false)
+    declare_runtime_function(backend, "yc_runtime_shutdown", void_type, none, 0, false)
+    declare_runtime_function(backend, "yc_frame_push", void_type, none, 0, false)
+    declare_runtime_function(backend, "yc_frame_pop", void_type, none, 0, false)
+    declare_runtime_function(backend, "yc_move_frame_to_parent", void_type, none, 0, false)
+    two_sizes: *RefSlot := mem.calloc(2, mem.sizeof(RefSlot))
+    ref_set(two_sizes, 0, llvm.i64_type(backend.ctx))
+    ref_set(two_sizes, 1, llvm.i64_type(backend.ctx))
+    declare_runtime_function(backend, "yc_calloc", backend.ptr_type, two_sizes, 2, false)
+    ptr_size: *RefSlot := mem.calloc(2, mem.sizeof(RefSlot))
+    ref_set(ptr_size, 0, backend.ptr_type)
+    ref_set(ptr_size, 1, llvm.i64_type(backend.ctx))
+    declare_runtime_function(backend, "yc_realloc", backend.ptr_type, ptr_size, 2, false)
+    two_ptrs: *RefSlot := mem.calloc(2, mem.sizeof(RefSlot))
+    ref_set(two_ptrs, 0, backend.ptr_type)
+    ref_set(two_ptrs, 1, backend.ptr_type)
+    declare_runtime_function(backend, "yc_attach_child", void_type, two_ptrs, 2, false)
+    three_ptrs: *RefSlot := mem.calloc(3, mem.sizeof(RefSlot))
+    ref_set(three_ptrs, 0, backend.ptr_type)
+    ref_set(three_ptrs, 1, backend.ptr_type)
+    ref_set(three_ptrs, 2, backend.ptr_type)
+    declare_runtime_function(backend, "yc_replace_child", void_type, three_ptrs, 3, false)
+    move_params: *RefSlot := mem.calloc(2, mem.sizeof(RefSlot))
+    ref_set(move_params, 0, backend.ptr_type)
+    ref_set(move_params, 1, llvm.i64_type(backend.ctx))
+    declare_runtime_function(backend, "yc_move_to_ancestor", backend.ptr_type, move_params, 2, false)
+}
+
+fn call_void_runtime(backend *Backend, name string) {
+    fn_type := llvm.function_type(llvm.void_type(backend.ctx), none, 0, 0)
+    function := llvm.named_function(backend.mod, name)
+    if function == none { function = llvm.add_function(backend.mod, name, fn_type) }
+    llvm.build_call(backend.builder, fn_type, function, none, 0, "")
+}
+
+fn emit_scope_unwind(backend *Backend, target_depth i32) {
+    depth := backend.runtime_depth
+    for (; depth > target_depth; depth--) { call_void_runtime(backend, "yc_frame_pop") }
+}
+
+fn emit_function_cleanup(backend *Backend) {
+    depth := backend.runtime_depth
+    for (; depth >= 0; depth--) { call_void_runtime(backend, "yc_frame_pop") }
+    if backend.current_main { call_void_runtime(backend, "yc_runtime_shutdown") }
+}
+
+fn move_to_ancestor(backend *Backend, value *byte, levels i32) *byte {
+    if value == none || levels <= 0 { return value }
+    params: *RefSlot := mem.calloc(2, mem.sizeof(RefSlot))
+    ref_set(params, 0, backend.ptr_type)
+    ref_set(params, 1, llvm.i64_type(backend.ctx))
+    fn_type := llvm.function_type(backend.ptr_type, params, 2, 0)
+    function := llvm.named_function(backend.mod, "yc_move_to_ancestor")
+    args: *RefSlot := mem.calloc(2, mem.sizeof(RefSlot))
+    ref_set(args, 0, value)
+    ref_set(args, 1, llvm.const_int(llvm.i64_type(backend.ctx), levels, 0))
+    return llvm.build_call(backend.builder, fn_type, function, args, 2, "runtime.escape")
+}
+
+fn escape_return_value(backend *Backend, value *byte) *byte {
+    if value == none { return value }
+    typ := llvm.type_of(value)
+    levels := backend.runtime_depth + 1
+    if typ == backend.ptr_type {
+        return move_to_ancestor(backend, value, levels)
+    }
+    kind := llvm.type_kind(typ)
+    if kind == 10 || kind == 11 {
+        i := 0
+        for (; i < levels; i++) { call_void_runtime(backend, "yc_move_frame_to_parent") }
+    }
+    return value
+}
+
+fn mark_expr(backend *Backend, program ProgramAst, expr_id i32) {
+    if expr_id == ast.invalid_id() { return }
+    node: *ExprNode := program.arena.exprs + expr_id
+    if node.symbol_id != ast.invalid_id() && node.symbol_id < backend.semantic.symbol_len {
+        symbol: *Symbol := backend.semantic.symbols + node.symbol_id
+        if symbol.kind == ast.decl_function() { mark_function(backend, node.symbol_id) }
+    }
+    mark_expr(backend, program, node.left)
+    mark_expr(backend, program, node.right)
+    i := 0
+    for (; i < node.arg_count; i++) { mark_expr(backend, program, program.arena.children[node.first_arg + i]) }
+}
+
+fn mark_stmt(backend *Backend, program ProgramAst, stmt_id i32) {
+    if stmt_id == ast.invalid_id() { return }
+    node: *StmtNode := program.arena.stmts + stmt_id
+    mark_expr(backend, program, node.a)
+    if node.kind == ast.stmt_if() {
+        mark_stmt(backend, program, node.b)
+        mark_stmt(backend, program, node.c)
+    } else if node.kind == ast.stmt_for() {
+        mark_stmt(backend, program, node.a)
+        mark_expr(backend, program, node.b)
+        mark_stmt(backend, program, node.c)
+        mark_stmt(backend, program, node.first_child)
+    } else if node.kind == ast.stmt_for_in() {
+        mark_stmt(backend, program, node.b)
+    } else if node.kind == ast.stmt_assign() {
+        mark_expr(backend, program, node.b)
+    } else if node.kind == ast.stmt_defer() || node.kind == ast.stmt_scope() {
+        mark_stmt(backend, program, node.a)
+    }
+    i := 0
+    for (; i < node.child_count; i++) { mark_stmt(backend, program, program.arena.children[node.first_child + i]) }
+}
+
+fn mark_function(backend *Backend, symbol_id i32) {
+    if symbol_id < 0 || symbol_id >= backend.semantic.symbol_len || backend.reachable[symbol_id] != 0 { return }
+    symbol: *Symbol := backend.semantic.symbols + symbol_id
+    if symbol.kind != ast.decl_function() { return }
+    backend.reachable[symbol_id] = 1
+    program: ProgramAst := project.program_at(backend.semantic.syntax, symbol.file_id)
+    decl: *DeclNode := program.arena.decls + symbol.node_id
+    body := decl_body(program, symbol.node_id)
+    if body != ast.invalid_id() { mark_stmt(backend, program, body) }
+}
+
+fn mark_reachable(backend *Backend) {
+    i := 0
+    for (; i < backend.semantic.symbol_len; i++) {
+        symbol: *Symbol := backend.semantic.symbols + i
+        if symbol.kind == ast.decl_function() && (str.eq(symbol.name, "main") || (str.eq(symbol.import_path, "std/bytes") && str.eq(symbol.name, "eq"))) { mark_function(backend, i) }
+    }
+}
+
+fn declare_structs(backend *Backend) {
+    i := 0
+    for (; i < backend.semantic.symbol_len; i++) {
+        symbol: *Symbol := backend.semantic.symbols + i
+        if symbol.kind == ast.decl_struct() {
+            ref_set(backend.symbol_types, i, llvm.named_struct(backend.ctx, symbol.name))
+        }
+    }
+    i = 0
+    for (; i < backend.semantic.symbol_len; i++) {
+        symbol: *Symbol := backend.semantic.symbols + i
+        if symbol.kind == ast.decl_struct() {
+            program: ProgramAst := project.program_at(backend.semantic.syntax, symbol.file_id)
+            decl: *DeclNode := program.arena.decls + symbol.node_id
+            first_field := decl_first_field(program, symbol.node_id)
+            field_count := decl_field_count(program, symbol.node_id)
+            fields: *RefSlot := mem.calloc(field_count, mem.sizeof(RefSlot))
+            field_id := 0
+            for (; field_id < field_count; field_id++) {
+                field_llvm_type := type_for(backend, symbol.file_id, program.arena.field_type_ids[first_field + field_id])
+                ref_set(fields, field_id, field_llvm_type)
+                if backend.field_len < backend.field_cap {
+                    field_slot: *FieldSlot := backend.fields + backend.field_len
+                    field_slot.symbol_id = i
+                    field_slot.name_id = program.arena.field_name_ids[first_field + field_id]
+                    field_slot.index = field_id
+                    field_slot.typ = field_llvm_type
+                    backend.field_len += 1
+                }
+            }
+            llvm.set_struct_body(ref_get(backend.symbol_types, i), fields, field_count, 0)
+        }
+    }
+}
+
+fn declare_functions(backend *Backend) {
+    i := 0
+    for (; i < backend.semantic.symbol_len; i++) {
+        symbol: *Symbol := backend.semantic.symbols + i
+        if symbol.kind == ast.decl_function() && backend.reachable[i] != 0 {
+            program: ProgramAst := project.program_at(backend.semantic.syntax, symbol.file_id)
+            decl: *DeclNode := program.arena.decls + symbol.node_id
+            first_param := decl_first_param(program, symbol.node_id)
+            param_count := decl_param_count(program, symbol.node_id)
+            params: *RefSlot := mem.calloc(param_count, mem.sizeof(RefSlot))
+            variadic := 0
+            param_id := 0
+            for (; param_id < param_count; param_id++) {
+                ref_set(params, param_id, type_for(backend, symbol.file_id, program.arena.param_type_ids[first_param + param_id]))
+                if (program.arena.param_flags[first_param + param_id] / ast.flag_variadic()) % 2 == 1 { variadic = 1 }
+            }
+            result := type_for(backend, symbol.file_id, decl_type_id(program, symbol.node_id))
+            if str.eq(symbol.name, "main") { result = llvm.i32_type(backend.ctx) }
+            typ := llvm.function_type(result, params, param_count, variadic)
+            ref_set(backend.function_types, i, typ)
+            function := llvm.named_function(backend.mod, symbol.link_name)
+            if function == none { function = llvm.add_function(backend.mod, symbol.link_name, typ) }
+            ref_set(backend.functions, i, function)
+        }
+    }
+}
+
+fn aggregate_symbol_for_type(backend *Backend, file_id i32, type_id i32) i32 {
+    if file_id < 0 || file_id >= backend.semantic.syntax.files || type_id < 0 { return ast.invalid_id() }
+    program: ProgramAst := project.program_at(backend.semantic.syntax, file_id)
+    if type_id >= program.arena.type_len { return ast.invalid_id() }
+    if program.arena.type_kinds[type_id] == ast.type_pointer() {
+        return aggregate_symbol_for_type(backend, file_id, program.arena.type_bases[type_id])
+    }
+    if program.arena.type_kinds[type_id] != ast.type_named() || program.arena.type_resolved_files[type_id] == ast.invalid_id() { return ast.invalid_id() }
+    resolved_file := program.arena.type_resolved_files[type_id]
+    resolved_id := program.arena.type_resolved_ids[type_id]
+    resolved_program: ProgramAst := project.program_at(backend.semantic.syntax, resolved_file)
+    return semantic.find_by_import(backend.semantic, project.import_path_at(backend.semantic.syntax, resolved_file), ast.decl_name(resolved_program.arena, resolved_id))
+}
+
+fn local_symbol_for(backend *Backend, file_id i32, kind i32, node_id i32) i32 {
+    i := 0
+    for (; i < backend.semantic.symbol_len; i++) {
+        symbol: *Symbol := backend.semantic.symbols + i
+        if symbol.file_id == file_id && symbol.kind == kind && symbol.node_id == node_id { return i }
+    }
+    return ast.invalid_id()
+}
+
+fn backend_local_address(backend *Backend, name_id i32) *byte {
+    i := backend.local_len - 1
+    for (; i >= 0; i--) {
+        slot: *LocalSlot := backend.locals + i
+        if slot.name_id == name_id { return slot.address }
+    }
+    return none
+}
+
+fn backend_local_type(backend *Backend, name_id i32) *byte {
+    i := backend.local_len - 1
+    for (; i >= 0; i--) {
+        slot: *LocalSlot := backend.locals + i
+        if slot.name_id == name_id { return slot.typ }
+    }
+    return none
+}
+
+fn add_backend_local(backend *Backend, name_id i32, address *byte, typ *byte, element_type *byte, nested_element_type *byte, aggregate_symbol i32, array_length i32) {
+    if backend.local_len >= backend.local_cap { return }
+    slot: *LocalSlot := backend.locals + backend.local_len
+    slot.name = "local"
+    slot.name_id = name_id
+    slot.address = address
+    slot.typ = typ
+    slot.element_type = element_type
+    slot.nested_element_type = nested_element_type
+    slot.aggregate_symbol = aggregate_symbol
+    slot.array_length = array_length
+    slot.runtime_depth = backend.runtime_depth
+    backend.local_len += 1
+}
+
+fn backend_local_runtime_depth(backend *Backend, name_id i32) i32 {
+    i := backend.local_len - 1
+    for (; i >= 0; i--) {
+        slot: *LocalSlot := backend.locals + i
+        if slot.name_id == name_id { return slot.runtime_depth }
+    }
+    return backend.runtime_depth
+}
+
+fn backend_local_nested_element_type(backend *Backend, name_id i32) *byte {
+    i := backend.local_len - 1
+    for (; i >= 0; i--) {
+        slot: *LocalSlot := backend.locals + i
+        if slot.name_id == name_id { return slot.nested_element_type }
+    }
+    return none
+}
+
+fn backend_local_array_length(backend *Backend, name_id i32) i32 {
+    i := backend.local_len - 1
+    for (; i >= 0; i--) {
+        slot: *LocalSlot := backend.locals + i
+        if slot.name_id == name_id { return slot.array_length }
+    }
+    return 0
+}
+
+fn backend_local_element_type(backend *Backend, name_id i32) *byte {
+    i := backend.local_len - 1
+    for (; i >= 0; i--) {
+        slot: *LocalSlot := backend.locals + i
+        if slot.name_id == name_id { return slot.element_type }
+    }
+    return none
+}
+
+fn backend_local_aggregate_symbol(backend *Backend, name_id i32) i32 {
+    i := backend.local_len - 1
+    for (; i >= 0; i--) {
+        slot: *LocalSlot := backend.locals + i
+        if slot.name_id == name_id { return slot.aggregate_symbol }
+    }
+    return ast.invalid_id()
+}
+
+fn field_index_hash(backend *Backend, symbol_id i32, wanted i64) i32 {
+    if symbol_id == ast.invalid_id() { return ast.invalid_id() }
+    symbol: *Symbol := backend.semantic.symbols + symbol_id
+    program: ProgramAst := project.program_at(backend.semantic.syntax, symbol.file_id)
+    first_field := decl_first_field(program, symbol.node_id)
+    field_count := decl_field_count(program, symbol.node_id)
+    i := 0
+    for (; i < field_count; i++) {
+        field: *FieldNode := program.arena.fields + first_field + i
+        if field.value == wanted { return i }
+    }
+    return ast.invalid_id()
+}
+
+fn field_index(backend *Backend, symbol_id i32, name string) i32 {
+    if symbol_id == ast.invalid_id() { return ast.invalid_id() }
+    symbol: *Symbol := backend.semantic.symbols + symbol_id
+    program: ProgramAst := project.program_at(backend.semantic.syntax, symbol.file_id)
+    first_field := decl_first_field(program, symbol.node_id)
+    field_count := decl_field_count(program, symbol.node_id)
+    i := 0
+    for (; i < field_count; i++) {
+        if str.eq(program.arena.field_names[first_field + i], name) { return i }
+    }
+    return ast.invalid_id()
+}
+
+fn field_index_id(backend *Backend, symbol_id i32, wanted i32) i32 {
+    i := 0
+    for (; i < backend.field_len; i++) {
+        field: *FieldSlot := backend.fields + i
+        if field.symbol_id == symbol_id && field.name_id == wanted { return field.index }
+    }
+    return ast.invalid_id()
+}
+
+fn field_slot_type(backend *Backend, symbol_id i32, index i32) *byte {
+    i := 0
+    for (; i < backend.field_len; i++) {
+        field: *FieldSlot := backend.fields + i
+        if field.symbol_id == symbol_id && field.index == index { return field.typ }
+    }
+    return none
+}
+
+fn field_type(backend *Backend, symbol_id i32, index i32) *byte {
+    cached := field_slot_type(backend, symbol_id, index)
+    if cached != none { return cached }
+    if symbol_id == ast.invalid_id() || index == ast.invalid_id() { return none }
+    symbol: *Symbol := backend.semantic.symbols + symbol_id
+    program: ProgramAst := project.program_at(backend.semantic.syntax, symbol.file_id)
+    return type_for(backend, symbol.file_id, program.arena.field_type_ids[decl_first_field(program, symbol.node_id) + index])
+}
+
+fn struct_type_for_symbol(backend *Backend, symbol_id i32) *byte {
+    if symbol_id == ast.invalid_id() { return none }
+    stored_type := ref_get(backend.symbol_types, symbol_id)
+    if stored_type != none { return stored_type }
+    symbol: *Symbol := backend.semantic.symbols + symbol_id
+    return llvm.named_type(backend.ctx, symbol.name)
+}
+
+fn struct_symbol_for_name(backend *Backend, name string) i32 {
+    i := 0
+    for (; i < backend.semantic.symbol_len; i++) {
+        symbol: *Symbol := backend.semantic.symbols + i
+        if symbol.kind == ast.decl_struct() && symbol.file_id == backend.current_file && str.eq(symbol.name, name) { return i }
+    }
+    return ast.invalid_id()
+}
+
+fn binary_value(backend *Backend, op string, left *byte, right *byte) *byte {
+    typ := llvm.type_of(left)
+    floating := typ == llvm.float_type(backend.ctx) || typ == llvm.double_type(backend.ctx)
+    if str.eq(op, "+") {
+        if floating { return llvm.build_fadd(backend.builder, left, right, "add") }
+        return llvm.build_add(backend.builder, left, right, "add")
+    }
+    if str.eq(op, "-") {
+        if floating { return llvm.build_fsub(backend.builder, left, right, "sub") }
+        return llvm.build_sub(backend.builder, left, right, "sub")
+    }
+    if str.eq(op, "*") {
+        if floating { return llvm.build_fmul(backend.builder, left, right, "mul") }
+        return llvm.build_mul(backend.builder, left, right, "mul")
+    }
+    if str.eq(op, "/") {
+        if floating { return llvm.build_fdiv(backend.builder, left, right, "div") }
+        return llvm.build_sdiv(backend.builder, left, right, "div")
+    }
+    if str.eq(op, "%") { return llvm.build_srem(backend.builder, left, right, "rem") }
+    if str.eq(op, "==") { return llvm.build_icmp(backend.builder, llvm.int_eq(), left, right, "eq") }
+    if str.eq(op, "!=") { return llvm.build_icmp(backend.builder, llvm.int_ne(), left, right, "ne") }
+    if str.eq(op, "<") { return llvm.build_icmp(backend.builder, llvm.int_slt(), left, right, "lt") }
+    if str.eq(op, "<=") { return llvm.build_icmp(backend.builder, llvm.int_sle(), left, right, "le") }
+    if str.eq(op, ">") { return llvm.build_icmp(backend.builder, llvm.int_sgt(), left, right, "gt") }
+    if str.eq(op, ">=") { return llvm.build_icmp(backend.builder, llvm.int_sge(), left, right, "ge") }
+    if str.eq(op, "&") { return llvm.build_and(backend.builder, left, right, "and") }
+    if str.eq(op, "|") { return llvm.build_or(backend.builder, left, right, "or") }
+    if str.eq(op, "^") { return llvm.build_xor(backend.builder, left, right, "xor") }
+    if str.eq(op, "<<") { return llvm.build_shl(backend.builder, left, right, "shl") }
+    if str.eq(op, ">>") { return llvm.build_ashr(backend.builder, left, right, "shr") }
+    return none
+}
+
+fn lower_lvalue(backend *Backend, program ProgramAst, expr_id i32) {
+    backend.address = none
+    backend.value_type = none
+    if expr_id == ast.invalid_id() { return }
+    node: *ExprNode := program.arena.exprs + expr_id
+    if node.kind == ast.expr_ident() {
+        backend.address = backend_local_address(backend, program.arena.expr_name_ids[expr_id])
+        backend.value_type = backend_local_type(backend, program.arena.expr_name_ids[expr_id])
+        return
+    }
+    if node.kind == ast.expr_unary() && str.eq(node.text, "*") {
+        child: *ExprNode := program.arena.exprs + node.left
+        lower_expr(backend, program, node.left)
+        backend.address = backend.value
+        backend.value_type = deref_type(backend, child.type_file, child.type_id)
+        return
+    }
+    if node.kind == ast.expr_member() {
+        left: *ExprNode := program.arena.exprs + node.left
+        lower_lvalue(backend, program, node.left)
+        address := backend.address
+        owner_type := backend.value_type
+        symbol_id := ast.invalid_id()
+        if left.kind == ast.expr_ident() { symbol_id = backend_local_aggregate_symbol(backend, program.arena.expr_name_ids[node.left]) }
+        if symbol_id == ast.invalid_id() { symbol_id = aggregate_symbol_for_type(backend, left.type_file, left.type_id) }
+        index := program.arena.expr_int_values[expr_id]
+        if index < 0 || index > 10000 {
+            index = field_index_hash(backend, symbol_id, program.arena.expr_int_values[expr_id])
+            if index == ast.invalid_id() { index = field_index_id(backend, symbol_id, program.arena.expr_name_ids[expr_id]) }
+        }
+        if index == ast.invalid_id() { index = field_index(backend, symbol_id, program.arena.expr_names[expr_id]) }
+        if address == none || index == ast.invalid_id() {
+            backend.address = none
+            backend.value_type = none
+            return
+        }
+        struct_type := struct_type_for_symbol(backend, symbol_id)
+        if owner_type == backend.ptr_type { address = llvm.build_load(backend.builder, backend.ptr_type, address, "owner.ptr") }
+        backend.address = llvm.build_struct_gep(backend.builder, struct_type, address, index, "field.addr")
+        backend.value_type = field_type(backend, symbol_id, index)
+        return
+    }
+    if node.kind == ast.expr_index() {
+        left: *ExprNode := program.arena.exprs + node.left
+        lower_lvalue(backend, program, node.left)
+        address := backend.address
+        aggregate_type := backend.value_type
+        element_type: *byte := none
+        count := 0
+        if left.kind == ast.expr_ident() {
+            element_type = backend_local_element_type(backend, program.arena.expr_name_ids[node.left])
+            count = backend_local_array_length(backend, program.arena.expr_name_ids[node.left])
+        }
+        slice_element := slice_element_type(backend, left.type_file, left.type_id)
+        if slice_element != none && element_type == none {
+            element_type = slice_element
+            count = -1
+        }
+        if address == none { return }
+        lower_expr(backend, program, node.right)
+        index_value := backend.value
+        if llvm.type_of(index_value) != llvm.i32_type(backend.ctx) {
+            index_value = coerce(backend, index_value, llvm.type_of(index_value), llvm.i32_type(backend.ctx))
+        }
+        if count > 0 {
+            indices: *RefSlot := mem.calloc(2, mem.sizeof(RefSlot))
+            ref_set(indices, 0, llvm.const_int(llvm.i32_type(backend.ctx), 0, 0))
+            ref_set(indices, 1, index_value)
+            backend.address = llvm.build_gep(backend.builder, aggregate_type, address, indices, 2, "index.addr")
+            backend.value_type = element_type
+        } else if count < 0 {
+            header := llvm.build_load(backend.builder, backend.ptr_type, address, "array.header")
+            raw_length := llvm.build_load(backend.builder, llvm.i64_type(backend.ctx), header_field_address(backend, header, 1, "array.len.addr"), "array.len")
+            length := llvm.build_trunc(backend.builder, raw_length, llvm.i32_type(backend.ctx), "array.len.i32")
+            emit_bounds_check(backend, index_value, length)
+            data_address := header_field_address(backend, header, 0, "array.data.addr")
+            data := llvm.build_load(backend.builder, backend.ptr_type, data_address, "array.data")
+            indices: *RefSlot := mem.calloc(1, mem.sizeof(RefSlot))
+            ref_set(indices, 0, index_value)
+            backend.address = llvm.build_gep(backend.builder, element_type, data, indices, 1, "array.item.addr")
+            backend.value_type = element_type
+        } else if aggregate_type == backend.ptr_type {
+            pointer := llvm.build_load(backend.builder, backend.ptr_type, address, "string.ptr")
+            indices: *RefSlot := mem.calloc(1, mem.sizeof(RefSlot))
+            ref_set(indices, 0, index_value)
+            pointer_element := pointee_type(backend, left.type_file, left.type_id)
+            backend.address = llvm.build_gep(backend.builder, pointer_element, pointer, indices, 1, "index.addr")
+            backend.value_type = pointer_element
+        }
+    }
+}
+
+fn header_field_address(backend *Backend, header *byte, index i32, name string) *byte {
+    return llvm.build_struct_gep(backend.builder, backend.array_header_type, header, index, name)
+}
+
+fn array_element_type(backend *Backend, program ProgramAst, node *ExprNode) *byte {
+    if node.arg_count > 0 {
+        first: *ExprNode := program.arena.exprs + program.arena.children[node.first_arg]
+        if first.kind == ast.expr_ident() {
+            typ := backend_local_element_type(backend, first.flags)
+            if typ != none { return typ }
+        }
+        first_type_id := program.arena.expr_syntax_type_ids[program.arena.children[node.first_arg]]
+        if first.kind == ast.expr_type() && first_type_id != ast.invalid_id() {
+            if program.arena.type_kinds[first_type_id] == ast.type_slice() { return type_for(backend, backend.current_file, program.arena.type_bases[first_type_id]) }
+        }
+        resolved_element := slice_element_type(backend, first.type_file, first.type_id)
+        if resolved_element != none { return resolved_element }
+    }
+    return llvm.i32_type(backend.ctx)
+}
+
+fn array_element_symbol(backend *Backend, program ProgramAst, node *ExprNode) i32 {
+    if node.arg_count <= 0 { return ast.invalid_id() }
+    type_expr_id := program.arena.children[node.first_arg]
+    type_expr: *ExprNode := program.arena.exprs + type_expr_id
+    syntax_type_id := program.arena.expr_syntax_type_ids[type_expr_id]
+    if type_expr.kind != ast.expr_type() || syntax_type_id < 0 || syntax_type_id >= program.arena.type_len { return ast.invalid_id() }
+    if program.arena.type_kinds[syntax_type_id] == ast.type_slice() {
+        return aggregate_symbol_for_type(backend, backend.current_file, program.arena.type_bases[syntax_type_id])
+    }
+    return ast.invalid_id()
+}
+
+fn array_nested_element_type(backend *Backend, program ProgramAst, node *ExprNode) *byte {
+    if node.arg_count <= 0 { return none }
+    type_expr_id := program.arena.children[node.first_arg]
+    syntax_type_id := program.arena.expr_syntax_type_ids[type_expr_id]
+    if syntax_type_id < 0 || syntax_type_id >= program.arena.type_len || program.arena.type_kinds[syntax_type_id] != ast.type_slice() { return none }
+    element_id := program.arena.type_bases[syntax_type_id]
+    if element_id >= 0 && element_id < program.arena.type_len && program.arena.type_kinds[element_id] == ast.type_slice() {
+        return type_for(backend, backend.current_file, program.arena.type_bases[element_id])
+    }
+    return none
+}
+
+fn libc_function(backend *Backend, name string, result *byte, params *RefSlot, count i32) *byte {
+    found := llvm.named_function(backend.mod, name)
+    if found != none { return found }
+    typ := llvm.function_type(result, params, count, 0)
+    return llvm.add_function(backend.mod, name, typ)
+}
+
+fn emit_bounds_check(backend *Backend, index *byte, length *byte) {
+    zero := llvm.const_int(llvm.i32_type(backend.ctx), 0, 0)
+    nonnegative := llvm.build_icmp(backend.builder, llvm.int_sge(), index, zero, "index.nonnegative")
+    below := llvm.build_icmp(backend.builder, llvm.int_slt(), index, length, "index.in.bounds")
+    valid := llvm.build_and(backend.builder, nonnegative, below, "index.valid")
+    valid_block := llvm.append_block(backend.ctx, backend.current_function, next_block_name(backend, "bounds.ok"))
+    fail_block := llvm.append_block(backend.ctx, backend.current_function, next_block_name(backend, "bounds.fail"))
+    llvm.build_cond_br(backend.builder, valid, valid_block, fail_block)
+    llvm.position_at_end(backend.builder, fail_block)
+    abort_type := llvm.function_type(llvm.void_type(backend.ctx), none, 0, 0)
+    abort_fn := llvm.named_function(backend.mod, "abort")
+    if abort_fn == none { abort_fn = llvm.add_function(backend.mod, "abort", abort_type) }
+    llvm.build_call(backend.builder, abort_type, abort_fn, none, 0, "")
+    llvm.build_unreachable(backend.builder)
+    llvm.position_at_end(backend.builder, valid_block)
+}
+
+fn lower_array_intrinsic(backend *Backend, program ProgramAst, node *ExprNode, symbol *Symbol) {
+    element_type := array_element_type(backend, program, node)
+    if (str.eq(symbol.name, "len") || str.eq(symbol.name, "cap")) && node.arg_count == 1 {
+        first: *ExprNode := program.arena.exprs + program.arena.children[node.first_arg]
+        if first.kind == ast.expr_ident() {
+            fixed_count := backend_local_array_length(backend, first.flags)
+            if fixed_count > 0 {
+                backend.value = llvm.const_int(llvm.i32_type(backend.ctx), fixed_count, 0)
+                return
+            }
+            if fixed_count == 0 && backend_local_type(backend, first.flags) == backend.ptr_type && slice_element_type(backend, first.type_file, first.type_id) == none {
+                lower_string_intrinsic(backend, program, node, symbol)
+                return
+            }
+        }
+    }
+    if str.eq(symbol.name, "make") || str.eq(symbol.name, "new") {
+        params: *RefSlot := mem.calloc(2, mem.sizeof(RefSlot))
+        ref_set(params, 0, llvm.i64_type(backend.ctx))
+        ref_set(params, 1, llvm.i64_type(backend.ctx))
+        calloc_type := llvm.function_type(backend.ptr_type, params, 2, 0)
+        calloc_fn := llvm.named_function(backend.mod, "yc_calloc")
+        args: *RefSlot := mem.calloc(2, mem.sizeof(RefSlot))
+        ref_set(args, 0, llvm.const_int(llvm.i64_type(backend.ctx), 1, 0))
+        ref_set(args, 1, llvm.const_int(llvm.i64_type(backend.ctx), 32, 0))
+        header := llvm.build_call(backend.builder, calloc_type, calloc_fn, args, 2, "array.header")
+        llvm.build_store(backend.builder, llvm.sizeof_type(element_type), header_field_address(backend, header, 3, "array.elem_size"))
+        backend.value = header
+        return
+    }
+    if node.arg_count == 0 {
+        backend.value = none
+        return
+    }
+    lower_expr(backend, program, program.arena.children[node.first_arg])
+    header := backend.value
+    data_address := header_field_address(backend, header, 0, "array.data.addr")
+    len_address := header_field_address(backend, header, 1, "array.len.addr")
+    cap_address := header_field_address(backend, header, 2, "array.cap.addr")
+    if str.eq(symbol.name, "len") || str.eq(symbol.name, "cap") {
+        address := len_address
+        if str.eq(symbol.name, "cap") { address = cap_address }
+        raw := llvm.build_load(backend.builder, llvm.i64_type(backend.ctx), address, "array.count")
+        backend.value = llvm.build_trunc(backend.builder, raw, llvm.i32_type(backend.ctx), "array.count.i32")
+        return
+    }
+    if str.eq(symbol.name, "push") || str.eq(symbol.name, "append") {
+        lower_expr(backend, program, program.arena.children[node.first_arg + 1])
+        item := backend.value
+        element_type = llvm.type_of(item)
+        old_data := llvm.build_load(backend.builder, backend.ptr_type, data_address, "array.data")
+        length := llvm.build_load(backend.builder, llvm.i64_type(backend.ctx), len_address, "array.len")
+        next_length := llvm.build_add(backend.builder, length, llvm.const_int(llvm.i64_type(backend.ctx), 1, 0), "array.next_len")
+        bytes := llvm.build_mul(backend.builder, next_length, llvm.sizeof_type(element_type), "array.bytes")
+        params: *RefSlot := mem.calloc(2, mem.sizeof(RefSlot))
+        ref_set(params, 0, backend.ptr_type)
+        ref_set(params, 1, llvm.i64_type(backend.ctx))
+        realloc_type := llvm.function_type(backend.ptr_type, params, 2, 0)
+        realloc_fn := llvm.named_function(backend.mod, "yc_realloc")
+        args: *RefSlot := mem.calloc(2, mem.sizeof(RefSlot))
+        ref_set(args, 0, old_data)
+        ref_set(args, 1, bytes)
+        data := llvm.build_call(backend.builder, realloc_type, realloc_fn, args, 2, "array.grow")
+        ownership_args: *RefSlot := mem.calloc(3, mem.sizeof(RefSlot))
+        ref_set(ownership_args, 0, header)
+        ref_set(ownership_args, 1, old_data)
+        ref_set(ownership_args, 2, data)
+        ownership_params: *RefSlot := mem.calloc(3, mem.sizeof(RefSlot))
+        ref_set(ownership_params, 0, backend.ptr_type)
+        ref_set(ownership_params, 1, backend.ptr_type)
+        ref_set(ownership_params, 2, backend.ptr_type)
+        replace_type := llvm.function_type(llvm.void_type(backend.ctx), ownership_params, 3, 0)
+        llvm.build_call(backend.builder, replace_type, llvm.named_function(backend.mod, "yc_replace_child"), ownership_args, 3, "")
+        indices: *RefSlot := mem.calloc(1, mem.sizeof(RefSlot))
+        ref_set(indices, 0, length)
+        slot := llvm.build_gep(backend.builder, element_type, data, indices, 1, "array.slot")
+        llvm.build_store(backend.builder, item, slot)
+        llvm.build_store(backend.builder, data, data_address)
+        llvm.build_store(backend.builder, next_length, len_address)
+        llvm.build_store(backend.builder, next_length, cap_address)
+        backend.value = header
+        return
+    }
+    if str.eq(symbol.name, "get") || str.eq(symbol.name, "set") {
+        lower_expr(backend, program, program.arena.children[node.first_arg + 1])
+        index := coerce(backend, backend.value, llvm.type_of(backend.value), llvm.i64_type(backend.ctx))
+        data := llvm.build_load(backend.builder, backend.ptr_type, data_address, "array.data")
+        length := llvm.build_load(backend.builder, llvm.i64_type(backend.ctx), len_address, "array.len")
+        index_i32 := llvm.build_trunc(backend.builder, index, llvm.i32_type(backend.ctx), "index.i32")
+        length_i32 := llvm.build_trunc(backend.builder, length, llvm.i32_type(backend.ctx), "array.len.i32")
+        emit_bounds_check(backend, index_i32, length_i32)
+        indices: *RefSlot := mem.calloc(1, mem.sizeof(RefSlot))
+        ref_set(indices, 0, index)
+        slot := llvm.build_gep(backend.builder, element_type, data, indices, 1, "array.slot")
+        if str.eq(symbol.name, "get") { backend.value = llvm.build_load(backend.builder, element_type, slot, "array.item")
+        } else {
+            lower_expr(backend, program, program.arena.children[node.first_arg + 2])
+            llvm.build_store(backend.builder, coerce(backend, backend.value, llvm.type_of(backend.value), element_type), slot)
+            backend.value = none
+        }
+    }
+}
+
+fn lower_string_intrinsic(backend *Backend, program ProgramAst, node *ExprNode, symbol *Symbol) {
+    if str.eq(symbol.name, "eq") || str.eq(symbol.name, "cmp") {
+        params: *RefSlot := mem.calloc(2, mem.sizeof(RefSlot))
+        ref_set(params, 0, backend.ptr_type)
+        ref_set(params, 1, backend.ptr_type)
+        typ := llvm.function_type(llvm.i32_type(backend.ctx), params, 2, 0)
+        fn_value := libc_function(backend, "strcmp", llvm.i32_type(backend.ctx), params, 2)
+        args: *RefSlot := mem.calloc(2, mem.sizeof(RefSlot))
+        lower_expr(backend, program, program.arena.children[node.first_arg])
+        ref_set(args, 0, backend.value)
+        lower_expr(backend, program, program.arena.children[node.first_arg + 1])
+        ref_set(args, 1, backend.value)
+        compared := llvm.build_call(backend.builder, typ, fn_value, args, 2, "strcmp")
+        if str.eq(symbol.name, "eq") { backend.value = llvm.build_icmp(backend.builder, llvm.int_eq(), compared, llvm.const_int(llvm.i32_type(backend.ctx), 0, 0), "string.eq")
+        } else { backend.value = compared }
+        return
+    }
+    if str.eq(symbol.name, "len") {
+        params: *RefSlot := mem.calloc(1, mem.sizeof(RefSlot))
+        ref_set(params, 0, backend.ptr_type)
+        typ := llvm.function_type(llvm.i64_type(backend.ctx), params, 1, 0)
+        fn_value := libc_function(backend, "strlen", llvm.i64_type(backend.ctx), params, 1)
+        args: *RefSlot := mem.calloc(1, mem.sizeof(RefSlot))
+        lower_expr(backend, program, program.arena.children[node.first_arg])
+        ref_set(args, 0, backend.value)
+        backend.value = llvm.build_call(backend.builder, typ, fn_value, args, 1, "strlen")
+    }
+}
+
+fn emit_defers(backend *Backend, program ProgramAst, mark i32) {
+    i := backend.defer_len - 1
+    for (; i >= mark; i--) {
+        slot: *DeferSlot := backend.defers + i
+        lower_stmt(backend, program, slot.stmt_id)
+    }
+}
+
+fn lower_expr(backend *Backend, program ProgramAst, expr_id i32) {
+    if expr_id == ast.invalid_id() {
+        backend.value = none
+        return
+    }
+    node: *ExprNode := program.arena.exprs + expr_id
+    if node.kind == ast.expr_int() {
+        backend.value = llvm.const_int(llvm.i32_type(backend.ctx), program.arena.expr_int_values[expr_id], 1)
+    } else if node.kind == ast.expr_float() {
+        backend.value = llvm.const_real(llvm.double_type(backend.ctx), cstdlib.atof(node.text))
+    } else if node.kind == ast.expr_bool() {
+        backend.value = llvm.const_int(llvm.i1_type(backend.ctx), program.arena.expr_int_values[expr_id], 0)
+    } else if node.kind == ast.expr_char() {
+        value := 0
+        if str.len(node.text) > 0 { value = node.text[0] }
+        backend.value = llvm.const_int(llvm.i8_type(backend.ctx), value, 0)
+    } else if node.kind == ast.expr_string() {
+        backend.value = llvm.build_global_string(backend.builder, node.text, "str")
+        backend.string_id += 1
+    } else if node.kind == ast.expr_none() {
+        backend.value = llvm.const_pointer_null(backend.ptr_type)
+    } else if node.kind == ast.expr_ident() {
+        local_address := backend_local_address(backend, program.arena.expr_name_ids[expr_id])
+        if local_address != none {
+            local_type := backend_local_type(backend, program.arena.expr_name_ids[expr_id])
+            backend.value = llvm.build_load(backend.builder, local_type, local_address, "load")
+            return
+        }
+        if node.symbol_id != ast.invalid_id() && node.symbol_id < backend.semantic.symbol_len {
+            symbol: *Symbol := backend.semantic.symbols + node.symbol_id
+            if symbol.kind == 100 || symbol.kind == 101 {
+                address := ref_get(backend.symbol_values, node.symbol_id)
+                typ := ref_get(backend.symbol_types, node.symbol_id)
+                if typ == none { typ = type_for(backend, symbol.type_file, symbol.type_id) }
+                backend.value = llvm.build_load(backend.builder, typ, address, "load")
+            } else if symbol.kind == ast.decl_function() {
+                backend.value = ref_get(backend.functions, node.symbol_id)
+            } else if symbol.kind == ast.decl_enum() {
+                backend.value = llvm.const_int(llvm.i32_type(backend.ctx), program.arena.expr_int_values[expr_id], 1)
+            }
+        }
+    } else if node.kind == ast.expr_member() {
+        if node.symbol_id != ast.invalid_id() {
+            member_symbol: *Symbol := backend.semantic.symbols + node.symbol_id
+            if member_symbol.kind == ast.decl_enum() { backend.value = llvm.const_int(llvm.i32_type(backend.ctx), program.arena.expr_int_values[expr_id], 1)
+            } else { backend.value = ref_get(backend.functions, node.symbol_id) }
+        } else {
+            lower_lvalue(backend, program, expr_id)
+            if backend.address != none { backend.value = llvm.build_load(backend.builder, backend.value_type, backend.address, "field")
+            } else {
+                left: *ExprNode := program.arena.exprs + node.left
+                lower_expr(backend, program, node.left)
+                owner := backend.value
+                struct_symbol := aggregate_symbol_for_type(backend, left.type_file, left.type_id)
+                index := program.arena.expr_int_values[expr_id]
+                if index < 0 || index > 10000 { index = field_index_hash(backend, struct_symbol, program.arena.expr_int_values[expr_id]) }
+                if index == ast.invalid_id() { index = field_index_id(backend, struct_symbol, program.arena.expr_name_ids[expr_id]) }
+                if index == ast.invalid_id() { index = field_index(backend, struct_symbol, program.arena.expr_names[expr_id]) }
+                field_value_type := field_type(backend, struct_symbol, index)
+                if llvm.type_of(owner) == backend.ptr_type {
+                    address := llvm.build_struct_gep(backend.builder, struct_type_for_symbol(backend, struct_symbol), owner, index, "field.addr")
+                    backend.value = llvm.build_load(backend.builder, field_value_type, address, "field")
+                } else { backend.value = llvm.build_extract_value(backend.builder, owner, index, "field") }
+            }
+        }
+    } else if node.kind == ast.expr_index() {
+        lower_lvalue(backend, program, expr_id)
+        if backend.address != none { backend.value = llvm.build_load(backend.builder, backend.value_type, backend.address, "load_struct_value_dyn") }
+    } else if node.kind == ast.expr_unary() {
+        if str.eq(node.text, "&") {
+            lower_lvalue(backend, program, node.left)
+            backend.value = backend.address
+            return
+        }
+        lower_expr(backend, program, node.left)
+        if str.eq(node.text, "*") {
+            child: *ExprNode := program.arena.exprs + node.left
+            element_type := deref_type(backend, child.type_file, child.type_id)
+            backend.value = llvm.build_load(backend.builder, element_type, backend.value, "deref")
+            return
+        }
+        if str.eq(node.text, "-") { backend.value = llvm.build_neg(backend.builder, backend.value, "neg") }
+        if str.eq(node.text, "!") { backend.value = llvm.build_not(backend.builder, backend.value, "not") }
+    } else if node.kind == ast.expr_postfix() {
+        lower_lvalue(backend, program, node.left)
+        if backend.address != none {
+            old := llvm.build_load(backend.builder, backend.value_type, backend.address, "old")
+            one := llvm.const_int(backend.value_type, 1, 0)
+            next := binary_value(backend, "+", old, one)
+            if str.eq(node.text, "--") { next = binary_value(backend, "-", old, one) }
+            llvm.build_store(backend.builder, next, backend.address)
+            backend.value = old
+        }
+    } else if node.kind == ast.expr_binary() {
+        lower_expr(backend, program, node.left)
+        left := backend.value
+        if str.eq(node.text, "&&") || str.eq(node.text, "||") {
+            origin := llvm.insert_block(backend.builder)
+            rhs_block := llvm.append_block(backend.ctx, backend.current_function, next_block_name(backend, "logic.rhs"))
+            done := llvm.append_block(backend.ctx, backend.current_function, next_block_name(backend, "logic.end"))
+            if str.eq(node.text, "&&") { llvm.build_cond_br(backend.builder, left, rhs_block, done)
+            } else { llvm.build_cond_br(backend.builder, left, done, rhs_block) }
+            llvm.position_at_end(backend.builder, rhs_block)
+            lower_expr(backend, program, node.right)
+            right := backend.value
+            rhs_end := llvm.insert_block(backend.builder)
+            llvm.build_br(backend.builder, done)
+            llvm.position_at_end(backend.builder, done)
+            phi := llvm.build_phi(backend.builder, llvm.i1_type(backend.ctx), "logic")
+            values: *RefSlot := mem.calloc(2, mem.sizeof(RefSlot))
+            blocks: *RefSlot := mem.calloc(2, mem.sizeof(RefSlot))
+            ref_set(values, 0, left)
+            ref_set(values, 1, right)
+            ref_set(blocks, 0, origin)
+            ref_set(blocks, 1, rhs_end)
+            llvm.add_incoming(phi, values, blocks, 2)
+            backend.value = phi
+        } else {
+            lower_expr(backend, program, node.right)
+            right := backend.value
+            left_node: *ExprNode := program.arena.exprs + node.left
+            if llvm.type_of(left) == backend.ptr_type && (str.eq(node.text, "+") || str.eq(node.text, "-")) {
+                if str.eq(node.text, "-") { right = llvm.build_neg(backend.builder, right, "ptr.offset.neg") }
+                indices: *RefSlot := mem.calloc(1, mem.sizeof(RefSlot))
+                ref_set(indices, 0, right)
+                backend.value = llvm.build_gep(backend.builder, pointee_type(backend, left_node.type_file, left_node.type_id), left, indices, 1, "ptr.offset")
+            } else {
+                left_type := llvm.type_of(left)
+                right_type := llvm.type_of(right)
+                if left_type != right_type && left_type != backend.ptr_type && right_type != backend.ptr_type {
+                    i64_type := llvm.i64_type(backend.ctx)
+                    i32_type := llvm.i32_type(backend.ctx)
+                    double_type := llvm.double_type(backend.ctx)
+                    if left_type == double_type { right = coerce(backend, right, right_type, double_type)
+                    } else if right_type == double_type { left = coerce(backend, left, left_type, double_type)
+                    } else if left_type == i64_type { right = coerce(backend, right, right_type, i64_type)
+                    } else if right_type == i64_type { left = coerce(backend, left, left_type, i64_type)
+                    } else if left_type == i32_type { right = coerce(backend, right, right_type, i32_type)
+                    } else if right_type == i32_type { left = coerce(backend, left, left_type, i32_type) }
+                }
+                backend.value = binary_value(backend, node.text, left, right)
+            }
+        }
+    } else if node.kind == ast.expr_call() {
+        symbol: *Symbol := none
+        if node.symbol_id != ast.invalid_id() { symbol = backend.semantic.symbols + node.symbol_id }
+        if symbol != none && str.eq(symbol.module_name, "std.array") {
+            lower_array_intrinsic(backend, program, node, symbol)
+        } else if symbol != none && str.eq(symbol.module_name, "std.str") && (str.eq(symbol.name, "len") || str.eq(symbol.name, "eq")) {
+            lower_string_intrinsic(backend, program, node, symbol)
+        } else if symbol != none && str.eq(symbol.module_name, "std.mem") && str.eq(symbol.name, "sizeof") && node.arg_count == 1 {
+            type_expr_id := program.arena.children[node.first_arg]
+            type_expr: *ExprNode := program.arena.exprs + type_expr_id
+            size_type: *byte := none
+            syntax_type_id := program.arena.expr_syntax_type_ids[type_expr_id]
+            if syntax_type_id != ast.invalid_id() { size_type = type_for(backend, backend.current_file, syntax_type_id) }
+            if size_type == none {
+                struct_symbol := struct_symbol_for_name(backend, type_expr.name)
+                if struct_symbol != ast.invalid_id() { size_type = struct_type_for_symbol(backend, struct_symbol) }
+            }
+            if size_type == none && type_expr.symbol_id != ast.invalid_id() && type_expr.symbol_id < backend.semantic.symbol_len {
+                type_symbol: *Symbol := backend.semantic.symbols + type_expr.symbol_id
+                if type_symbol.kind == ast.decl_struct() { size_type = struct_type_for_symbol(backend, type_expr.symbol_id) }
+            }
+            if size_type == none { size_type = backend.ptr_type }
+            backend.value = llvm.sizeof_type(size_type)
+        } else if symbol != none && str.eq(symbol.module_name, "std.fmt") {
+            params: *RefSlot := mem.calloc(1, mem.sizeof(RefSlot))
+            ref_set(params, 0, backend.ptr_type)
+            printf_type := llvm.function_type(llvm.i32_type(backend.ctx), params, 1, 1)
+            printf_fn := llvm.named_function(backend.mod, "printf")
+            if printf_fn == none { printf_fn = llvm.add_function(backend.mod, "printf", printf_type) }
+            if str.eq(symbol.name, "printf") {
+                args: *RefSlot := mem.calloc(node.arg_count, mem.sizeof(RefSlot))
+                i := 0
+                for (; i < node.arg_count; i++) {
+                    lower_expr(backend, program, program.arena.children[node.first_arg + i])
+                    ref_set(args, i, backend.value)
+                }
+                backend.value = llvm.build_call(backend.builder, printf_type, printf_fn, args, node.arg_count, "printed")
+                return
+            }
+            i := 0
+            for (; i < node.arg_count; i++) {
+                arg_id := program.arena.children[node.first_arg + i]
+                arg: *ExprNode := program.arena.exprs + arg_id
+                lower_expr(backend, program, arg_id)
+                format := "%d"
+                typ := llvm.type_of(backend.value)
+                if typ == backend.ptr_type { format = "%s" }
+                if typ == llvm.i8_type(backend.ctx) { backend.value = llvm.build_sext(backend.builder, backend.value, llvm.i32_type(backend.ctx), "char.i32") }
+                if typ == llvm.i64_type(backend.ctx) { format = "%lld" }
+                if typ == llvm.double_type(backend.ctx) { format = "%f" }
+                if str.eq(symbol.name, "println") {
+                    format = "%d\n"
+                    if typ == backend.ptr_type { format = "%s\n" }
+                    if typ == llvm.i64_type(backend.ctx) { format = "%lld\n" }
+                    if typ == llvm.double_type(backend.ctx) { format = "%f\n" }
+                }
+                args: *RefSlot := mem.calloc(2, mem.sizeof(RefSlot))
+                ref_set(args, 0, llvm.build_global_string(backend.builder, format, "fmt"))
+                ref_set(args, 1, backend.value)
+                backend.value = llvm.build_call(backend.builder, printf_type, printf_fn, args, 2, "printed")
+            }
+        } else if symbol != none {
+            function_program: ProgramAst := project.program_at(backend.semantic.syntax, symbol.file_id)
+            first_param := decl_first_param(function_program, symbol.node_id)
+            param_count := decl_param_count(function_program, symbol.node_id)
+            implicit_owner := false
+            callee: *ExprNode := program.arena.exprs + node.left
+            if callee.kind == ast.expr_member() {
+                owner: *ExprNode := program.arena.exprs + callee.left
+                implicit_owner = owner.symbol_id != ast.invalid_id()
+            }
+            total_args := node.arg_count
+            if implicit_owner { total_args += 1 }
+            args: *RefSlot := mem.calloc(total_args, mem.sizeof(RefSlot))
+            i := 0
+            if implicit_owner {
+                lower_expr(backend, program, callee.left)
+                argument := backend.value
+                if param_count > 0 {
+                    target := type_for(backend, symbol.file_id, function_program.arena.param_type_ids[first_param])
+                    argument = coerce(backend, argument, llvm.type_of(argument), target)
+                }
+                ref_set(args, 0, argument)
+                i = 1
+            }
+            for (; i < total_args; i++) {
+                source_index := i
+                if implicit_owner { source_index -= 1 }
+                lower_expr(backend, program, program.arena.children[node.first_arg + source_index])
+                argument := backend.value
+                if i < param_count {
+                    target := type_for(backend, symbol.file_id, function_program.arena.param_type_ids[first_param + i])
+                    argument = coerce(backend, argument, llvm.type_of(argument), target)
+                }
+                ref_set(args, i, argument)
+            }
+            call_name := "call"
+            if decl_type_id(function_program, symbol.node_id) == ast.invalid_id() { call_name = "" }
+            backend.value = llvm.build_call(backend.builder, ref_get(backend.function_types, node.symbol_id), ref_get(backend.functions, node.symbol_id), args, total_args, call_name)
+        }
+    } else if node.kind == ast.expr_array() {
+        if node.arg_count == 0 { backend.value = none
+        } else {
+            lower_expr(backend, program, program.arena.children[node.first_arg])
+            element_type := llvm.type_of(backend.value)
+            aggregate_type := llvm.array_type(element_type, node.arg_count)
+            aggregate := llvm.undef(aggregate_type)
+            i := 0
+            for (; i < node.arg_count; i++) {
+                lower_expr(backend, program, program.arena.children[node.first_arg + i])
+                aggregate = llvm.build_insert_value(backend.builder, aggregate, backend.value, i, "array.item")
+            }
+            backend.value = aggregate
+        }
+    } else if node.kind == ast.expr_struct() {
+        struct_symbol := struct_symbol_for_name(backend, program.arena.expr_names[expr_id])
+        if struct_symbol == ast.invalid_id() { struct_symbol = struct_symbol_for_name(backend, node.name) }
+        if struct_symbol == ast.invalid_id() { struct_symbol = node.symbol_id }
+        aggregate_type := struct_type_for_symbol(backend, struct_symbol)
+        aggregate := llvm.undef(aggregate_type)
+        i := 0
+        for (; i < node.arg_count; i++) {
+            init_id := program.arena.children[node.first_arg + i]
+            init: *ExprNode := program.arena.exprs + init_id
+            index := field_index_id(backend, struct_symbol, program.arena.expr_name_ids[init_id])
+            lower_expr(backend, program, init.left)
+            target_type := field_type(backend, struct_symbol, index)
+            value := coerce(backend, backend.value, llvm.type_of(backend.value), target_type)
+            aggregate = llvm.build_insert_value(backend.builder, aggregate, value, index, "field.init")
+        }
+        backend.value = aggregate
+    } else if node.kind == ast.expr_cast() {
+        lower_expr(backend, program, node.left)
+        backend.value = coerce(backend, backend.value, llvm.type_of(backend.value), type_for(backend, backend.current_file, program.arena.expr_syntax_type_ids[expr_id]))
+    }
+}
+
+fn lower_stmt(backend *Backend, program ProgramAst, stmt_id i32) {
+    if stmt_id == ast.invalid_id() || llvm.block_has_terminator(backend.builder) { return }
+    node: *StmtNode := program.arena.stmts + stmt_id
+    if node.kind == ast.stmt_block() {
+        saved_locals := backend.local_len
+        defer_mark := backend.defer_len
+        i := 0
+        for (; i < node.child_count; i++) { lower_stmt(backend, program, program.arena.children[node.first_child + i]) }
+        if !llvm.block_has_terminator(backend.builder) { emit_defers(backend, program, defer_mark) }
+        backend.defer_len = defer_mark
+        backend.local_len = saved_locals
+    } else if node.kind == ast.stmt_local() {
+        init_node: *ExprNode := program.arena.exprs + node.a
+        if init_node.kind == ast.expr_struct() {
+            struct_expr_id := node.a
+            struct_symbol := struct_symbol_for_name(backend, program.arena.expr_names[node.a])
+            if struct_symbol == ast.invalid_id() { struct_symbol = struct_symbol_for_name(backend, init_node.name) }
+            if struct_symbol == ast.invalid_id() { struct_symbol = init_node.symbol_id }
+            typ := struct_type_for_symbol(backend, struct_symbol)
+            address := llvm.build_alloca(backend.builder, typ, "local")
+            local_symbol := local_symbol_for(backend, backend.current_file, 100, stmt_id)
+            ref_set(backend.symbol_values, local_symbol, address)
+            ref_set(backend.symbol_types, local_symbol, typ)
+            add_backend_local(backend, program.arena.stmt_name_ids[stmt_id], address, typ, none, none, struct_symbol, 0)
+            i := 0
+            for (; i < init_node.arg_count; i++) {
+                struct_expr: *ExprNode := program.arena.exprs + struct_expr_id
+                init_id := program.arena.children[struct_expr.first_arg + i]
+                init: *ExprNode := program.arena.exprs + init_id
+                index := field_index_id(backend, struct_symbol, program.arena.expr_name_ids[init_id])
+                target := llvm.build_struct_gep(backend.builder, typ, address, index, "field.init.addr")
+                target_type := field_type(backend, struct_symbol, index)
+                value_id := init.left
+                lower_expr(backend, program, value_id)
+                llvm.build_store(backend.builder, coerce(backend, backend.value, llvm.type_of(backend.value), target_type), target)
+            }
+            return
+        }
+        lower_expr(backend, program, node.a)
+        init := backend.value
+        init_type := llvm.type_of(init)
+        symbol_id := local_symbol_for(backend, backend.current_file, 100, stmt_id)
+        typ := init_type
+        if node.b != ast.invalid_id() { typ = type_for(backend, backend.current_file, node.b) }
+        init = coerce(backend, init, init_type, typ)
+        address := llvm.build_alloca(backend.builder, typ, "local")
+        ref_set(backend.symbol_values, symbol_id, address)
+        ref_set(backend.symbol_types, symbol_id, typ)
+        element_type: *byte := none
+        nested_element_type: *byte := none
+        aggregate_symbol := ast.invalid_id()
+        array_length := 0
+        if init_node.kind == ast.expr_array() && init_node.arg_count > 0 {
+            item: *ExprNode := program.arena.exprs + program.arena.children[init_node.first_arg]
+            element_type = expression_type(backend, item)
+            array_length = init_node.arg_count
+        }
+        if init_node.kind == ast.expr_call() && init_node.symbol_id != ast.invalid_id() {
+            init_symbol: *Symbol := backend.semantic.symbols + init_node.symbol_id
+            if str.eq(init_symbol.module_name, "std.array") {
+                element_type = array_element_type(backend, program, init_node)
+                nested_element_type = array_nested_element_type(backend, program, init_node)
+                aggregate_symbol = array_element_symbol(backend, program, init_node)
+                array_length = -1
+            }
+        }
+        if node.b != ast.invalid_id() {
+            declared_element := slice_element_type(backend, backend.current_file, node.b)
+            if declared_element != none {
+                element_type = declared_element
+                array_length = -1
+            }
+        }
+        inferred_element := slice_element_type(backend, init_node.type_file, init_node.type_id)
+        if inferred_element != none && element_type == none {
+            element_type = inferred_element
+            array_length = -1
+        }
+        if init_node.kind == ast.expr_struct() {
+            aggregate_symbol = struct_symbol_for_name(backend, program.arena.expr_names[node.a])
+            if aggregate_symbol == ast.invalid_id() { aggregate_symbol = struct_symbol_for_name(backend, init_node.name) }
+            if aggregate_symbol == ast.invalid_id() { aggregate_symbol = init_node.symbol_id }
+        }
+        if aggregate_symbol == ast.invalid_id() {
+            aggregate_symbol = aggregate_symbol_for_type(backend, init_node.type_file, init_node.type_id)
+        }
+        if aggregate_symbol == ast.invalid_id() && init_node.kind == ast.expr_index() {
+            indexed: *ExprNode := program.arena.exprs + init_node.left
+            if indexed.kind == ast.expr_ident() { aggregate_symbol = backend_local_aggregate_symbol(backend, program.arena.expr_name_ids[init_node.left]) }
+        }
+        add_backend_local(backend, program.arena.stmt_name_ids[stmt_id], address, typ, element_type, nested_element_type, aggregate_symbol, array_length)
+        llvm.build_store(backend.builder, init, address)
+    } else if node.kind == ast.stmt_assign() {
+        lower_lvalue(backend, program, node.a)
+        address := backend.address
+        target_type := backend.value_type
+        lower_expr(backend, program, node.b)
+        if address != none {
+            value := backend.value
+            target: *ExprNode := program.arena.exprs + node.a
+            if target.kind == ast.expr_ident() && llvm.type_of(value) == backend.ptr_type {
+                target_depth := backend_local_runtime_depth(backend, program.arena.expr_name_ids[node.a])
+                value = move_to_ancestor(backend, value, backend.runtime_depth - target_depth)
+            }
+            value = coerce(backend, value, llvm.type_of(value), target_type)
+            if !str.eq(node.op, "=") {
+                old := llvm.build_load(backend.builder, target_type, address, "compound.old")
+                if str.eq(node.op, "+=") { value = binary_value(backend, "+", old, value) }
+                if str.eq(node.op, "-=") { value = binary_value(backend, "-", old, value) }
+                if str.eq(node.op, "*=") { value = binary_value(backend, "*", old, value) }
+                if str.eq(node.op, "/=") { value = binary_value(backend, "/", old, value) }
+                if str.eq(node.op, "%=") { value = binary_value(backend, "%", old, value) }
+            }
+            llvm.build_store(backend.builder, value, address)
+        }
+    } else if node.kind == ast.stmt_expr() { lower_expr(backend, program, node.a)
+    } else if node.kind == ast.stmt_return() {
+        emit_defers(backend, program, 0)
+        return_value: *byte := none
+        if node.a != ast.invalid_id() {
+            lower_expr(backend, program, node.a)
+            return_value = coerce(backend, backend.value, llvm.type_of(backend.value), backend.current_return)
+            return_value = escape_return_value(backend, return_value)
+        }
+        emit_function_cleanup(backend)
+        if node.a == ast.invalid_id() {
+            if backend.current_main { llvm.build_ret(backend.builder, llvm.const_int(llvm.i32_type(backend.ctx), 0, 0))
+            } else { llvm.build_ret_void(backend.builder) }
+        } else {
+            llvm.build_ret(backend.builder, return_value)
+        }
+    } else if node.kind == ast.stmt_if() {
+        lower_expr(backend, program, node.a)
+        yes := llvm.append_block(backend.ctx, backend.current_function, next_block_name(backend, "if.then"))
+        no := llvm.append_block(backend.ctx, backend.current_function, next_block_name(backend, "if.else"))
+        done := llvm.append_block(backend.ctx, backend.current_function, next_block_name(backend, "if.end"))
+        llvm.build_cond_br(backend.builder, backend.value, yes, no)
+        llvm.position_at_end(backend.builder, yes)
+        lower_stmt(backend, program, node.b)
+        if !llvm.block_has_terminator(backend.builder) { llvm.build_br(backend.builder, done) }
+        llvm.position_at_end(backend.builder, no)
+        lower_stmt(backend, program, node.c)
+        if !llvm.block_has_terminator(backend.builder) { llvm.build_br(backend.builder, done) }
+        llvm.position_at_end(backend.builder, done)
+    } else if node.kind == ast.stmt_for() {
+        saved_locals := backend.local_len
+        lower_stmt(backend, program, node.a)
+        cond_block := llvm.append_block(backend.ctx, backend.current_function, next_block_name(backend, "for.cond"))
+        body_block := llvm.append_block(backend.ctx, backend.current_function, next_block_name(backend, "for.body"))
+        post_block := llvm.append_block(backend.ctx, backend.current_function, next_block_name(backend, "for.post"))
+        done_block := llvm.append_block(backend.ctx, backend.current_function, next_block_name(backend, "for.end"))
+        llvm.build_br(backend.builder, cond_block)
+        llvm.position_at_end(backend.builder, cond_block)
+        if node.b == ast.invalid_id() { backend.value = llvm.const_int(llvm.i1_type(backend.ctx), 1, 0)
+        } else { lower_expr(backend, program, node.b) }
+        llvm.build_cond_br(backend.builder, backend.value, body_block, done_block)
+        old_break := backend.break_block
+        old_continue := backend.continue_block
+        old_defer_mark := backend.loop_defer_mark
+        old_break_depth := backend.break_runtime_depth
+        old_continue_depth := backend.continue_runtime_depth
+        backend.break_block = done_block
+        backend.continue_block = post_block
+        backend.loop_defer_mark = backend.defer_len
+        backend.break_runtime_depth = backend.runtime_depth
+        backend.continue_runtime_depth = backend.runtime_depth
+        llvm.position_at_end(backend.builder, body_block)
+        lower_stmt(backend, program, node.c)
+        if !llvm.block_has_terminator(backend.builder) { llvm.build_br(backend.builder, post_block) }
+        llvm.position_at_end(backend.builder, post_block)
+        lower_stmt(backend, program, node.first_child)
+        if !llvm.block_has_terminator(backend.builder) { llvm.build_br(backend.builder, cond_block) }
+        backend.break_block = old_break
+        backend.continue_block = old_continue
+        backend.loop_defer_mark = old_defer_mark
+        backend.break_runtime_depth = old_break_depth
+        backend.continue_runtime_depth = old_continue_depth
+        backend.local_len = saved_locals
+        llvm.position_at_end(backend.builder, done_block)
+    } else if node.kind == ast.stmt_for_in() {
+        saved_locals := backend.local_len
+        iterable: *ExprNode := program.arena.exprs + node.a
+        array_count := 0
+        string_count := 0
+        element_type := llvm.i32_type(backend.ctx)
+        nested_element_type: *byte := none
+        element_aggregate := ast.invalid_id()
+        if iterable.kind == ast.expr_ident() {
+            array_count = backend_local_array_length(backend, program.arena.expr_name_ids[node.a])
+            local_element := backend_local_element_type(backend, program.arena.expr_name_ids[node.a])
+            if local_element != none {
+                element_type = local_element
+                if array_count == 0 { array_count = -1 }
+            }
+            element_aggregate = backend_local_aggregate_symbol(backend, program.arena.expr_name_ids[node.a])
+            nested_element_type = backend_local_nested_element_type(backend, program.arena.expr_name_ids[node.a])
+        }
+        if iterable.kind == ast.expr_string() {
+            string_count = str.len(iterable.text)
+            element_type = llvm.i8_type(backend.ctx)
+        }
+        lower_expr(backend, program, node.a)
+        iterable_value := backend.value
+        limit := iterable_value
+        if array_count > 0 { limit = llvm.const_int(llvm.i32_type(backend.ctx), array_count, 0) }
+        if string_count > 0 { limit = llvm.const_int(llvm.i32_type(backend.ctx), string_count, 0) }
+        if array_count < 0 {
+            len_address := header_field_address(backend, backend.value, 1, "array.len.addr")
+            raw_limit := llvm.build_load(backend.builder, llvm.i64_type(backend.ctx), len_address, "array.len")
+            limit = llvm.build_trunc(backend.builder, raw_limit, llvm.i32_type(backend.ctx), "array.len.i32")
+        }
+        counter := llvm.build_alloca(backend.builder, llvm.i32_type(backend.ctx), "for.index")
+        llvm.build_store(backend.builder, llvm.const_int(llvm.i32_type(backend.ctx), 0, 0), counter)
+        item_address := llvm.build_alloca(backend.builder, element_type, "item")
+        item_array_length := 0
+        if nested_element_type != none { item_array_length = -1 }
+        add_backend_local(backend, program.arena.stmt_name_ids[stmt_id], item_address, element_type, nested_element_type, none, element_aggregate, item_array_length)
+        cond_block := llvm.append_block(backend.ctx, backend.current_function, next_block_name(backend, "forin.cond"))
+        body_block := llvm.append_block(backend.ctx, backend.current_function, next_block_name(backend, "forin.body"))
+        post_block := llvm.append_block(backend.ctx, backend.current_function, next_block_name(backend, "forin.post"))
+        done_block := llvm.append_block(backend.ctx, backend.current_function, next_block_name(backend, "forin.end"))
+        llvm.build_br(backend.builder, cond_block)
+        llvm.position_at_end(backend.builder, cond_block)
+        index := llvm.build_load(backend.builder, llvm.i32_type(backend.ctx), counter, "for.index.load")
+        condition := llvm.build_icmp(backend.builder, llvm.int_slt(), index, limit, "for.more")
+        llvm.build_cond_br(backend.builder, condition, body_block, done_block)
+        llvm.position_at_end(backend.builder, body_block)
+        if string_count > 0 {
+            indices: *RefSlot := mem.calloc(1, mem.sizeof(RefSlot))
+            ref_set(indices, 0, index)
+            source := llvm.build_gep(backend.builder, llvm.i8_type(backend.ctx), iterable_value, indices, 1, "for.char.addr")
+            llvm.build_store(backend.builder, llvm.build_load(backend.builder, llvm.i8_type(backend.ctx), source, "for.char"), item_address)
+        } else if array_count > 0 {
+            array_address := backend_local_address(backend, program.arena.expr_name_ids[node.a])
+            array_type := backend_local_type(backend, program.arena.expr_name_ids[node.a])
+            indices: *RefSlot := mem.calloc(2, mem.sizeof(RefSlot))
+            ref_set(indices, 0, llvm.const_int(llvm.i32_type(backend.ctx), 0, 0))
+            ref_set(indices, 1, index)
+            source := llvm.build_gep(backend.builder, array_type, array_address, indices, 2, "for.item.addr")
+            llvm.build_store(backend.builder, llvm.build_load(backend.builder, element_type, source, "for.item"), item_address)
+        } else if array_count < 0 {
+            header_address := backend_local_address(backend, program.arena.expr_name_ids[node.a])
+            header := llvm.build_load(backend.builder, backend.ptr_type, header_address, "array.header")
+            data_address := header_field_address(backend, header, 0, "array.data.addr")
+            data := llvm.build_load(backend.builder, backend.ptr_type, data_address, "array.data")
+            indices: *RefSlot := mem.calloc(1, mem.sizeof(RefSlot))
+            ref_set(indices, 0, index)
+            source := llvm.build_gep(backend.builder, element_type, data, indices, 1, "for.item.addr")
+            llvm.build_store(backend.builder, llvm.build_load(backend.builder, element_type, source, "for.item"), item_address)
+        } else { llvm.build_store(backend.builder, index, item_address) }
+        old_break := backend.break_block
+        old_continue := backend.continue_block
+        old_defer_mark := backend.loop_defer_mark
+        old_break_depth := backend.break_runtime_depth
+        old_continue_depth := backend.continue_runtime_depth
+        backend.break_block = done_block
+        backend.continue_block = post_block
+        backend.loop_defer_mark = backend.defer_len
+        backend.break_runtime_depth = backend.runtime_depth
+        backend.continue_runtime_depth = backend.runtime_depth
+        lower_stmt(backend, program, node.b)
+        if !llvm.block_has_terminator(backend.builder) { llvm.build_br(backend.builder, post_block) }
+        llvm.position_at_end(backend.builder, post_block)
+        next := llvm.build_add(backend.builder, llvm.build_load(backend.builder, llvm.i32_type(backend.ctx), counter, "for.next.old"), llvm.const_int(llvm.i32_type(backend.ctx), 1, 0), "for.next")
+        llvm.build_store(backend.builder, next, counter)
+        llvm.build_br(backend.builder, cond_block)
+        backend.break_block = old_break
+        backend.continue_block = old_continue
+        backend.loop_defer_mark = old_defer_mark
+        backend.break_runtime_depth = old_break_depth
+        backend.continue_runtime_depth = old_continue_depth
+        backend.local_len = saved_locals
+        llvm.position_at_end(backend.builder, done_block)
+    } else if node.kind == ast.stmt_switch() && node.child_count > 0 {
+        lower_expr(backend, program, node.a)
+        switch_value := backend.value
+        done_block := llvm.append_block(backend.ctx, backend.current_function, next_block_name(backend, "switch.end"))
+        blocks: *RefSlot := mem.calloc(node.child_count, mem.sizeof(RefSlot))
+        default_block := done_block
+        i := 0
+        for (; i < node.child_count; i++) {
+            case_node: *StmtNode := program.arena.stmts + program.arena.children[node.first_child + i]
+            block := llvm.append_block(backend.ctx, backend.current_function, next_block_name(backend, "switch.case"))
+            ref_set(blocks, i, block)
+            if str.eq(case_node.name, "default") { default_block = block }
+        }
+        switch_inst := llvm.build_switch(backend.builder, switch_value, default_block, node.child_count)
+        i = 0
+        for (; i < node.child_count; i++) {
+            case_node: *StmtNode := program.arena.stmts + program.arena.children[node.first_child + i]
+            if case_node.a != ast.invalid_id() {
+                lower_expr(backend, program, case_node.a)
+                llvm.add_case(switch_inst, backend.value, ref_get(blocks, i))
+            }
+        }
+        old_break := backend.break_block
+        old_break_depth := backend.break_runtime_depth
+        backend.break_block = done_block
+        backend.break_runtime_depth = backend.runtime_depth
+        i = 0
+        for (; i < node.child_count; i++) {
+            case_node: *StmtNode := program.arena.stmts + program.arena.children[node.first_child + i]
+            llvm.position_at_end(backend.builder, ref_get(blocks, i))
+            lower_stmt(backend, program, case_node.b)
+            if !llvm.block_has_terminator(backend.builder) { llvm.build_br(backend.builder, done_block) }
+        }
+        backend.break_block = old_break
+        backend.break_runtime_depth = old_break_depth
+        llvm.position_at_end(backend.builder, done_block)
+    } else if node.kind == ast.stmt_break() {
+        emit_defers(backend, program, backend.loop_defer_mark)
+        emit_scope_unwind(backend, backend.break_runtime_depth)
+        if backend.break_block != none { llvm.build_br(backend.builder, backend.break_block) }
+    } else if node.kind == ast.stmt_continue() {
+        emit_defers(backend, program, backend.loop_defer_mark)
+        emit_scope_unwind(backend, backend.continue_runtime_depth)
+        if backend.continue_block != none { llvm.build_br(backend.builder, backend.continue_block) }
+    } else if node.kind == ast.stmt_defer() {
+        if backend.defer_len < backend.defer_cap {
+            slot: *DeferSlot := backend.defers + backend.defer_len
+            slot.stmt_id = node.a
+            backend.defer_len += 1
+        }
+    } else if node.kind == ast.stmt_scope() {
+        call_void_runtime(backend, "yc_frame_push")
+        backend.runtime_depth += 1
+        lower_stmt(backend, program, node.a)
+        if !llvm.block_has_terminator(backend.builder) { call_void_runtime(backend, "yc_frame_pop") }
+        backend.runtime_depth -= 1
+    }
+}
+
+fn should_emit(symbol *Symbol) bool {
+    return !str.eq(symbol.module_name, "std") && !str.eq(symbol.module_name, "c") && !(str.len(symbol.module_name) > 4 && symbol.module_name[0] == 's' && symbol.module_name[1] == 't' && symbol.module_name[2] == 'd' && symbol.module_name[3] == '.') && !(str.len(symbol.module_name) > 2 && symbol.module_name[0] == 'c' && symbol.module_name[1] == '.')
+}
+
+fn emit_functions(backend *Backend) {
+    i := 0
+    for (; i < backend.semantic.symbol_len; i++) {
+        symbol: *Symbol := backend.semantic.symbols + i
+        if symbol.kind == ast.decl_function() && backend.reachable[i] != 0 {
+            program: ProgramAst := project.program_at(backend.semantic.syntax, symbol.file_id)
+            body := decl_body(program, symbol.node_id)
+            if body != ast.invalid_id() {
+                backend.current_file = symbol.file_id
+                backend.current_function = ref_get(backend.functions, i)
+                result_type_id := decl_type_id(program, symbol.node_id)
+                backend.current_return = type_for(backend, symbol.file_id, result_type_id)
+                backend.current_main = str.eq(symbol.name, "main")
+                backend.local_len = 0
+                backend.defer_len = 0
+                backend.runtime_depth = 0
+                if backend.current_main { backend.current_return = llvm.i32_type(backend.ctx) }
+                entry := llvm.append_block(backend.ctx, backend.current_function, "entry")
+                llvm.position_at_end(backend.builder, entry)
+                if backend.current_main { call_void_runtime(backend, "yc_runtime_init") }
+                call_void_runtime(backend, "yc_frame_push")
+                param_id := 0
+                first_param := decl_first_param(program, symbol.node_id)
+                param_count := decl_param_count(program, symbol.node_id)
+                for (; param_id < param_count; param_id++) {
+                    local_symbol := local_symbol_for(backend, symbol.file_id, 101, first_param + param_id)
+                    param_type_id := program.arena.param_type_ids[first_param + param_id]
+                    typ := type_for(backend, symbol.file_id, param_type_id)
+                    address := llvm.build_alloca(backend.builder, typ, "param")
+                    llvm.build_store(backend.builder, llvm.get_param(backend.current_function, param_id), address)
+                    if local_symbol != ast.invalid_id() {
+                        ref_set(backend.symbol_values, local_symbol, address)
+                        ref_set(backend.symbol_types, local_symbol, typ)
+                    }
+                    param_aggregate := aggregate_symbol_for_type(backend, symbol.file_id, param_type_id)
+                    param_element := slice_element_type(backend, symbol.file_id, param_type_id)
+                    param_array_length := 0
+                    if param_element != none { param_array_length = -1 }
+                    add_backend_local(backend, program.arena.param_name_ids[first_param + param_id], address, typ, param_element, none, param_aggregate, param_array_length)
+                }
+                lower_stmt(backend, program, body)
+                if !llvm.block_has_terminator(backend.builder) {
+                    emit_function_cleanup(backend)
+                    if backend.current_main { llvm.build_ret(backend.builder, llvm.const_int(llvm.i32_type(backend.ctx), 0, 0))
+                    } else if result_type_id == ast.invalid_id() { llvm.build_ret_void(backend.builder)
+                    } else { llvm.build_ret(backend.builder, llvm.const_null(backend.current_return)) }
+                }
+            }
+        }
+    }
+}
+
+pub fn emit(input string, stl_root string, out_file string) BackendResult {
+    checked := semantic.load(input, stl_root)
+    if !checked.ok { return BackendResult{ok: false, file: checked.file, line: checked.line, col: checked.col, message: checked.message, out_file: ""} }
+    ctx := llvm.context_create()
+    mod := llvm.module_create("yc", ctx)
+    builder := llvm.builder_create(ctx)
+    count := checked.symbol_len
+    functions: *RefSlot := mem.calloc(count, mem.sizeof(RefSlot))
+    function_types: *RefSlot := mem.calloc(count, mem.sizeof(RefSlot))
+    symbol_types: *RefSlot := mem.calloc(count, mem.sizeof(RefSlot))
+    symbol_values: *RefSlot := mem.calloc(count, mem.sizeof(RefSlot))
+    reachable: *byte := mem.calloc(count, 1)
+    locals: *LocalSlot := mem.calloc(count, mem.sizeof(LocalSlot))
+    field_capacity := checked.syntax.fields + 1
+    fields: *FieldSlot := mem.calloc(field_capacity, mem.sizeof(FieldSlot))
+    defer_capacity := checked.syntax.stmts + 1
+    defers: *DeferSlot := mem.calloc(defer_capacity, mem.sizeof(DeferSlot))
+    pointer := llvm.pointer_type(llvm.i8_type(ctx), 0)
+    slice_fields: *RefSlot := mem.calloc(4, mem.sizeof(RefSlot))
+    ref_set(slice_fields, 0, pointer)
+    ref_set(slice_fields, 1, llvm.i64_type(ctx))
+    ref_set(slice_fields, 2, llvm.i64_type(ctx))
+    ref_set(slice_fields, 3, llvm.i64_type(ctx))
+    array_header := llvm.named_struct(ctx, "YCPLArrayHeader")
+    llvm.set_struct_body(array_header, slice_fields, 4, 0)
+    state := Backend{ok: true, message: "", semantic: checked, ctx: ctx, mod: mod, builder: builder, ptr_type: pointer, slice_type: pointer, array_header_type: array_header, functions: functions, function_types: function_types, symbol_types: symbol_types, symbol_values: symbol_values, reachable: reachable, locals: locals, local_len: 0, local_cap: count, fields: fields, field_len: 0, field_cap: field_capacity, defers: defers, defer_len: 0, defer_cap: defer_capacity, loop_defer_mark: 0, break_runtime_depth: 0, continue_runtime_depth: 0, current_file: 0, current_function: none, current_return: none, current_main: false, runtime_depth: 0, value: none, address: none, value_type: none, break_block: none, continue_block: none, block_id: 0, string_id: 0}
+    state_ptr: *Backend = &state
+    declare_support_runtime(state_ptr)
+    mark_reachable(state_ptr)
+    declare_structs(state_ptr)
+    declare_functions(state_ptr)
+    emit_functions(state_ptr)
+    if !llvm.verify_module(mod) {
+        llvm.write_module(mod, out_file)
+        return fail("LLVM module verification failed")
+    }
+    if !llvm.write_module(mod, out_file) { return fail("failed to write LLVM IR") }
+    llvm.builder_dispose(builder)
+    llvm.module_dispose(mod)
+    llvm.context_dispose(ctx)
+    return BackendResult{ok: true, file: "", line: 1, col: 1, message: "", out_file: out_file}
+}

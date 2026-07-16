@@ -34,6 +34,7 @@ pub fn kw_as() i32 { return 29 }
 pub fn kw_switch() i32 { return 34 }
 pub fn kw_type() i32 { return 35 }
 pub fn kw_byte() i32 { return 36 }
+pub fn kw_cast() i32 { return 37 }
 
 pub fn lparen() i32 { return 40 }
 pub fn rparen() i32 { return 41 }
@@ -114,6 +115,7 @@ pub fn name(kind i32) string {
     if kind == kw_switch() { return "switch" }
     if kind == kw_type() { return "type" }
     if kind == kw_byte() { return "byte" }
+    if kind == kw_cast() { return "cast" }
     if kind == lparen() { return "(" }
     if kind == rparen() { return ")" }
     if kind == lbrace() { return "{" }

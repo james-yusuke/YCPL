@@ -3,12 +3,11 @@ module compiler.ycpl.parser.real
 import "ast/nodes" as ast
 import "lexer/lexer" as lexer
 import "lexer/token" as tok
+import "c/stdlib" as cstdlib
 import "std/array" as array
 import "std/mem" as mem
 import "std/str" as str
 import "std/text" as text
-
-extern fn c_atoi(text string) i32 as "atoi"
 
 struct AstToken {
     kind i32
@@ -24,6 +23,13 @@ struct TokenArena {
     lengths []i32
     lines []i32
     cols []i32
+}
+
+fn retain_token_text(value string) string {
+    n := str.len(value)
+    copy: string := mem.calloc(n + 1, 1)
+    if copy != none && n > 0 { mem.copy(copy, value, n) }
+    return mem.keep(copy)
 }
 
 struct TokenResult {
@@ -53,7 +59,10 @@ fn token_result_fail(message string, line i32, col i32, tokens TokenArena) Token
 }
 
 fn lex_all(path string, source string) TokenResult {
-    tokens := TokenArena{source: source, kinds: array.new([]i32, 256), starts: array.new([]i32, 256), lengths: array.new([]i32, 256), lines: array.new([]i32, 256), cols: array.new([]i32, 256)}
+    // Parsing happens after lex_all returns. Retain the source buffer itself,
+    // not only slices made from it, so token offsets remain valid across the
+    // lexer frame in stage1 and later self-hosted binaries.
+    tokens := TokenArena{source: retain_token_text(source), kinds: array.new([]i32, 256), starts: array.new([]i32, 256), lengths: array.new([]i32, 256), lines: array.new([]i32, 256), cols: array.new([]i32, 256)}
     lx := lexer.new(path, source)
     for (; true; ) {
         lx = lexer.next(lx)
@@ -61,7 +70,7 @@ fn lex_all(path string, source string) TokenResult {
             return token_result_fail(lx.message, lx.tok_line, lx.tok_col, tokens)
         }
         tokens.kinds = array.append(tokens.kinds, lx.kind)
-        token_len := str.len(lx.lexeme)
+        token_len: i32 := cast(i32, str.len(lx.lexeme))
         tokens.starts = array.append(tokens.starts, lx.pos - token_len)
         tokens.lengths = array.append(tokens.lengths, token_len)
         tokens.lines = array.append(tokens.lines, lx.tok_line)
@@ -77,7 +86,8 @@ fn current(p *Parser) AstToken {
     if p.pos < 0 || p.pos >= array.len(p.tokens.kinds) {
         return AstToken{kind: tok.eof(), text: "", line: p.line, col: p.col}
     }
-    return AstToken{kind: p.tokens.kinds[p.pos], text: text.slice(p.tokens.source, p.tokens.starts[p.pos], p.tokens.lengths[p.pos]), line: p.tokens.lines[p.pos], col: p.tokens.cols[p.pos]}
+    token_text: string := token_text_at(p, p.pos)
+    return AstToken{kind: p.tokens.kinds[p.pos], text: token_text, line: p.tokens.lines[p.pos], col: p.tokens.cols[p.pos]}
 }
 
 fn look(p *Parser, offset i32) AstToken {
@@ -85,7 +95,23 @@ fn look(p *Parser, offset i32) AstToken {
     if at < 0 || at >= array.len(p.tokens.kinds) {
         return AstToken{kind: tok.eof(), text: "", line: p.line, col: p.col}
     }
-    return AstToken{kind: p.tokens.kinds[at], text: text.slice(p.tokens.source, p.tokens.starts[at], p.tokens.lengths[at]), line: p.tokens.lines[at], col: p.tokens.cols[at]}
+    token_text: string := token_text_at(p, at)
+    return AstToken{kind: p.tokens.kinds[at], text: token_text, line: p.tokens.lines[at], col: p.tokens.cols[at]}
+}
+
+// AstToken is a convenient look-ahead value, but declaration and expression
+// nodes outlive that temporary aggregate.  Persist token spelling directly
+// from the source arena so a self-hosted build never depends on the ABI used
+// to return an AstToken containing a string slice.
+fn token_text_at(p *Parser, index i32) string {
+    if index < 0 || index >= array.len(p.tokens.kinds) {
+        return ""
+    }
+    return mem.keep(text.slice(p.tokens.source, p.tokens.starts[index], p.tokens.lengths[index]))
+}
+
+fn current_text(p *Parser) string {
+    return token_text_at(p, p.pos)
 }
 
 // At a `{` after an identifier, distinguish `Type{field: value}` from the
@@ -157,16 +183,34 @@ fn at_span(token AstToken) Span {
     return Span{file: 0, line: token.line, col: token.col, end_line: token.line, end_col: token.col + str.len(token.text)}
 }
 
-fn literal_contents(token AstToken) string {
-    n := str.len(token.text)
+fn literal_contents_text(value string) string {
+    n := str.len(value)
     if n >= 2 {
-        first := token.text[0]
-        last := token.text[n - 1]
+        first := value[0]
+        last := value[n - 1]
         if (first == '"' && last == '"') || (first == 39 && last == 39) || (first == '`' && last == '`') {
-            return text.slice(token.text, 1, n - 2)
+            if first == '`' { return mem.keep(text.slice(value, 1, n - 2)) }
+            out: string := mem.calloc(n, 1)
+            at := 0
+            i := 1
+            for (; i < n - 1; i++) {
+                ch := value[i]
+                if ch == '\\' && i + 1 < n - 1 {
+                    i += 1
+                    escaped := value[i]
+                    if escaped == 'n' { ch = 10
+                    } else if escaped == 'r' { ch = 13
+                    } else if escaped == 't' { ch = 9
+                    } else if escaped == '0' { ch = 0
+                    } else { ch = escaped }
+                }
+                out[at] = ch
+                at += 1
+            }
+            return out
         }
     }
-    return token.text
+    return value
 }
 
 fn add_type(p *Parser, node TypeNode) *Parser {
@@ -199,6 +243,7 @@ fn builtin_type_kind(name string) i32 {
     if str.eq(name, "i64") { return ast.type_i64() }
     if str.eq(name, "bool") { return ast.type_bool() }
     if str.eq(name, "byte") { return ast.type_byte() }
+    if str.eq(name, "i8") { return ast.type_byte() }
     if str.eq(name, "char") { return ast.type_char() }
     if str.eq(name, "float") { return ast.type_float() }
     if str.eq(name, "double") { return ast.type_double() }
@@ -227,15 +272,14 @@ fn parse_type(p *Parser) *Parser {
         p = advance(advance(p))
     }
 
+    at_pos := p.pos
     at := current(p)
-    if at.kind != tok.ident() && at.kind != tok.kw_byte() {
-        return fail(p, "expected type name")
-    }
+    type_name := token_text_at(p, at_pos)
     p = advance(p)
     flags := 0
     if owner_marker { flags = ast.flag_owned() }
 
-    if str.eq(at.text, "Map") && current(p).kind == tok.lt() {
+    if current(p).kind == tok.lt() {
         p = advance(p)
         p = parse_type(p)
         key := p.type_result
@@ -245,7 +289,7 @@ fn parse_type(p *Parser) *Parser {
         p = expect(p, tok.gt(), "expected '>' after Map type")
         p = add_type(p, ast.make_type(ast.type_map(), at_span(at), "Map", ast.invalid_id(), key, value, flags))
     } else {
-        p = add_type(p, ast.make_type(builtin_type_kind(at.text), at_span(at), at.text, ast.invalid_id(), ast.invalid_id(), ast.invalid_id(), flags))
+        p = add_type(p, ast.make_type(builtin_type_kind(type_name), at_span(at), type_name, ast.invalid_id(), ast.invalid_id(), ast.invalid_id(), flags))
     }
     base := p.type_result
     for (; slices > 0; slices--) {
@@ -275,31 +319,41 @@ fn precedence(kind i32) i32 {
 }
 
 fn parse_primary(p *Parser) *Parser {
+    at_pos := p.pos
     at := current(p)
+    at_text := token_text_at(p, at_pos)
     kind := at.kind
-    if kind == tok.ident() {
+    primary_is_cast := kind == tok.kw_cast()
+    if kind == tok.ident() || kind == tok.kw_cast() {
         p = advance(p)
-        p = add_expr(p, ast.make_expr(ast.expr_ident(), at_span(at), ast.invalid_id(), ast.invalid_id(), ast.invalid_id(), 0, 0, at.text, "", 0, 0.0, 0))
+        type_kind := builtin_type_kind(at_text)
+        type_argument_context := look(p, -2).kind == tok.lparen() && (str.eq(token_text_at(p, p.pos - 3), "sizeof") || str.eq(token_text_at(p, p.pos - 3), "new"))
+        if kind == tok.ident() && type_kind != ast.type_named() && type_argument_context {
+            p = add_type(p, ast.make_type(type_kind, at_span(at), at_text, ast.invalid_id(), ast.invalid_id(), ast.invalid_id(), 0))
+            p = add_expr(p, ast.make_expr(ast.expr_type(), at_span(at), p.type_result, ast.invalid_id(), ast.invalid_id(), 0, 0, at_text, "", 0, 0.0, ast.name_hash32(at_text)))
+        } else {
+            p = add_expr(p, ast.make_expr(ast.expr_ident(), at_span(at), ast.invalid_id(), ast.invalid_id(), ast.invalid_id(), 0, 0, at_text, "", 0, 0.0, ast.name_hash32(at_text)))
+        }
     } else if kind == tok.int_lit() {
         p = advance(p)
-        p = add_expr(p, ast.make_expr(ast.expr_int(), at_span(at), ast.invalid_id(), ast.invalid_id(), ast.invalid_id(), 0, 0, "", at.text, 0, 0.0, 0))
+        p = add_expr(p, ast.make_expr(ast.expr_int(), at_span(at), ast.invalid_id(), ast.invalid_id(), ast.invalid_id(), 0, 0, "", at_text, cstdlib.atoi(at_text), 0.0, 0))
     } else if kind == tok.float_lit() {
         p = advance(p)
-        p = add_expr(p, ast.make_expr(ast.expr_float(), at_span(at), ast.invalid_id(), ast.invalid_id(), ast.invalid_id(), 0, 0, "", at.text, 0, 0.0, 0))
+        p = add_expr(p, ast.make_expr(ast.expr_float(), at_span(at), ast.invalid_id(), ast.invalid_id(), ast.invalid_id(), 0, 0, "", at_text, 0, 0.0, 0))
     } else if kind == tok.char_lit() {
         p = advance(p)
-        p = add_expr(p, ast.make_expr(ast.expr_char(), at_span(at), ast.invalid_id(), ast.invalid_id(), ast.invalid_id(), 0, 0, "", literal_contents(at), 0, 0.0, 0))
+        p = add_expr(p, ast.make_expr(ast.expr_char(), at_span(at), ast.invalid_id(), ast.invalid_id(), ast.invalid_id(), 0, 0, "", literal_contents_text(at_text), 0, 0.0, 0))
     } else if kind == tok.string_lit() {
         p = advance(p)
-        p = add_expr(p, ast.make_expr(ast.expr_string(), at_span(at), ast.invalid_id(), ast.invalid_id(), ast.invalid_id(), 0, 0, "", literal_contents(at), 0, 0.0, 0))
+        p = add_expr(p, ast.make_expr(ast.expr_string(), at_span(at), ast.invalid_id(), ast.invalid_id(), ast.invalid_id(), 0, 0, "", literal_contents_text(at_text), 0, 0.0, 0))
     } else if kind == tok.bool_lit() {
         p = advance(p)
         value := 0
-        if str.eq(at.text, "true") { value = 1 }
-        p = add_expr(p, ast.make_expr(ast.expr_bool(), at_span(at), ast.invalid_id(), ast.invalid_id(), ast.invalid_id(), 0, 0, "", at.text, value, 0.0, 0))
+        if str.eq(at_text, "true") { value = 1 }
+        p = add_expr(p, ast.make_expr(ast.expr_bool(), at_span(at), ast.invalid_id(), ast.invalid_id(), ast.invalid_id(), 0, 0, "", at_text, value, 0.0, 0))
     } else if kind == tok.none_lit() {
         p = advance(p)
-        p = add_expr(p, ast.make_expr(ast.expr_none(), at_span(at), ast.invalid_id(), ast.invalid_id(), ast.invalid_id(), 0, 0, "", at.text, 0, 0.0, 0))
+        p = add_expr(p, ast.make_expr(ast.expr_none(), at_span(at), ast.invalid_id(), ast.invalid_id(), ast.invalid_id(), 0, 0, "", at_text, 0, 0.0, 0))
     } else if kind == tok.lparen() {
         p = advance(p)
         p = parse_expression(p, 1)
@@ -328,7 +382,7 @@ fn parse_primary(p *Parser) *Parser {
     for (; p.ok; ) {
         left := p.expr_result
         suffix := current(p)
-        if suffix.kind == tok.lparen() && kind == tok.ident() && left == primary_id && str.eq(at.text, "cast") {
+        if suffix.kind == tok.lparen() && primary_is_cast {
             p = advance(p)
             p = skip_lines(p)
             p = parse_type(p)
@@ -364,9 +418,11 @@ fn parse_primary(p *Parser) *Parser {
             p = add_expr(p, ast.make_expr(ast.expr_call(), at_span(suffix), ast.invalid_id(), left, ast.invalid_id(), first, array.len(args), "", "", 0, 0.0, 0))
         } else if suffix.kind == tok.dot() {
             p = advance(p)
+            name_pos := p.pos
             name := current(p)
+            name_text := token_text_at(p, name_pos)
             p = expect(p, tok.ident(), "expected member name")
-            p = add_expr(p, ast.make_expr(ast.expr_member(), at_span(suffix), ast.invalid_id(), left, ast.invalid_id(), 0, 0, name.text, "", 0, 0.0, 0))
+            p = add_expr(p, ast.make_expr(ast.expr_member(), at_span(suffix), ast.invalid_id(), left, ast.invalid_id(), 0, 0, name_text, "", ast.name_hash(name_text), 0.0, ast.name_hash32(name_text)))
         } else if suffix.kind == tok.lbrack() {
             p = advance(p)
             p = parse_expression(p, 1)
@@ -374,19 +430,22 @@ fn parse_primary(p *Parser) *Parser {
             p = expect(p, tok.rbrack(), "expected ']' after index")
             p = add_expr(p, ast.make_expr(ast.expr_index(), at_span(suffix), ast.invalid_id(), left, index, 0, 0, "", "", 0, 0.0, 0))
         } else if suffix.kind == tok.plusplus() || suffix.kind == tok.minusminus() {
+            suffix_text := current_text(p)
             p = advance(p)
-            p = add_expr(p, ast.make_expr(ast.expr_postfix(), at_span(suffix), ast.invalid_id(), left, ast.invalid_id(), 0, 0, "", suffix.text, 0, 0.0, 0))
+            p = add_expr(p, ast.make_expr(ast.expr_postfix(), at_span(suffix), ast.invalid_id(), left, ast.invalid_id(), 0, 0, "", suffix_text, 0, 0.0, 0))
         } else if suffix.kind == tok.lbrace() && kind == tok.ident() && left == primary_id && struct_literal_start(p) {
             p = advance(p)
             p = skip_lines(p)
             fields := array.new([]i32, 8)
             for (; p.ok && current(p).kind != tok.rbrace(); ) {
+                field_pos := p.pos
                 field := current(p)
+                field_text := token_text_at(p, field_pos)
                 p = expect(p, tok.ident(), "expected struct field name")
                 p = expect(p, tok.colon(), "expected ':' after struct field name")
                 p = parse_expression(p, 1)
                 value := p.expr_result
-                p = add_expr(p, ast.make_expr(ast.expr_binary(), at_span(field), ast.invalid_id(), value, ast.invalid_id(), 0, 0, field.text, ":", 0, 0.0, 0))
+                p = add_expr(p, ast.make_expr(ast.expr_binary(), at_span(field), ast.invalid_id(), value, ast.invalid_id(), 0, 0, field_text, ":", ast.name_hash(field_text), 0.0, ast.name_hash32(field_text)))
                 fields = array.append(fields, p.expr_result)
                 p = skip_lines(p)
                 if current(p).kind == tok.comma() {
@@ -400,7 +459,7 @@ fn parse_primary(p *Parser) *Parser {
             first := ast.child_count(p.program.arena)
             i := 0
             for (; i < array.len(fields); i++) { p.program.arena = ast.add_child(p.program.arena, fields[i]) }
-            p = add_expr(p, ast.make_expr(ast.expr_struct(), at_span(at), ast.invalid_id(), left, ast.invalid_id(), first, array.len(fields), at.text, "", 0, 0.0, 0))
+            p = add_expr(p, ast.make_expr(ast.expr_struct(), at_span(at), ast.invalid_id(), left, ast.invalid_id(), first, array.len(fields), at_text, "", 0, 0.0, 0))
         } else {
             break
         }
@@ -411,9 +470,10 @@ fn parse_primary(p *Parser) *Parser {
 fn parse_unary(p *Parser) *Parser {
     at := current(p)
     if at.kind == tok.bang() || at.kind == tok.minus() || at.kind == tok.plus() || at.kind == tok.star() || at.kind == tok.amp() || at.kind == tok.plusplus() || at.kind == tok.minusminus() {
+        op_text := current_text(p)
         p = advance(p)
         p = parse_unary(p)
-        p = add_expr(p, ast.make_expr(ast.expr_unary(), at_span(at), ast.invalid_id(), p.expr_result, ast.invalid_id(), 0, 0, "", at.text, 0, 0.0, 0))
+        p = add_expr(p, ast.make_expr(ast.expr_unary(), at_span(at), ast.invalid_id(), p.expr_result, ast.invalid_id(), 0, 0, "", op_text, 0, 0.0, 0))
         return p
     }
     return parse_primary(p)
@@ -423,12 +483,13 @@ fn parse_expression(p *Parser, minimum i32) *Parser {
     p = parse_unary(p)
     for (; p.ok; ) {
         op := current(p)
+        op_text := current_text(p)
         prec := precedence(op.kind)
         if prec < minimum { break }
         left := p.expr_result
         p = advance(p)
         p = parse_expression(p, prec + 1)
-        p = add_expr(p, ast.make_expr(ast.expr_binary(), at_span(op), ast.invalid_id(), left, p.expr_result, 0, 0, "", op.text, 0, 0.0, 0))
+        p = add_expr(p, ast.make_expr(ast.expr_binary(), at_span(op), ast.invalid_id(), left, p.expr_result, 0, 0, "", op_text, 0, 0.0, 0))
     }
     return p
 }
@@ -456,7 +517,9 @@ fn parse_block(p *Parser) *Parser {
 }
 
 fn parse_local(p *Parser, is_const bool) *Parser {
+    name_pos := p.pos
     name := current(p)
+    name_text := token_text_at(p, name_pos)
     p = expect(p, tok.ident(), "expected local name")
     type_id := ast.invalid_id()
     if current(p).kind == tok.colon() {
@@ -467,14 +530,14 @@ fn parse_local(p *Parser, is_const bool) *Parser {
     if current(p).kind != tok.assign() {
         return fail(p, "expected initializer after local")
     }
-    if type_id == ast.invalid_id() && !str.eq(current(p).text, ":=") {
+    if type_id == ast.invalid_id() && !str.eq(current_text(p), ":=") {
         return fail(p, "untyped local declarations require ':='")
     }
     p = advance(p)
     p = parse_expression(p, 1)
     flags := 0
     if is_const { flags = ast.flag_const() }
-    return add_stmt(p, ast.make_stmt(ast.stmt_local(), at_span(name), 0, 0, p.expr_result, type_id, ast.invalid_id(), name.text, ":=", flags))
+    return add_stmt(p, ast.make_stmt(ast.stmt_local(), at_span(name), 0, 0, p.expr_result, type_id, ast.invalid_id(), name_text, ":=", flags))
 }
 
 fn parse_if(p *Parser) *Parser {
@@ -507,12 +570,14 @@ fn parse_for(p *Parser) *Parser {
         return add_stmt(p, ast.make_stmt(ast.stmt_for(), at_span(at), 0, 0, ast.invalid_id(), ast.invalid_id(), p.stmt_result, "", "", 0))
     }
     if current(p).kind == tok.ident() && look(p, 1).kind == tok.kw_in() {
+        name_pos := p.pos
         name := current(p)
+        name_text := token_text_at(p, name_pos)
         p = advance(advance(p))
         p = parse_expression(p, 1)
         iterable := p.expr_result
         p = parse_block(p)
-        return add_stmt(p, ast.make_stmt(ast.stmt_for_in(), at_span(at), 0, 0, iterable, p.stmt_result, ast.invalid_id(), name.text, "", 0))
+        return add_stmt(p, ast.make_stmt(ast.stmt_for_in(), at_span(at), 0, 0, iterable, p.stmt_result, ast.invalid_id(), name_text, "", 0))
     }
     parenthesized := false
     if current(p).kind == tok.lparen() {
@@ -551,17 +616,18 @@ fn parse_switch(p *Parser) *Parser {
     p = skip_lines(p)
     for (; p.ok && current(p).kind != tok.rbrace(); ) {
         label := current(p)
-        if label.kind != tok.ident() || (!str.eq(label.text, "case") && !str.eq(label.text, "default")) {
+        label_text := current_text(p)
+        if label.kind != tok.ident() || (!str.eq(label_text, "case") && !str.eq(label_text, "default")) {
             return fail(p, "expected case or default")
         }
         p = advance(p)
         case_value := ast.invalid_id()
-        if str.eq(label.text, "case") {
+        if str.eq(label_text, "case") {
             p = parse_expression(p, 1)
             case_value = p.expr_result
         }
         p = parse_block(p)
-        p = add_stmt(p, ast.make_stmt(ast.stmt_switch(), at_span(label), 0, 0, case_value, p.stmt_result, ast.invalid_id(), label.text, "", 0))
+        p = add_stmt(p, ast.make_stmt(ast.stmt_switch(), at_span(label), 0, 0, case_value, p.stmt_result, ast.invalid_id(), label_text, "", 0))
         cases = array.append(cases, p.stmt_result)
         p = skip_lines(p)
     }
@@ -576,7 +642,7 @@ fn parse_statement(p *Parser) *Parser {
     p = skip_lines(p)
     at := current(p)
     if at.kind == tok.kw_else() {
-        return fail(p, "misplaced else")
+        return fail(p, "unexpected token in expression: misplaced else")
     }
     if at.kind == tok.kw_return() {
         p = advance(p)
@@ -607,7 +673,7 @@ fn parse_statement(p *Parser) *Parser {
         p = advance(p)
         name := ""
         if current(p).kind == tok.ident() && look(p, 1).kind == tok.lbrace() {
-            name = current(p).text
+            name = current_text(p)
             p = advance(p)
         }
         p = parse_block(p)
@@ -617,16 +683,17 @@ fn parse_statement(p *Parser) *Parser {
         p = advance(p)
         return parse_local(p, true)
     }
-    if at.kind == tok.ident() && (look(p, 1).kind == tok.colon() || (look(p, 1).kind == tok.assign() && str.eq(look(p, 1).text, ":="))) {
+    if at.kind == tok.ident() && (look(p, 1).kind == tok.colon() || (look(p, 1).kind == tok.assign() && str.eq(token_text_at(p, p.pos + 1), ":="))) {
         return parse_local(p, false)
     }
     p = parse_expression(p, 1)
     left := p.expr_result
     if assignment_kind(current(p).kind) {
         op := current(p)
+        op_text := current_text(p)
         p = advance(p)
         p = parse_expression(p, 1)
-        return add_stmt(p, ast.make_stmt(ast.stmt_assign(), at_span(op), 0, 0, left, p.expr_result, ast.invalid_id(), "", op.text, 0))
+        return add_stmt(p, ast.make_stmt(ast.stmt_assign(), at_span(op), 0, 0, left, p.expr_result, ast.invalid_id(), "", op_text, 0))
     }
     return add_stmt(p, ast.make_stmt(ast.stmt_expr(), at_span(at), 0, 0, left, ast.invalid_id(), ast.invalid_id(), "", "", 0))
 }
@@ -634,13 +701,17 @@ fn parse_statement(p *Parser) *Parser {
 fn parse_function(p *Parser, flags i32) *Parser {
     start := current(p)
     p = expect(p, tok.kw_fn(), "expected fn")
+    name_pos := p.pos
     name := current(p)
-    p = expect(p, tok.ident(), "expected function name")
+    name_text := token_text_at(p, name_pos)
+    p = expect(p, tok.ident(), "expected function or method name")
     p = expect(p, tok.lparen(), "expected '(' after function name")
     first_param := ast.param_count(p.program.arena)
     params := 0
     for (; p.ok && current(p).kind != tok.rparen(); ) {
+        param_pos := p.pos
         param := current(p)
+        param_text := token_text_at(p, param_pos)
         p = expect(p, tok.ident(), "expected parameter name")
         param_flags := 0
         if current(p).kind == tok.ellipsis() {
@@ -652,7 +723,7 @@ fn parse_function(p *Parser, flags i32) *Parser {
             param_flags = ast.flag_variadic()
             p = advance(p)
         }
-        p.program.arena = ast.add_param(p.program.arena, ast.make_param(at_span(param), param.text, p.type_result, param_flags))
+        p.program.arena = ast.add_param(p.program.arena, ast.make_param(at_span(param), param_text, p.type_result, param_flags))
         params += 1
         if current(p).kind == tok.comma() { p = advance(p) } else { break }
     }
@@ -665,23 +736,26 @@ fn parse_function(p *Parser, flags i32) *Parser {
     link_name := ""
     if current(p).kind == tok.kw_as() {
         p = advance(p)
+        link_pos := p.pos
         link := current(p)
         p = expect(p, tok.string_lit(), "expected external link name")
-        link_name = literal_contents(link)
+        link_name = literal_contents_text(token_text_at(p, link_pos))
     }
     body := ast.invalid_id()
     if current(p).kind == tok.lbrace() {
         p = parse_block(p)
         body = p.stmt_result
     }
-    p = add_decl(p, ast.make_decl(ast.decl_function(), at_span(start), name.text, p.program.module_name, link_name, return_type, body, first_param, params, 0, 0, flags))
+    p = add_decl(p, ast.make_decl(ast.decl_function(), at_span(start), name_text, p.program.module_name, link_name, return_type, body, first_param, params, 0, 0, flags))
     return p
 }
 
 fn parse_struct(p *Parser, flags i32) *Parser {
     start := current(p)
     p = advance(p)
+    name_pos := p.pos
     name := current(p)
+    name_text := token_text_at(p, name_pos)
     p = expect(p, tok.ident(), "expected struct name")
     p = expect(p, tok.lbrace(), "expected '{' after struct name")
     first := ast.field_count(p.program.arena)
@@ -693,21 +767,25 @@ fn parse_struct(p *Parser, flags i32) *Parser {
             field_flags = ast.flag_public()
             p = advance(p)
         }
+        field_pos := p.pos
         field := current(p)
+        field_text := token_text_at(p, field_pos)
         p = expect(p, tok.ident(), "expected field name")
         p = parse_type(p)
-        p.program.arena = ast.add_field(p.program.arena, ast.make_field(at_span(field), field.text, p.type_result, field_flags, 0))
+        p.program.arena = ast.add_field(p.program.arena, ast.make_field(at_span(field), field_text, p.type_result, field_flags, ast.name_hash(field_text)))
         count += 1
         p = skip_lines(p)
     }
     p = expect(p, tok.rbrace(), "expected '}' after struct")
-    return add_decl(p, ast.make_decl(ast.decl_struct(), at_span(start), name.text, p.program.module_name, "", ast.invalid_id(), ast.invalid_id(), 0, 0, first, count, flags))
+    return add_decl(p, ast.make_decl(ast.decl_struct(), at_span(start), name_text, p.program.module_name, "", ast.invalid_id(), ast.invalid_id(), 0, 0, first, count, flags))
 }
 
 fn parse_enum(p *Parser, flags i32) *Parser {
     start := current(p)
     p = advance(p)
+    name_pos := p.pos
     name := current(p)
+    name_text := token_text_at(p, name_pos)
     p = expect(p, tok.ident(), "expected enum name")
     p = expect(p, tok.lbrace(), "expected '{' after enum name")
     first := ast.field_count(p.program.arena)
@@ -715,24 +793,27 @@ fn parse_enum(p *Parser, flags i32) *Parser {
     next_value: i64 := 0
     p = skip_lines(p)
     for (; p.ok && current(p).kind != tok.rbrace(); ) {
+        item_pos := p.pos
         item := current(p)
+        item_text := token_text_at(p, item_pos)
         p = expect(p, tok.ident(), "expected enum variant")
         value := next_value
         if current(p).kind == tok.assign() {
             p = advance(p)
+            literal_pos := p.pos
             literal := current(p)
             p = expect(p, tok.int_lit(), "expected integer enum value")
             value = 0
-            value = c_atoi(literal.text)
+            value = cstdlib.atoi(token_text_at(p, literal_pos))
         }
-        p.program.arena = ast.add_field(p.program.arena, ast.make_field(at_span(item), item.text, ast.invalid_id(), 0, value))
+        p.program.arena = ast.add_field(p.program.arena, ast.make_field(at_span(item), item_text, ast.invalid_id(), 0, value))
         count += 1
         next_value = value + 1
         if current(p).kind == tok.comma() { p = advance(p) }
         p = skip_lines(p)
     }
     p = expect(p, tok.rbrace(), "expected '}' after enum")
-    return add_decl(p, ast.make_decl(ast.decl_enum(), at_span(start), name.text, p.program.module_name, "", ast.invalid_id(), ast.invalid_id(), 0, 0, first, count, flags))
+    return add_decl(p, ast.make_decl(ast.decl_enum(), at_span(start), name_text, p.program.module_name, "", ast.invalid_id(), ast.invalid_id(), 0, 0, first, count, flags))
 }
 
 fn parse_declaration(p *Parser) *Parser {
@@ -756,11 +837,13 @@ fn parse_declaration(p *Parser) *Parser {
     if current(p).kind == tok.kw_type() {
         start := current(p)
         p = advance(p)
+        name_pos := p.pos
         name := current(p)
+        name_text := token_text_at(p, name_pos)
         p = expect(p, tok.ident(), "expected type alias name")
         if current(p).kind == tok.assign() { p = advance(p) }
         p = parse_type(p)
-        return add_decl(p, ast.make_decl(ast.decl_alias(), at_span(start), name.text, p.program.module_name, "", p.type_result, ast.invalid_id(), 0, 0, 0, 0, flags))
+        return add_decl(p, ast.make_decl(ast.decl_alias(), at_span(start), name_text, p.program.module_name, "", p.type_result, ast.invalid_id(), 0, 0, 0, 0, flags))
     }
     return fail(p, "expected top-level declaration")
 }
@@ -795,29 +878,34 @@ pub fn parse(path string, source string) ProgramAst {
     p = skip_lines(p)
     if current(p).kind == tok.kw_module() || current(p).kind == tok.kw_package() {
         p = advance(p)
+        name_pos := p.pos
         name := current(p)
-        p = expect(p, tok.ident(), "expected module name")
-        p.program.module_name = name.text
+        name_text := token_text_at(p, name_pos)
+        p = expect(p, tok.ident(), "expected module/package name")
+        p.program.module_name = name_text
         for (; p.ok && current(p).kind == tok.dot(); ) {
             p = advance(p)
+            part_pos := p.pos
             part := current(p)
+            part_text := token_text_at(p, part_pos)
             p = expect(p, tok.ident(), "expected module name component")
-            p.program.module_name = text.concat3(p.program.module_name, ".", part.text)
+            p.program.module_name = mem.keep(text.concat3(p.program.module_name, ".", part_text))
         }
         p = skip_lines(p)
     }
     for (; p.ok && current(p).kind == tok.kw_import(); ) {
         start := current(p)
         p = advance(p)
+        path_pos := p.pos
         path_token := current(p)
         p = advance(p)
         alias := ""
         if current(p).kind == tok.kw_as() {
             p = advance(p)
-            alias = current(p).text
-            p = expect(p, tok.ident(), "expected import alias")
+            alias = current_text(p)
+            p = expect(p, tok.ident(), "expected alias after 'as'")
         }
-        p = add_decl(p, ast.make_decl(ast.decl_import(), at_span(start), alias, p.program.module_name, literal_contents(path_token), ast.invalid_id(), ast.invalid_id(), 0, 0, 0, 0, 0))
+        p = add_decl(p, ast.make_decl(ast.decl_import(), at_span(start), alias, p.program.module_name, literal_contents_text(token_text_at(p, path_pos)), ast.invalid_id(), ast.invalid_id(), 0, 0, 0, 0, 0))
         p.program.root_decls = array.append(p.program.root_decls, p.decl_result)
         p = skip_lines(p)
     }
