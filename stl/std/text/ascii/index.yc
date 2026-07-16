@@ -1,0 +1,189 @@
+module std.text.ascii
+
+import "std/mem" as mem
+import "std/str" as str
+
+fn len(value string) i32 { return str.len(value) }
+fn whitespace(ch i32) bool { return ch == ' ' || ch == 9 || ch == 10 || ch == 13 }
+
+fn slice(value string, start i32, count i32) string {
+    if value == none || start < 0 || count < 0 { return none }
+    n := len(value)
+    if start > n { return none }
+    if count > n - start { count = n - start }
+    out: string := mem.calloc(count + 1, 1)
+    i := 0
+    for (; i < count; i++) { out[i] = value[start + i] }
+    return out
+}
+
+fn find_from(value string, needle string, start i32) i32 {
+    if value == none || needle == none { return -1 }
+    n := len(value)
+    m := len(needle)
+    if start < 0 { start = 0 }
+    if start > n { return -1 }
+    if m == 0 { return start }
+    i := start
+    for (; i <= n - m; i++) {
+        found := true
+        j := 0
+        for (; j < m; j++) {
+            if value[i + j] != needle[j] { found = false }
+        }
+        if found { return i }
+    }
+    return -1
+}
+
+fn append_copy(builder string, at i32, value string) i32 {
+    if value == none { return at }
+    i := 0
+    n := len(value)
+    for (; i < n; i++) {
+        builder[at] = value[i]
+        at += 1
+    }
+    return at
+}
+
+pub fn ends_with(value string, suffix string) bool {
+    if value == none || suffix == none { return false }
+    n := len(value)
+    m := len(suffix)
+    if m > n { return false }
+    i := 0
+    for (; i < m; i++) {
+        if value[n - m + i] != suffix[i] { return false }
+    }
+    return true
+}
+
+pub fn trim_start(value string) string {
+    if value == none { return none }
+    i := 0
+    n := len(value)
+    for (; i < n && whitespace(value[i]); i++) {}
+    return slice(value, i, n - i)
+}
+
+pub fn trim_end(value string) string {
+    if value == none { return none }
+    end_pos := len(value)
+    for (; end_pos > 0 && whitespace(value[end_pos - 1]); end_pos--) {}
+    return slice(value, 0, end_pos)
+}
+
+pub fn trim(value string) string {
+    if value == none { return none }
+    start := 0
+    end_pos := len(value)
+    for (; start < end_pos && whitespace(value[start]); start++) {}
+    for (; end_pos > start && whitespace(value[end_pos - 1]); end_pos--) {}
+    return slice(value, start, end_pos - start)
+}
+
+pub fn replace(value string, needle string, replacement string) string {
+    if value == none || needle == none || replacement == none { return none }
+    needle_len := len(needle)
+    if needle_len == 0 { return slice(value, 0, len(value)) }
+    count := 0
+    at := 0
+    n := len(value)
+    for (; at < n; ) {
+        found := find_from(value, needle, at)
+        if found < 0 { break }
+        count += 1
+        at = found + needle_len
+    }
+    replacement_len := len(replacement)
+    output_len := n
+    if replacement_len >= needle_len {
+        growth := replacement_len - needle_len
+        if growth > 0 && count > (2147483646 - n) / growth { return none }
+        output_len += count * growth
+    } else {
+        output_len -= count * (needle_len - replacement_len)
+    }
+    out: string := mem.calloc(output_len + 1, 1)
+    at = 0
+    written := 0
+    for (; at < n; ) {
+        found := find_from(value, needle, at)
+        if found < 0 {
+            written = append_copy(out, written, slice(value, at, n - at))
+            break
+        }
+        written = append_copy(out, written, slice(value, at, found - at))
+        written = append_copy(out, written, replacement)
+        at = found + needle_len
+    }
+    return out
+}
+
+pub fn split(value string, separator string) Vec<string> {
+    out := Vec<string>{}
+    if value == none || separator == none { return out }
+    separator_len := len(separator)
+    if separator_len == 0 {
+        out.push(slice(value, 0, len(value)))
+        return out
+    }
+    at := 0
+    n := len(value)
+    for (; at <= n; ) {
+        found := find_from(value, separator, at)
+        if found < 0 {
+            out.push(slice(value, at, n - at))
+            break
+        }
+        out.push(slice(value, at, found - at))
+        at = found + separator_len
+    }
+    return out
+}
+
+pub fn join_all(values Vec<string>, separator string) string {
+    if separator == none { return none }
+    total := 0
+    separator_len := len(separator)
+    i := 0
+    for (; i < values.len(); i++) {
+        value := values[i]
+        value_len := len(value)
+        if value_len > 2147483646 - total { return none }
+        total += value_len
+        if i > 0 {
+            if separator_len > 2147483646 - total { return none }
+            total += separator_len
+        }
+    }
+    out: string := mem.calloc(total + 1, 1)
+    written := 0
+    i = 0
+    for (; i < values.len(); i++) {
+        if i > 0 { written = append_copy(out, written, separator) }
+        written = append_copy(out, written, values[i])
+    }
+    return out
+}
+
+pub fn to_lower(value string) string {
+    if value == none { return none }
+    out := slice(value, 0, len(value))
+    i := 0
+    for (; i < len(out); i++) {
+        if out[i] >= 'A' && out[i] <= 'Z' { out[i] += 32 }
+    }
+    return out
+}
+
+pub fn to_upper(value string) string {
+    if value == none { return none }
+    out := slice(value, 0, len(value))
+    i := 0
+    for (; i < len(out); i++) {
+        if out[i] >= 'a' && out[i] <= 'z' { out[i] -= 32 }
+    }
+    return out
+}

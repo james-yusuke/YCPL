@@ -146,7 +146,7 @@ contains language-level APIs.
 ## Tests
 
 ```sh
-# Apply the same 77-case oracle to any compiler executable.
+# Apply the same conformance oracle to any compiler executable.
 tests/run_conformance.sh ./bazel-bin/ycc
 
 # Fixed point, examples, runtime, LSP, and all Bazel targets.

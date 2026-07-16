@@ -4,6 +4,13 @@ import "std/bytes" as bytes
 import "std/mem" as mem
 import "std/str" as str
 
+pub struct DecodeResult {
+    ok bool
+    value Bytes
+    message string
+    offset i32
+}
+
 fn hex_digit(n i32) i32 {
     if n < 10 {
         return '0' + n
@@ -111,4 +118,23 @@ pub fn is_valid(text string) bool {
     }
 
     return true
+}
+
+fn invalid_offset(text string) i32 {
+    if text == none { return 0 }
+    n: i32 := str.len(text)
+    i := 0
+    for (; i < n; i++) {
+        if hex_value(text[i]) < 0 { return i }
+    }
+    if n % 2 != 0 { return n - 1 }
+    return -1
+}
+
+pub fn decode_result(text string) DecodeResult {
+    offset := invalid_offset(text)
+    if offset >= 0 {
+        return DecodeResult{ok: false, value: bytes.wrap(none, 0), message: "invalid hexadecimal text", offset: offset}
+    }
+    return DecodeResult{ok: true, value: decode(text), message: "", offset: -1}
 }

@@ -1,24 +1,43 @@
 module std.fs
 
+import "c/fcntl" as fcntl
+import "c/stdio" as stdio
+import "c/sys/stat" as cstat
+import "c/unistd" as unistd
+import "c/yc_runtime" as runtime
+import "std/bytes" as bytes
 import "std/mem" as mem
-
-extern fn c_open(path string, flags i32, mode i32) i32 as "open"
-extern fn c_close(fd i32) i32 as "close"
-extern fn c_read(fd i32, buf string, count i32) i32 as "read"
-extern fn c_fopen(path string, mode string) *byte as "fopen"
-extern fn c_fputs(text string, file *byte) i32 as "fputs"
-extern fn c_fclose(file *byte) i32 as "fclose"
-extern fn c_mkdir(path string, mode i32) i32 as "mkdir"
-extern fn c_popen(command string, mode string) *byte as "popen"
-extern fn c_pclose(file *byte) i32 as "pclose"
-extern fn c_fgets(buf string, size i32, file *byte) string as "fgets"
-extern fn runtime_find_yc_files(root string) string as "yc_fs_find_yc_files"
+import "std/text" as text
 
 pub struct CommandOutput {
     ok bool
     text string
     message string
     status i32
+}
+
+pub struct TextResult {
+    ok bool
+    value string
+    message string
+}
+
+pub struct BytesResult {
+    ok bool
+    value Bytes
+    message string
+}
+
+pub struct StatusResult {
+    ok bool
+    message string
+}
+
+pub struct FileInfo {
+    ok bool
+    kind i32
+    size i64
+    message string
 }
 
 fn command_ok(text string, status i32) CommandOutput {
@@ -99,7 +118,7 @@ fn build_find_yc_command(root string) string {
 }
 
 pub fn command_output(command string) CommandOutput {
-    file := c_popen(command, "r")
+    file := stdio.popen(command, "r")
     if file == none {
         return command_fail("failed to start command", 1)
     }
@@ -111,7 +130,7 @@ pub fn command_output(command string) CommandOutput {
     truncated := false
 
     for (; true; ) {
-        got := c_fgets(line, 4096, file)
+        got := stdio.fgets(line, 4096, file)
         if got == none {
             break
         }
@@ -124,7 +143,7 @@ pub fn command_output(command string) CommandOutput {
         len += n
     }
 
-    status := c_pclose(file)
+    status := stdio.pclose(file)
     if truncated {
         return command_fail("command output is too large", status)
     }
@@ -135,7 +154,7 @@ pub fn command_output(command string) CommandOutput {
 }
 
 pub fn find_yc_files(root string) CommandOutput {
-    files := runtime_find_yc_files(root)
+    files := runtime.find_yc_files(root)
     if files == none {
         return command_fail("failed to traverse project sources", 1)
     }
@@ -143,42 +162,23 @@ pub fn find_yc_files(root string) CommandOutput {
 }
 
 pub fn exists(path string) bool {
-    fd := c_open(path, 0, 0)
-    if fd < 0 {
-        return false
-    }
-
-    c_close(fd)
-    return true
+    kind := 0
+    size: i64 := 0
+    return runtime.fs_stat(path, &kind, &size) != 0
 }
 
 pub fn read_file(path string) string {
-    fd := c_open(path, 0, 0)
-    if fd < 0 {
-        return none
-    }
-
-    cap := 1048576
-    buf: string := mem.calloc(cap + 1, 1)
-    c_read(fd, buf, cap)
-    c_close(fd)
-    return buf
+    result := read_text(path)
+    if !result.ok { return none }
+    return result.value
 }
 
 pub fn write_file(path string, text string) bool {
-    file := c_fopen(path, "w")
-    if file == none {
-        return false
-    }
-
-    rc := c_fputs(text, file)
-    c_fclose(file)
-    return rc >= 0
+    return write_text(path, text).ok
 }
 
 pub fn mkdir(path string) bool {
-    rc := c_mkdir(path, 493)
-    return rc == 0
+    return create_dir(path).ok
 }
 
 pub fn uri_to_path(uri string) string {
@@ -187,4 +187,79 @@ pub fn uri_to_path(uri string) string {
     }
 
     return uri
+}
+
+pub fn read_text(path string) TextResult {
+    size: i64 := 0
+    value := runtime.fs_read_all(path, &size)
+    if value == none { return TextResult{ok: false, value: none, message: "failed to read file"} }
+    return TextResult{ok: true, value: value, message: ""}
+}
+
+pub fn read_bytes(path string) BytesResult {
+    size: i64 := 0
+    data := runtime.fs_read_all(path, &size)
+    if data == none { return BytesResult{ok: false, value: bytes.empty(), message: "failed to read file"} }
+    value := bytes.take_managed(data, cast(i32, size), cast(i32, size))
+    return BytesResult{ok: true, value: value, message: ""}
+}
+
+pub fn write_text(path string, value string) StatusResult {
+    if path == none || value == none { return StatusResult{ok: false, message: "path and text are required"} }
+    ok := runtime.fs_write_all(path, cast(*byte, value), text.len(value), 0) != 0
+    if !ok { return StatusResult{ok: false, message: "failed to write file"} }
+    return StatusResult{ok: true, message: ""}
+}
+
+pub fn write_bytes(path string, value Bytes) StatusResult {
+    if path == none || !bytes.is_valid(value) { return StatusResult{ok: false, message: "path and bytes are required"} }
+    ok := runtime.fs_write_all(path, cast(*byte, value.data), value.len, 0) != 0
+    if !ok { return StatusResult{ok: false, message: "failed to write file"} }
+    return StatusResult{ok: true, message: ""}
+}
+
+pub fn append_text(path string, value string) StatusResult {
+    if path == none || value == none { return StatusResult{ok: false, message: "path and text are required"} }
+    ok := runtime.fs_write_all(path, cast(*byte, value), text.len(value), 1) != 0
+    if !ok { return StatusResult{ok: false, message: "failed to append file"} }
+    return StatusResult{ok: true, message: ""}
+}
+
+pub fn remove(path string) StatusResult {
+    if runtime.fs_remove(path) == 0 { return StatusResult{ok: false, message: "failed to remove path"} }
+    return StatusResult{ok: true, message: ""}
+}
+
+pub fn rename(from string, to string) StatusResult {
+    if runtime.fs_rename(from, to) == 0 { return StatusResult{ok: false, message: "failed to rename path"} }
+    return StatusResult{ok: true, message: ""}
+}
+
+pub fn create_dir(path string) StatusResult {
+    if runtime.fs_create_dir(path) == 0 { return StatusResult{ok: false, message: "failed to create directory"} }
+    return StatusResult{ok: true, message: ""}
+}
+
+pub fn create_dirs(path string) StatusResult {
+    if runtime.fs_create_dirs(path) == 0 { return StatusResult{ok: false, message: "failed to create directories"} }
+    return StatusResult{ok: true, message: ""}
+}
+
+pub fn stat(path string) FileInfo {
+    kind := 0
+    size: i64 := 0
+    if runtime.fs_stat(path, &kind, &size) == 0 {
+        return FileInfo{ok: false, kind: 0, size: 0, message: "path does not exist"}
+    }
+    return FileInfo{ok: true, kind: kind, size: size, message: ""}
+}
+
+pub fn is_file(path string) bool {
+    info := stat(path)
+    return info.ok && info.kind == 1
+}
+
+pub fn is_dir(path string) bool {
+    info := stat(path)
+    return info.ok && info.kind == 2
 }

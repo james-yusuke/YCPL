@@ -68,6 +68,12 @@ namespace module
         return "__YCPL_" + sanitize_module_name(module_name) + "_" + symbol;
     }
 
+    static bool is_vec_builtin_method(const std::string &name)
+    {
+        return name == "push" || name == "len" || name == "capacity" ||
+               name == "reserve" || name == "clear" || name == "as_slice";
+    }
+
     static bool is_std_module_name(const std::string &module_name)
     {
         return module_name == "std" ||
@@ -288,6 +294,11 @@ namespace module
 
             if (auto member = dynamic_cast<ast::MemberExpr *>(call->callee.get()))
             {
+                if (is_vec_builtin_method(member->member))
+                {
+                    rewrite_expr(member->object, info, local_functions, modules, errors);
+                    return;
+                }
                 const SymbolInfo *ufcs = find_unique_imported_function(member->member, info, modules);
                 if (ufcs)
                 {

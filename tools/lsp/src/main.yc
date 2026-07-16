@@ -1,10 +1,11 @@
 import "std/fmt" as fmt
 import "std/array" as array
 import "std/io" as io
-import "std/json" as json
+import "std/jsonrpc" as jsonrpc
 import "std/map" as map
 import "std/mem" as mem
 import "std/text" as text
+import "std/ycpl/syntax" as syntax
 
 fn append_str(out string, at i32, value string) i32 {
     if value == none {
@@ -68,13 +69,13 @@ fn send_initialize(id i32) {
 }
 
 fn send_shutdown(id i32) {
-    size := 37 + json.digits_i32(id)
+    size := 37 + jsonrpc.digits_i32(id)
     fmt.printf("Content-Length: %d\r\n\r\n{\"jsonrpc\":\"2.0\",\"id\":%d,\"result\":null}", size, id)
 }
 
 fn send_hover(id i32) {
     value := "YCPL symbol"
-    size := 76 + json.digits_i32(id) + text.len(value)
+    size := 76 + jsonrpc.digits_i32(id) + text.len(value)
     fmt.printf("Content-Length: %d\r\n\r\n{\"jsonrpc\":\"2.0\",\"id\":%d,\"result\":{\"contents\":{\"kind\":\"markdown\",\"value\":\"%s\"}}}", size, id, value)
 }
 
@@ -133,7 +134,7 @@ fn send_hover_for_word(id i32, source string, word string) {
 }
 
 fn send_completion(id i32) {
-    size := 530 + json.digits_i32(id)
+    size := 530 + jsonrpc.digits_i32(id)
     fmt.printf("Content-Length: %d\r\n\r\n{\"jsonrpc\":\"2.0\",\"id\":%d,\"result\":{\"isIncomplete\":false,\"items\":[{\"label\":\"fn\",\"kind\":14},{\"label\":\"main\",\"kind\":15,\"insertTextFormat\":2,\"insertText\":\"fn main() i32 {\\n    $1\\n}\"},{\"label\":\"struct\",\"kind\":14},{\"label\":\"import\",\"kind\":14},{\"label\":\"const\",\"kind\":14},{\"label\":\"i32\",\"kind\":7},{\"label\":\"string\",\"kind\":7},{\"label\":\"bool\",\"kind\":7},{\"label\":\"std/fmt\",\"kind\":9},{\"label\":\"std/array\",\"kind\":9},{\"label\":\"std/json\",\"kind\":9},{\"label\":\"std/io\",\"kind\":9},{\"label\":\"fmt.println\",\"kind\":3},{\"label\":\"array.append\",\"kind\":3}]}}", size, id)
 }
 
@@ -243,7 +244,7 @@ fn append_semantic_token(out string, at i32, first bool, delta_line i32, delta_c
 }
 
 fn send_empty_result(id i32) {
-    size := 35 + json.digits_i32(id)
+    size := 35 + jsonrpc.digits_i32(id)
     fmt.printf("Content-Length: %d\r\n\r\n{\"jsonrpc\":\"2.0\",\"id\":%d,\"result\":[]}", size, id)
 }
 
@@ -1512,7 +1513,7 @@ fn send_formatting(id i32, source string) {
     escaped := json_escape_string(formatted)
     end_line := 9999
     escaped_len := text.len(escaped)
-    size := 122 + json.digits_i32(id) + json.digits_i32(end_line) + escaped_len
+    size := 122 + jsonrpc.digits_i32(id) + jsonrpc.digits_i32(end_line) + escaped_len
     fmt.printf("Content-Length: %d\r\n\r\n{\"jsonrpc\":\"2.0\",\"id\":%d,\"result\":[{\"range\":{\"start\":{\"line\":0,\"character\":0},\"end\":{\"line\":%d,\"character\":0}},\"newText\":\"%s\"}]}", size, id, end_line, escaped)
     mem.free(escaped)
     mem.free(formatted)
@@ -1543,12 +1544,12 @@ fn send_folding_ranges(id i32, source string) {
         return
     }
 
-    size := 76 + json.digits_i32(id) + json.digits_i32(start_line) + json.digits_i32(end_line)
+    size := 76 + jsonrpc.digits_i32(id) + jsonrpc.digits_i32(start_line) + jsonrpc.digits_i32(end_line)
     fmt.printf("Content-Length: %d\r\n\r\n{\"jsonrpc\":\"2.0\",\"id\":%d,\"result\":[{\"startLine\":%d,\"endLine\":%d,\"kind\":\"region\"}]}", size, id, start_line, end_line)
 }
 
 fn send_signature_help(id i32) {
-    size := 179 + json.digits_i32(id)
+    size := 179 + jsonrpc.digits_i32(id)
     fmt.printf("Content-Length: %d\r\n\r\n{\"jsonrpc\":\"2.0\",\"id\":%d,\"result\":{\"signatures\":[{\"label\":\"fmt.println(value any)\",\"documentation\":\"Print a value followed by a newline.\"}],\"activeSignature\":0,\"activeParameter\":0}}", size, id)
 }
 
@@ -1559,7 +1560,7 @@ fn send_empty_diagnostics(uri string) {
 
 fn send_diagnostic(uri string, line i32, ch i32, message string) {
     end_ch := ch + 1
-    size := 210 + text.len(uri) + json.digits_i32(line) + json.digits_i32(ch) + json.digits_i32(line) + json.digits_i32(end_ch) + text.len(message)
+    size := 210 + text.len(uri) + jsonrpc.digits_i32(line) + jsonrpc.digits_i32(ch) + jsonrpc.digits_i32(line) + jsonrpc.digits_i32(end_ch) + text.len(message)
     fmt.printf("Content-Length: %d\r\n\r\n{\"jsonrpc\":\"2.0\",\"method\":\"textDocument/publishDiagnostics\",\"params\":{\"uri\":\"%s\",\"diagnostics\":[{\"range\":{\"start\":{\"line\":%d,\"character\":%d},\"end\":{\"line\":%d,\"character\":%d}},\"severity\":1,\"source\":\"YCPL\",\"message\":\"%s\"}]}}", size, uri, line, ch, line, end_ch, message)
 }
 
@@ -1573,16 +1574,16 @@ fn publish_diagnostics(uri string, source string) {
         return
     }
 
-    kind := json.syntax_error_kind(source)
+    kind := syntax.error_kind(source)
     if kind == 0 {
         send_empty_diagnostics(uri)
         return
     }
 
-    offset := json.syntax_error_offset(source, kind)
+    offset := syntax.error_offset(source, kind)
     line := text.line_of_offset(source, offset)
     ch := text.utf16_col(source, offset)
-    send_diagnostic(uri, line, ch, json.syntax_error_message(kind))
+    send_diagnostic(uri, line, ch, syntax.error_message(kind))
 }
 
 fn free_document_slot(uris []string, texts []string, index i32) {
@@ -1645,13 +1646,13 @@ fn store_document(uris []string, texts []string, uri string, source string) {
 }
 
 fn handle_document_change(message string, uris []string, texts []string) {
-    uri := json.field_string(message, "\"uri\"")
-    source := json.field_string(message, "\"text\"")
+    uri := jsonrpc.field_string(message, "\"uri\"")
+    source := jsonrpc.field_string(message, "\"text\"")
     store_document(uris, texts, uri, source)
 }
 
 fn handle_document_close(message string, uris []string, texts []string) {
-    uri := json.field_string(message, "\"uri\"")
+    uri := jsonrpc.field_string(message, "\"uri\"")
     if uri != none {
         index := map.find(uris, uri)
         if index >= 0 {
@@ -1663,22 +1664,22 @@ fn handle_document_close(message string, uris []string, texts []string) {
 }
 
 fn handle_message(message string, uris []string, texts []string) i32 {
-    id := json.id_i32(message)
+    id := jsonrpc.id_i32(message)
 
-    if json.method_name_is(message, "initialize") {
+    if jsonrpc.method_name_is(message, "initialize") {
         send_initialize(id)
     }
 
-    if json.method_name_is(message, "shutdown") {
+    if jsonrpc.method_name_is(message, "shutdown") {
         send_shutdown(id)
         return 0
     }
 
-    if json.method_name_is(message, "textDocument/hover") {
-        uri := json.field_string(message, "\"uri\"")
+    if jsonrpc.method_name_is(message, "textDocument/hover") {
+        uri := jsonrpc.field_string(message, "\"uri\"")
         source := map.get(uris, texts, uri)
-        line := json.field_i32(message, "\"line\"")
-        ch := json.field_i32(message, "\"character\"")
+        line := jsonrpc.field_i32(message, "\"line\"")
+        ch := jsonrpc.field_i32(message, "\"character\"")
         word := word_at_position(source, line, ch)
         send_hover_for_word(id, source, word)
         if word != none {
@@ -1689,16 +1690,16 @@ fn handle_message(message string, uris []string, texts []string) i32 {
         }
     }
 
-    if json.method_name_is(message, "textDocument/completion") {
+    if jsonrpc.method_name_is(message, "textDocument/completion") {
         send_completion(id)
     }
 
-    if json.method_name_is(message, "textDocument/signatureHelp") {
+    if jsonrpc.method_name_is(message, "textDocument/signatureHelp") {
         send_signature_help(id)
     }
 
-    if json.method_name_is(message, "textDocument/semanticTokens/full") {
-        uri := json.field_string(message, "\"uri\"")
+    if jsonrpc.method_name_is(message, "textDocument/semanticTokens/full") {
+        uri := jsonrpc.field_string(message, "\"uri\"")
         source := map.get(uris, texts, uri)
         send_semantic_tokens(id, source)
         if uri != none {
@@ -1706,8 +1707,8 @@ fn handle_message(message string, uris []string, texts []string) i32 {
         }
     }
 
-    if json.method_name_is(message, "textDocument/formatting") || json.method_name_is(message, "textDocument/rangeFormatting") {
-        uri := json.field_string(message, "\"uri\"")
+    if jsonrpc.method_name_is(message, "textDocument/formatting") || jsonrpc.method_name_is(message, "textDocument/rangeFormatting") {
+        uri := jsonrpc.field_string(message, "\"uri\"")
         source := map.get(uris, texts, uri)
         send_formatting(id, source)
         if uri != none {
@@ -1715,8 +1716,8 @@ fn handle_message(message string, uris []string, texts []string) i32 {
         }
     }
 
-    if json.method_name_is(message, "textDocument/foldingRange") {
-        uri := json.field_string(message, "\"uri\"")
+    if jsonrpc.method_name_is(message, "textDocument/foldingRange") {
+        uri := jsonrpc.field_string(message, "\"uri\"")
         source := map.get(uris, texts, uri)
         send_folding_ranges(id, source)
         if uri != none {
@@ -1724,8 +1725,8 @@ fn handle_message(message string, uris []string, texts []string) i32 {
         }
     }
 
-    if json.method_name_is(message, "textDocument/documentSymbol") {
-        uri := json.field_string(message, "\"uri\"")
+    if jsonrpc.method_name_is(message, "textDocument/documentSymbol") {
+        uri := jsonrpc.field_string(message, "\"uri\"")
         source := map.get(uris, texts, uri)
         send_document_symbols(id, source)
         if uri != none {
@@ -1733,11 +1734,11 @@ fn handle_message(message string, uris []string, texts []string) i32 {
         }
     }
 
-    if json.method_name_is(message, "textDocument/definition") || json.method_name_is(message, "textDocument/declaration") {
-        uri := json.field_string(message, "\"uri\"")
+    if jsonrpc.method_name_is(message, "textDocument/definition") || jsonrpc.method_name_is(message, "textDocument/declaration") {
+        uri := jsonrpc.field_string(message, "\"uri\"")
         source := map.get(uris, texts, uri)
-        line := json.field_i32(message, "\"line\"")
-        ch := json.field_i32(message, "\"character\"")
+        line := jsonrpc.field_i32(message, "\"line\"")
+        ch := jsonrpc.field_i32(message, "\"character\"")
         word := word_at_position(source, line, ch)
         send_definition_all(id, uri, source, word, uris, texts)
         if word != none {
@@ -1748,11 +1749,11 @@ fn handle_message(message string, uris []string, texts []string) i32 {
         }
     }
 
-    if json.method_name_is(message, "textDocument/typeDefinition") {
-        uri := json.field_string(message, "\"uri\"")
+    if jsonrpc.method_name_is(message, "textDocument/typeDefinition") {
+        uri := jsonrpc.field_string(message, "\"uri\"")
         source := map.get(uris, texts, uri)
-        line := json.field_i32(message, "\"line\"")
-        ch := json.field_i32(message, "\"character\"")
+        line := jsonrpc.field_i32(message, "\"line\"")
+        ch := jsonrpc.field_i32(message, "\"character\"")
         word := word_at_position(source, line, ch)
         send_type_definition_all(id, uri, source, word, uris, texts)
         if word != none {
@@ -1763,11 +1764,11 @@ fn handle_message(message string, uris []string, texts []string) i32 {
         }
     }
 
-    if json.method_name_is(message, "textDocument/references") {
-        uri := json.field_string(message, "\"uri\"")
+    if jsonrpc.method_name_is(message, "textDocument/references") {
+        uri := jsonrpc.field_string(message, "\"uri\"")
         source := map.get(uris, texts, uri)
-        line := json.field_i32(message, "\"line\"")
-        ch := json.field_i32(message, "\"character\"")
+        line := jsonrpc.field_i32(message, "\"line\"")
+        ch := jsonrpc.field_i32(message, "\"character\"")
         word := word_at_position(source, line, ch)
         send_references_all(id, word, uris, texts)
         if word != none {
@@ -1778,11 +1779,11 @@ fn handle_message(message string, uris []string, texts []string) i32 {
         }
     }
 
-    if json.method_name_is(message, "textDocument/documentHighlight") {
-        uri := json.field_string(message, "\"uri\"")
+    if jsonrpc.method_name_is(message, "textDocument/documentHighlight") {
+        uri := jsonrpc.field_string(message, "\"uri\"")
         source := map.get(uris, texts, uri)
-        line := json.field_i32(message, "\"line\"")
-        ch := json.field_i32(message, "\"character\"")
+        line := jsonrpc.field_i32(message, "\"line\"")
+        ch := jsonrpc.field_i32(message, "\"character\"")
         word := word_at_position(source, line, ch)
         send_document_highlights(id, source, word)
         if word != none {
@@ -1793,11 +1794,11 @@ fn handle_message(message string, uris []string, texts []string) i32 {
         }
     }
 
-    if json.method_name_is(message, "textDocument/prepareRename") {
-        uri := json.field_string(message, "\"uri\"")
+    if jsonrpc.method_name_is(message, "textDocument/prepareRename") {
+        uri := jsonrpc.field_string(message, "\"uri\"")
         source := map.get(uris, texts, uri)
-        line := json.field_i32(message, "\"line\"")
-        ch := json.field_i32(message, "\"character\"")
+        line := jsonrpc.field_i32(message, "\"line\"")
+        ch := jsonrpc.field_i32(message, "\"character\"")
         word := word_at_position(source, line, ch)
         send_prepare_rename(id, source, word, line, ch)
         if word != none {
@@ -1808,13 +1809,13 @@ fn handle_message(message string, uris []string, texts []string) i32 {
         }
     }
 
-    if json.method_name_is(message, "textDocument/rename") {
-        uri := json.field_string(message, "\"uri\"")
+    if jsonrpc.method_name_is(message, "textDocument/rename") {
+        uri := jsonrpc.field_string(message, "\"uri\"")
         source := map.get(uris, texts, uri)
-        line := json.field_i32(message, "\"line\"")
-        ch := json.field_i32(message, "\"character\"")
+        line := jsonrpc.field_i32(message, "\"line\"")
+        ch := jsonrpc.field_i32(message, "\"character\"")
         word := word_at_position(source, line, ch)
-        new_name := json.field_string(message, "\"newName\"")
+        new_name := jsonrpc.field_string(message, "\"newName\"")
         send_rename_all(id, word, new_name, uris, texts)
         if new_name != none {
             mem.free(new_name)
@@ -1827,30 +1828,30 @@ fn handle_message(message string, uris []string, texts []string) i32 {
         }
     }
 
-    if json.method_name_is(message, "textDocument/selectionRange") {
-        uri := json.field_string(message, "\"uri\"")
+    if jsonrpc.method_name_is(message, "textDocument/selectionRange") {
+        uri := jsonrpc.field_string(message, "\"uri\"")
         source := map.get(uris, texts, uri)
-        line := json.field_i32(message, "\"line\"")
-        ch := json.field_i32(message, "\"character\"")
+        line := jsonrpc.field_i32(message, "\"line\"")
+        ch := jsonrpc.field_i32(message, "\"character\"")
         send_selection_range(id, source, line, ch)
         if uri != none {
             mem.free(uri)
         }
     }
 
-    if json.method_name_is(message, "workspace/symbol") {
-        query := json.field_string(message, "\"query\"")
+    if jsonrpc.method_name_is(message, "workspace/symbol") {
+        query := jsonrpc.field_string(message, "\"query\"")
         send_workspace_symbols(id, query, uris, texts)
         if query != none {
             mem.free(query)
         }
     }
 
-    if json.method_name_is(message, "textDocument/didOpen") || json.method_name_is(message, "textDocument/didChange") {
+    if jsonrpc.method_name_is(message, "textDocument/didOpen") || jsonrpc.method_name_is(message, "textDocument/didChange") {
         handle_document_change(message, uris, texts)
     }
 
-    if json.method_name_is(message, "textDocument/didClose") {
+    if jsonrpc.method_name_is(message, "textDocument/didClose") {
         handle_document_close(message, uris, texts)
     }
 
@@ -1880,7 +1881,7 @@ fn process_frames(buf string, used i32, uris []string, texts []string) i32 {
             return used
         }
 
-        length := json.content_length_at(buf, header)
+        length := jsonrpc.content_length_at(buf, header)
         if length < 0 || length > 1048576 {
             io.write_str(2, "YCPL-lsp: invalid Content-Length\n")
             return -1

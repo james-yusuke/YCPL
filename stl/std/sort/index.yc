@@ -1,0 +1,66 @@
+module std.sort
+
+import "std/str" as str
+
+pub fn sort_i32(values Vec<i32>) {
+    i := 1
+    for (; i < values.len(); i++) {
+        value := values[i]
+        j := i
+        for (; j > 0 && values[j - 1] > value; j--) { values[j] = values[j - 1] }
+        values[j] = value
+    }
+}
+
+pub fn sort_i64(values Vec<i64>) {
+    i := 1
+    for (; i < values.len(); i++) {
+        value := values[i]
+        j := i
+        for (; j > 0 && values[j - 1] > value; j--) { values[j] = values[j - 1] }
+        values[j] = value
+    }
+}
+
+pub fn sort_string(values Vec<string>) {
+    i := 1
+    for (; i < values.len(); i++) {
+        value := values[i]
+        j := i
+        for (; j > 0 && str.cmp(values[j - 1], value) > 0; j--) { values[j] = values[j - 1] }
+        values[j] = value
+    }
+}
+
+pub fn reverse_i32(values Vec<i32>) {
+    i := 0
+    j := values.len() - 1
+    for (; i < j; i++) {
+        value := values[i]
+        values[i] = values[j]
+        values[j] = value
+        j -= 1
+    }
+}
+
+pub fn reverse_i64(values Vec<i64>) {
+    i := 0
+    j := values.len() - 1
+    for (; i < j; i++) {
+        value := values[i]
+        values[i] = values[j]
+        values[j] = value
+        j -= 1
+    }
+}
+
+pub fn reverse_string(values Vec<string>) {
+    i := 0
+    j := values.len() - 1
+    for (; i < j; i++) {
+        value := values[i]
+        values[i] = values[j]
+        values[j] = value
+        j -= 1
+    }
+}

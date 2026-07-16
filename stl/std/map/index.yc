@@ -14,6 +14,16 @@ pub struct Std2MapStringI32 {
     values []i32
 }
 
+pub struct StringLookup {
+    found bool
+    value string
+}
+
+pub struct I32Lookup {
+    found bool
+    value i32
+}
+
 fn normalized_capacity(capacity i32) i32 {
     if capacity <= 0 {
         return 4
@@ -99,8 +109,76 @@ pub fn get_i32_or(handle Map<string, i32>, key string, missing i32) i32 {
     return get_i32_value(handle, key, missing)
 }
 
+fn count_keys(keys []string) i32 {
+    total := 0
+    i := 0
+    for (; i < array.len(keys); i++) {
+        if array.get(keys, i) != none { total += 1 }
+    }
+    return total
+}
+
+fn grow_string(map *Std2MapString) {
+    old_keys := map.keys
+    old_values := map.values
+    old_cap := array.len(old_keys)
+    next_cap := old_cap * 2
+    if next_cap < 4 { next_cap = 4 }
+    new_keys := array.new([]string, next_cap)
+    new_values := array.new([]string, next_cap)
+    i := 0
+    for (; i < next_cap; i++) {
+        new_keys = array.append(new_keys, none)
+        new_values = array.append(new_values, none)
+    }
+    i = 0
+    for (; i < old_cap; i++) {
+        key := array.get(old_keys, i)
+        if key != none {
+            array.set(new_keys, i, key)
+            array.set(new_values, i, array.get(old_values, i))
+        }
+    }
+    mem.replace_child(cast(*byte, map), cast(*byte, old_keys), cast(*byte, new_keys))
+    mem.replace_child(cast(*byte, map), cast(*byte, old_values), cast(*byte, new_values))
+    mem.free(cast(*byte, old_keys))
+    mem.free(cast(*byte, old_values))
+    map.keys = new_keys
+    map.values = new_values
+}
+
+fn grow_i32(map *Std2MapStringI32) {
+    old_keys := map.keys
+    old_values := map.values
+    old_cap := array.len(old_keys)
+    next_cap := old_cap * 2
+    if next_cap < 4 { next_cap = 4 }
+    new_keys := array.new([]string, next_cap)
+    new_values := array.new([]i32, next_cap)
+    i := 0
+    for (; i < next_cap; i++) {
+        new_keys = array.append(new_keys, none)
+        new_values = array.append(new_values, 0)
+    }
+    i = 0
+    for (; i < old_cap; i++) {
+        key := array.get(old_keys, i)
+        if key != none {
+            array.set(new_keys, i, key)
+            array.set(new_values, i, array.get(old_values, i))
+        }
+    }
+    mem.replace_child(cast(*byte, map), cast(*byte, old_keys), cast(*byte, new_keys))
+    mem.replace_child(cast(*byte, map), cast(*byte, old_values), cast(*byte, new_values))
+    mem.free(cast(*byte, old_keys))
+    mem.free(cast(*byte, old_values))
+    map.keys = new_keys
+    map.values = new_values
+}
+
 pub fn put_string_value(handle Map<string, string>, key string, value string) i32 {
     map: *Std2MapString := cast(*Std2MapString, handle)
+    if find(map.keys, key) < 0 && first_empty(map.keys) < 0 { grow_string(map) }
     return put(map.keys, map.values, key, value)
 }
 
@@ -110,6 +188,7 @@ pub fn set_string(handle Map<string, string>, key string, value string) i32 {
 
 pub fn put_i32_value(handle Map<string, i32>, key string, value i32) i32 {
     map: *Std2MapStringI32 := cast(*Std2MapStringI32, handle)
+    if find(map.keys, key) < 0 && first_empty(map.keys) < 0 { grow_i32(map) }
     return put_i32(map.keys, map.values, key, value)
 }
 
@@ -137,6 +216,107 @@ pub fn remove_i32_value(handle Map<string, i32>, key string) {
 
 pub fn delete_i32(handle Map<string, i32>, key string) {
     remove_i32_value(handle, key)
+}
+
+pub fn len_string(handle Map<string, string>) i32 {
+    map: *Std2MapString := cast(*Std2MapString, handle)
+    return count_keys(map.keys)
+}
+
+pub fn len_i32(handle Map<string, i32>) i32 {
+    map: *Std2MapStringI32 := cast(*Std2MapStringI32, handle)
+    return count_keys(map.keys)
+}
+
+pub fn capacity_string(handle Map<string, string>) i32 {
+    map: *Std2MapString := cast(*Std2MapString, handle)
+    return array.len(map.keys)
+}
+
+pub fn capacity_i32(handle Map<string, i32>) i32 {
+    map: *Std2MapStringI32 := cast(*Std2MapStringI32, handle)
+    return array.len(map.keys)
+}
+
+pub fn clear_string(handle Map<string, string>) {
+    map: *Std2MapString := cast(*Std2MapString, handle)
+    i := 0
+    for (; i < array.len(map.keys); i++) {
+        array.set(map.keys, i, none)
+        array.set(map.values, i, none)
+    }
+}
+
+pub fn clear_i32(handle Map<string, i32>) {
+    map: *Std2MapStringI32 := cast(*Std2MapStringI32, handle)
+    i := 0
+    for (; i < array.len(map.keys); i++) {
+        array.set(map.keys, i, none)
+        array.set(map.values, i, 0)
+    }
+}
+
+pub fn lookup_string(handle Map<string, string>, key string) StringLookup {
+    if !has_string(handle, key) { return StringLookup{found: false, value: ""} }
+    value: string := get_string_value(handle, key)
+    return StringLookup{found: true, value: value}
+}
+
+pub fn lookup_i32(handle Map<string, i32>, key string) I32Lookup {
+    map: *Std2MapStringI32 := cast(*Std2MapStringI32, handle)
+    index := find(map.keys, key)
+    if index < 0 { return I32Lookup{found: false, value: 0} }
+    return I32Lookup{found: true, value: array.get(map.values, index)}
+}
+
+pub fn key_snapshot_string(handle Map<string, string>) Vec<string> {
+    map: *Std2MapString := cast(*Std2MapString, handle)
+    out := Vec<string>{}
+    i := 0
+    for (; i < array.len(map.keys); i++) {
+        key: string := array.get(map.keys, i)
+        if key != none { out.push(key) }
+    }
+    return out
+}
+
+pub fn key_snapshot_i32(handle Map<string, i32>) Vec<string> {
+    map: *Std2MapStringI32 := cast(*Std2MapStringI32, handle)
+    out := Vec<string>{}
+    i := 0
+    for (; i < array.len(map.keys); i++) {
+        key: string := array.get(map.keys, i)
+        if key != none { out.push(key) }
+    }
+    return out
+}
+
+pub fn value_snapshot_string(handle Map<string, string>) Vec<string> {
+    map: *Std2MapString := cast(*Std2MapString, handle)
+    out := Vec<string>{}
+    i := 0
+    for (; i < array.len(map.keys); i++) {
+        key: string := array.get(map.keys, i)
+        if key != none {
+            value: string := get_string_value(handle, key)
+            out.push(value)
+        }
+    }
+    return out
+}
+
+pub fn value_snapshot_i32(handle Map<string, i32>) Vec<i32> {
+    map: *Std2MapStringI32 := cast(*Std2MapStringI32, handle)
+    out := Vec<i32>{}
+    i := 0
+    for (; i < array.len(map.keys); i++) {
+        key: string := array.get(map.keys, i)
+        if key != none {
+            value: i32 := get_i32_value(handle, key, 0)
+            out.push(value)
+        }
+    }
+    return out
 }
 
 pub fn free_string(handle Map<string, string>) {

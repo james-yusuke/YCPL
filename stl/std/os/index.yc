@@ -1,12 +1,8 @@
 module std.os
 
-extern fn c_getenv(name string) string as "getenv"
-extern fn c_system(command string) i32 as "system"
-extern fn runtime_process_run(program string, args *string, count i64) i32 as "yc_process_run"
-extern fn runtime_process_capture(program string, args *string, count i64, status *i32) string as "yc_process_capture"
-extern fn runtime_process_run_packed(program string, args string, size i64) i32 as "yc_process_run_packed"
-extern fn runtime_process_capture_packed(program string, args string, size i64, status *i32) string as "yc_process_capture_packed"
-extern fn runtime_native_link(clang string, llvm_config string, linkflags string, object_file string, runtime_object string, output_file string) i32 as "yc_native_link"
+import "c/stdlib" as cstdlib
+import "c/yc_runtime" as runtime
+import "std/text" as text
 
 pub struct ProcessOutput {
     ok bool
@@ -15,30 +11,30 @@ pub struct ProcessOutput {
 }
 
 pub fn getenv(name string) string {
-    return c_getenv(name)
+    return cstdlib.getenv(name)
 }
 
 pub fn system(command string) i32 {
-    return c_system(command)
+    return cstdlib.system(command)
 }
 
 pub fn run(program string, args *string, count i32) i32 {
-    return runtime_process_run(program, args, count)
+    return runtime.process_run(program, args, count)
 }
 
 pub fn capture(program string, args *string, count i32) ProcessOutput {
     status := 0
-    text := runtime_process_capture(program, args, count, &status)
+    text := runtime.process_capture(program, args, count, &status)
     return ProcessOutput{ok: status == 0 && text != none, status: status, text: text}
 }
 
 pub fn run_packed(program string, args string, size i32) i32 {
-    return runtime_process_run_packed(program, args, size)
+    return runtime.process_run_packed(program, args, size)
 }
 
 pub fn capture_packed(program string, args string, size i32) ProcessOutput {
     status := 0
-    text := runtime_process_capture_packed(program, args, size, &status)
+    text := runtime.process_capture_packed(program, args, size, &status)
     return ProcessOutput{ok: status == 0 && text != none, status: status, text: text}
 }
 
@@ -46,9 +42,41 @@ pub fn capture_packed(program string, args string, size i32) ProcessOutput {
 // current scope. Returning it directly avoids copying a managed string through
 // a transient aggregate result.
 pub fn capture_packed_text(program string, args string, size i32, status *i32) string {
-    return runtime_process_capture_packed(program, args, size, status)
+    return runtime.process_capture_packed(program, args, size, status)
 }
 
 pub fn native_link(clang string, llvm_config string, linkflags string, object_file string, runtime_object string, output_file string) i32 {
-    return runtime_native_link(clang, llvm_config, linkflags, object_file, runtime_object, output_file)
+    return runtime.native_link(clang, llvm_config, linkflags, object_file, runtime_object, output_file)
+}
+
+fn pack_args(args Vec<string>) StringBuilder {
+    size := 1
+    i := 0
+    for (; i < args.len(); i++) { size += text.len(args[i]) + 1 }
+    packed := text.builder(size)
+    i = 0
+    for (; i < args.len(); i++) {
+        packed = text.append(packed, args[i])
+        packed = text.append_char(packed, 0)
+    }
+    return packed
+}
+
+pub fn run_args(program string, args Vec<string>) i32 {
+    packed := pack_args(args)
+    return run_packed(program, text.to_string(packed), text.builder_len(packed))
+}
+
+pub fn capture_args(program string, args Vec<string>) ProcessOutput {
+    packed := pack_args(args)
+    return capture_packed(program, text.to_string(packed), text.builder_len(packed))
+}
+
+pub fn cwd() string { return runtime.current_dir() }
+pub fn home_dir() string { return getenv("HOME") }
+
+pub fn temp_dir() string {
+    value := getenv("TMPDIR")
+    if value == none || text.len(value) == 0 { return "/tmp" }
+    return value
 }

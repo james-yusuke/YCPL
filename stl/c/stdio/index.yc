@@ -7,3 +7,4 @@ pub extern fn fgets(buf string, size i32, file *byte) string as "fgets"
 
 pub extern fn popen(command string, mode string) *byte as "popen"
 pub extern fn pclose(file *byte) i32 as "pclose"
+pub extern fn snprintf(buf *byte, size size_t, format string, value... any) i32 as "snprintf"

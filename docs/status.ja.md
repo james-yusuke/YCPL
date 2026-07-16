@@ -62,7 +62,7 @@ C runtimeは次の順で解決します。
 
 ## 検証済み
 
-- 任意compiler実行ファイルへ適用できるconformance harness: 77/77 PASS
+- 任意compiler実行ファイルへ適用できる拡張可能なconformance harness
 - 全examples、stdlib、`c/*` FFI、project/module、runtime ownership
 - 全negative fixtureの終了分類と診断位置・substring
 - Vecの拡張、共有handle、managed要素、nested Vec、index overwrite、clear

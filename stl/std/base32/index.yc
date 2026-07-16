@@ -4,6 +4,13 @@ import "std/bytes" as bytes
 import "std/mem" as mem
 import "std/str" as str
 
+pub struct DecodeResult {
+    ok bool
+    value Bytes
+    message string
+    offset i32
+}
+
 fn alphabet(index i32) i32 {
     if index < 26 {
         return 'A' + index
@@ -160,4 +167,36 @@ pub fn is_valid(text string) bool {
     ok := bytes.is_valid(out)
     bytes.free(out)
     return ok
+}
+
+fn invalid_offset(text string) i32 {
+    if text == none { return 0 }
+    n: i32 := str.len(text)
+    if n % 8 != 0 { return n }
+    seen_pad := false
+    pad := 0
+    i := 0
+    for (; i < n; i++) {
+        ch := text[i]
+        if ch == '=' {
+            seen_pad = true
+            pad += 1
+        } else {
+            if seen_pad || value_of(ch) < 0 { return i }
+        }
+    }
+    if pad != 0 && pad != 1 && pad != 3 && pad != 4 && pad != 6 { return n - pad }
+    return -1
+}
+
+pub fn decode_result(text string) DecodeResult {
+    offset := invalid_offset(text)
+    if offset >= 0 {
+        return DecodeResult{ok: false, value: bytes.wrap(none, 0), message: "invalid base32 text", offset: offset}
+    }
+    value := decode(text)
+    if !bytes.is_valid(value) {
+        return DecodeResult{ok: false, value: value, message: "invalid base32 padding bits", offset: str.len(text)}
+    }
+    return DecodeResult{ok: true, value: value, message: "", offset: -1}
 }

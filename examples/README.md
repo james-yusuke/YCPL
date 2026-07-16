@@ -23,6 +23,7 @@ mixed into normal examples.
 - `stdlib/base64.yc` and `stdlib/encoding.yc`: managed encoding APIs
 - `stdlib/json.yc`: JSON values and non-owning views
 - `stdlib/io_echo.yc`: file-descriptor I/O with a managed byte buffer
+- `stdlib/foundation.yc`: text, Vec sorting, strict JSON, paths, and UTF-8
 
 No public example requires `free`. Raw allocation and compatibility APIs are
 tested only under `tests/fixtures/compat` and `tests/fixtures/runtime`.

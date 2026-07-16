@@ -25,17 +25,28 @@ std/
 ├─ array  make, push, get, set, free 互換
 ├─ mem    managed alloc, copy, sizeof
 ├─ str    len, eq, cmp
-├─ math   abs, sqrt, pow
-├─ io     read/write, LSP frames
-├─ fs     exists, read_file, write_file
-├─ os     getenv, system
-├─ text   find, offsets
-├─ json   parse, get, stringify
-├─ map    runtime-backed arrays and Map<string, T> interop helpers
-├─ bytes  owned/wrapped binary buffers
+├─ math   型別min/max/clamp/abs、丸め、sqrt、pow
+├─ io     partial I/Oを完了するread/write helper
+├─ fs     text/bytes I/O、directory、stat、rename/remove
+├─ os     process引数、capture、cwd/home/temp
+├─ text   trim、replace、split/join、ASCII変換
+│  └─ ascii  text facadeのASCII実装submodule
+├─ utf8   validation、decode/encode、UTF-16 column
+├─ strconv strict parseとformat
+├─ path   filesystem非依存のPOSIX lexical path
+├─ json   strict parse、access、stringify
+│  └─ scanner JSON token/value boundary
+├─ jsonrpc JSON-RPC/LSP fieldとContent-Length helper
+├─ ycpl/syntax YCPL syntax error推定
+├─ map    自動拡張、lookup Result、managed snapshot
+├─ bytes  可変長binary bufferと検索・比較
+├─ sort   Vec<i32/i64/string>のsort/reverse
 ├─ hex    bytes <-> hexadecimal text
+├─ base32 bytes <-> base32 text
 ├─ base64 bytes <-> base64 text
 ├─ hash   FNV-1a32, CRC32
+├─ time   wall clock、monotonic clock、sleep
+├─ random seed可能な非暗号学的PRNG
 ├─ llvm   LLVM互換wrapper
 └─ unsafe/mem 明示的unsafe用途のmalloc/calloc/realloc/free wrapper
 
@@ -80,13 +91,57 @@ fmt.println(b.eq(decoded))
 | `std/fs` | `stl/std/fs/index.yc` |
 | `std/os` | `stl/std/os/index.yc` |
 | `std/text` | `stl/std/text/index.yc` |
+| `std/text/ascii` | `stl/std/text/ascii/index.yc` |
+| `std/utf8` | `stl/std/utf8/index.yc` |
+| `std/strconv` | `stl/std/strconv/index.yc` |
+| `std/path` | `stl/std/path/index.yc` |
 | `std/json` | `stl/std/json/index.yc` |
+| `std/json/scanner` | `stl/std/json/scanner/index.yc` |
+| `std/jsonrpc` | `stl/std/jsonrpc/index.yc` |
+| `std/ycpl/syntax` | `stl/std/ycpl/syntax/index.yc` |
 | `std/bytes` | `stl/std/bytes/index.yc` |
+| `std/sort` | `stl/std/sort/index.yc` |
 | `std/hex` | `stl/std/hex/index.yc` |
 | `std/base32` | `stl/std/base32/index.yc` |
 | `std/base64` | `stl/std/base64/index.yc` |
 | `std/hash` | `stl/std/hash/index.yc` |
+| `std/time` | `stl/std/time/index.yc` |
+| `std/random` | `stl/std/random/index.yc` |
 | `std/llvm` | `stl/std/llvm/index.yc` |
+
+`index.yc`は公開entry/facadeです。複数責務を持つ処理は
+`std/json/scanner`、`std/text/ascii`のような明示的import pathへ分離し、
+同一moduleの複数ファイル暗黙結合は行いません。`JsonValue`や
+`StringBuilder`など既存公開型は型re-exportがないためentry moduleに残します。
+
+## 基礎API
+
+- `std/text`: `ends_with`、`trim*`、`replace`、`split`、`join_all`、ASCII大小文字変換。
+- `std/utf8`: strict decode、validation、code point count、encode、UTF-16 column。
+- `std/strconv`: i32/i64/doubleの用途別Result付きparseとmanaged string format。
+- `std/bytes`: resize、append、contains/index、compare、reverse。新コードに`free`は不要です。
+- `std/path`: `join`、`normalize`、`base`、`dir`、`ext`、`stem`、`is_absolute`。
+- `std/fs`: text/bytes read/write、append、nested mkdir、rename/remove、stat。
+- `std/os`: `Vec<string>`引数のrun/captureとcwd/home/temp directory。
+- `std/map`: 自動capacity拡張、len/capacity/clear、found分離lookup、keys/values snapshot。
+- `std/sort`: `Vec<i32>`、`Vec<i64>`、`Vec<string>`のsort/reverse。
+- `std/time`: Unix millisecond、monotonic instant、elapsed、sleep。
+- `std/random`: seed可能で再現可能なPRNG。暗号用途には使用しません。
+
+失敗可能な新APIは、`ok`、用途別の`value`、`message`を持つResultを返します。
+encodingの`decode_result`とJSON parseは失敗位置`offset`も返します。旧
+`read_file`、`write_file`、`mkdir`、`decode`、`json.parse`は互換wrapperとして
+維持されます。
+
+## JSONとLSP helper
+
+`std/json.parse_result`はnumber、decimal/exponent、escape、Unicode surrogate pair、
+trailing textをstrictに検査します。型predicate、`has`、`keys`、`items`、
+`as_*`、`get_*_or`、`escape_string`、`quote_string`を利用できます。
+
+JSON-RPC field処理は`std/jsonrpc`、YCPL構文診断推定は`std/ycpl/syntax`へ分離
+されています。`std/json`内の旧同名APIはdeprecated forwarding wrapperです。
+YCPL LSPは新moduleを直接importします。
 
 ## よく使う流れ
 

@@ -1,0 +1,129 @@
+module std.strconv
+
+import "c/stdlib" as cstdlib
+import "c/yc_runtime" as runtime
+import "std/json/scanner" as scanner
+import "std/mem" as mem
+import "std/text" as text
+
+pub struct ParseI32Result {
+    ok bool
+    value i32
+    message string
+}
+
+pub struct ParseI64Result {
+    ok bool
+    value i64
+    message string
+}
+
+pub struct ParseDoubleResult {
+    ok bool
+    value double
+    message string
+}
+
+pub fn parse_i64(source string) ParseI64Result {
+    if source == none || text.len(source) == 0 { return ParseI64Result{ok: false, value: 0, message: "empty integer"} }
+    n := text.len(source)
+    i := 0
+    negative := false
+    if source[i] == '-' || source[i] == '+' {
+        negative = source[i] == '-'
+        i += 1
+    }
+    if i >= n { return ParseI64Result{ok: false, value: 0, message: "missing integer digits"} }
+    limit: i64 := -922337203
+    limit = limit * 1000000000 - 685477580
+    limit *= 10
+    if negative { limit -= 8 } else { limit -= 7 }
+    mult_min := limit / 10
+    result: i64 := 0
+    for (; i < n; i++) {
+        ch := source[i]
+        if ch < '0' || ch > '9' { return ParseI64Result{ok: false, value: 0, message: "invalid integer character"} }
+        digit: i64 := ch - '0'
+        if result < mult_min { return ParseI64Result{ok: false, value: 0, message: "integer overflow"} }
+        result *= 10
+        if result < limit + digit { return ParseI64Result{ok: false, value: 0, message: "integer overflow"} }
+        result -= digit
+    }
+    if !negative { result = -result }
+    return ParseI64Result{ok: true, value: result, message: ""}
+}
+
+pub fn parse_i32(source string) ParseI32Result {
+    parsed := parse_i64(source)
+    if !parsed.ok { return ParseI32Result{ok: false, value: 0, message: parsed.message} }
+    if parsed.value < -2147483648 || parsed.value > 2147483647 {
+        return ParseI32Result{ok: false, value: 0, message: "integer overflow"}
+    }
+    return ParseI32Result{ok: true, value: cast(i32, parsed.value), message: ""}
+}
+
+pub fn parse_double(source string) ParseDoubleResult {
+    if source == none || text.len(source) == 0 { return ParseDoubleResult{ok: false, value: 0.0, message: "empty float"} }
+    start := 0
+    if source[0] == '+' {
+        start = 1
+        if start >= text.len(source) { return ParseDoubleResult{ok: false, value: 0.0, message: "missing float digits"} }
+    }
+    end_pos := scanner.value_end(source, start)
+    if end_pos != text.len(source) || scanner.kind_at(source, start) != 6 {
+        return ParseDoubleResult{ok: false, value: 0.0, message: "invalid float"}
+    }
+    return ParseDoubleResult{ok: true, value: cstdlib.atof(source), message: ""}
+}
+
+pub fn format_i32(value i32) string {
+    negative := value < 0
+    work := value
+    if work > 0 { work = -work }
+    digits := 1
+    probe := work
+    for (; probe <= -10; ) {
+        digits += 1
+        probe /= 10
+    }
+    size := digits
+    if negative { size += 1 }
+    out: string := mem.calloc(size + 1, 1)
+    i := size - 1
+    for (; i >= 0 && work != 0; i--) {
+        digit := -(work % 10)
+        out[i] = '0' + digit
+        work /= 10
+    }
+    if value == 0 { out[size - 1] = '0' }
+    if negative { out[0] = '-' }
+    return out
+}
+
+pub fn format_i64(value i64) string {
+    negative := value < 0
+    work := value
+    if work > 0 { work = -work }
+    digits := 1
+    probe := work
+    for (; probe <= -10; ) {
+        digits += 1
+        probe /= 10
+    }
+    size := digits
+    if negative { size += 1 }
+    out: string := mem.calloc(size + 1, 1)
+    i := size - 1
+    for (; i >= 0 && work != 0; i--) {
+        digit := -(work % 10)
+        out[i] = '0' + cast(i32, digit)
+        work /= 10
+    }
+    if value == 0 { out[size - 1] = '0' }
+    if negative { out[0] = '-' }
+    return out
+}
+
+pub fn format_double(value double) string {
+    return runtime.format_double(value)
+}

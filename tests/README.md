@@ -24,8 +24,8 @@ tests/run_conformance.sh ./bazel-bin/ycc
 ```
 
 The Bazel fixed-point gate rebuilds the compiler with stage2 and stage3,
-canonicalizes both LLVM IR modules, compares them exactly, and runs the 77-case
-conformance suite with both generated compilers:
+canonicalizes both LLVM IR modules, compares them exactly, and runs the same
+expanding conformance suite with both generated compilers:
 
 ```sh
 bazel test //:self_host_stage_test //:ycc_ycpl_test

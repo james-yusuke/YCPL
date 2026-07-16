@@ -1,0 +1,118 @@
+module std.jsonrpc
+
+import "std/mem" as mem
+import "std/str" as str
+import "std/text" as text
+import "std/json/scanner" as scanner
+
+pub fn method_is(message string, method string) bool {
+    return text.contains(message, method)
+}
+
+pub fn field_value_start(message string, key string) i32 {
+    key_pos := text.find(message, key)
+    if key_pos < 0 { return -1 }
+    i := key_pos + text.len(key)
+    n := text.len(message)
+    for (; i < n && message[i] != ':'; i++) {}
+    if i >= n { return -1 }
+    return scanner.skip_ws(message, i + 1)
+}
+
+pub fn field_i32(message string, key string) i32 {
+    i := field_value_start(message, key)
+    if i < 0 { return 0 }
+    n := text.len(message)
+    sign := 1
+    if i < n && message[i] == '-' {
+        sign = -1
+        i += 1
+    }
+    value := 0
+    for (; i < n && message[i] >= '0' && message[i] <= '9'; i++) {
+        value = value * 10 + (message[i] - '0')
+    }
+    return value * sign
+}
+
+pub fn id_i32(message string) i32 {
+    return field_i32(message, "\"id\"")
+}
+
+fn decode_string(message string, start i32, end_pos i32) string {
+    if start < 0 || end_pos <= start || message[start] != '"' { return none }
+    out: string := mem.calloc(end_pos - start + 1, 1)
+    i := start + 1
+    j := 0
+    for (; i < end_pos - 1; i++) {
+        ch := message[i]
+        if ch != '\\' {
+            out[j] = ch
+            j += 1
+            continue
+        }
+        i += 1
+        if i >= end_pos - 1 { return none }
+        esc := message[i]
+        if esc == 'n' {
+            out[j] = 10
+        } else if esc == 'r' {
+            out[j] = 13
+        } else if esc == 't' {
+            out[j] = 9
+        } else if esc == 'b' {
+            out[j] = 8
+        } else if esc == 'f' {
+            out[j] = 12
+        } else {
+            out[j] = esc
+        }
+        j += 1
+    }
+    return out
+}
+
+pub fn field_string(message string, key string) string {
+    start := field_value_start(message, key)
+    if start < 0 { return none }
+    n := text.len(message)
+    for (; start < n && message[start] != '"'; start++) {}
+    if start >= n { return none }
+    end_pos := scanner.string_end(message, start)
+    if end_pos < 0 { return none }
+    return decode_string(message, start, end_pos)
+}
+
+pub fn method_name_is(message string, name string) bool {
+    method := field_string(message, "\"method\"")
+    if method == none { return false }
+    ok := str.eq(method, name)
+    mem.free(method)
+    return ok
+}
+
+pub fn content_length_at(message string, start i32) i32 {
+    key := text.find_from(message, "Content-Length:", start)
+    if key < 0 { return -1 }
+    i := scanner.skip_ws(message, key + 15)
+    n := text.len(message)
+    value := 0
+    for (; i < n && message[i] >= '0' && message[i] <= '9'; i++) {
+        value = value * 10 + (message[i] - '0')
+    }
+    return value
+}
+
+pub fn digits_i32(value i32) i32 {
+    magnitude: i64 := value
+    digits := 1
+    if magnitude < 0 {
+        digits += 1
+        magnitude = -magnitude
+    }
+    for (; magnitude >= 10; ) {
+        magnitude /= 10
+        digits += 1
+    }
+    return digits
+}

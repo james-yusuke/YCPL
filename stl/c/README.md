@@ -8,12 +8,12 @@ that declares the corresponding functions:
 c/
 ├─ stdlib   malloc, calloc, realloc, free, getenv, system
 ├─ string   memcpy, memset, memcmp, strlen, strcmp, strcpy, strstr
-├─ stdio    fopen, fputs, fclose, popen, pclose, fgets
-├─ math     pow, sin, cos, sqrt
+├─ stdio    fopen, fputs, fclose, popen, pclose, fgets, snprintf
+├─ math     pow, sin, cos, sqrt, min/max/abs, rounding
 ├─ unistd   close, read, write
 ├─ fcntl    open
 ├─ llvm     LLVM 22 C API
-├─ yc_runtime compiler-support source traversal
+├─ yc_runtime compiler-support source traversal, fs, process, clock bridges
 └─ sys/stat mkdir
 ```
 

@@ -1,0 +1,52 @@
+import "std/fmt" as fmt
+import "std/fs" as fs
+import "std/os" as os
+import "std/path" as path
+import "std/text" as text
+import "std/time" as time
+
+fn main() {
+    root := path.join(os.temp_dir(), "ycpl-std-system-test")
+    nested := path.join(root, "a/b")
+    original := path.join(nested, "value.txt")
+    renamed := path.join(nested, "renamed.txt")
+
+    fs.remove(renamed)
+    fs.remove(original)
+    fmt.println(fs.create_dirs(nested).ok)
+    fmt.println(fs.is_dir(nested))
+    fmt.println(fs.write_text(original, "YC").ok)
+    fmt.println(fs.append_text(original, "PL").ok)
+
+    read := fs.read_text(original)
+    fmt.println(read.ok)
+    fmt.println(read.value)
+    info := fs.stat(original)
+    fmt.println(info.ok)
+    fmt.println(info.kind)
+    fmt.println(info.size)
+
+    fmt.println(fs.rename(original, renamed).ok)
+    fmt.println(fs.is_file(renamed))
+    fmt.println(!fs.exists(original))
+    fmt.println(fs.remove(renamed).ok)
+    fmt.println(!fs.exists(renamed))
+
+    cwd := os.cwd()
+    fmt.println(cwd != none && text.len(cwd) > 0)
+    fmt.println(os.home_dir() != none)
+    fmt.println(text.len(os.temp_dir()) > 0)
+    args := Vec<string>{}
+    args.push("%s-%s")
+    args.push("A")
+    args.push("B")
+    captured := os.capture_args("/usr/bin/printf", args)
+    fmt.println(captured.ok)
+    fmt.println(captured.text)
+
+    start := time.monotonic_now()
+    fmt.println(time.sleep_ms(1))
+    elapsed := time.elapsed(start)
+    fmt.println(elapsed.nanos >= 0)
+    fmt.println(time.unix_millis() > 0)
+}

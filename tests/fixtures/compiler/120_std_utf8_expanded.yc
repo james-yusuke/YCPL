@@ -1,0 +1,10 @@
+import "std/fmt" as fmt
+import "std/utf8" as utf8
+
+fn main() {
+    value := "A😀B"
+    fmt.println(utf8.valid(value))
+    fmt.println(utf8.codepoint_count(value))
+    fmt.println(utf8.utf16_column(value, 5))
+    fmt.println(utf8.encode(128512))
+}
