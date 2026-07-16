@@ -30,6 +30,7 @@ stl/std/                YCPL standard library
 examples/               language, stdlib, and project examples
 tests/                  conformance, negative, project, and runtime fixtures
 tools/lsp/              LSP written in YCPL
+editors/vscode/         VS Code extension and portable TypeScript LSP
 ```
 
 YCPL is early alpha and not production-ready. The compiler accepts single
@@ -158,6 +159,23 @@ The conformance suite covers all examples, stdlib and `c/*` FFI, project/module
 builds, runtime ownership, and negative exit/location/message checks. The Bazel
 fixed-point test also removes seed/fallback variables and the bootstrap binary
 from the stage2/stage3 execution environment.
+
+## VS Code
+
+The VS Code extension prefers a configured or workspace-built `YCPL-lsp`, then
+`YCPL-lsp` on `PATH`, and falls back to the TypeScript server bundled in its
+VSIX. It discovers the self-hosted `ycc` and provides check, build, build-ir,
+and run commands with editor diagnostics.
+
+```sh
+npm ci --prefix editors/vscode/language-server
+npm run check --prefix editors/vscode/language-server
+npm ci --prefix editors/vscode/extension
+npm run check --prefix editors/vscode/extension
+npm run package --prefix editors/vscode/extension
+```
+
+See [the VS Code extension guide](editors/vscode/extension/README.md).
 
 ## Documentation
 

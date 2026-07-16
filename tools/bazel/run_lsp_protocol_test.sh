@@ -75,7 +75,10 @@ ln -s "$RUNFILES_ROOT/stl" "$WORK_DIR/stl"
 
 (cd "$YCPL_LSP_PROJECT_DIR" && "$YCC" build-ir)
 
-LL_FILE="$(find "$YCPL_LSP_OUT_DIR" -name '*.ll' | head -1)"
+LL_FILE="$YCPL_LSP_OUT_DIR/merged.ll"
+if [ ! -f "$LL_FILE" ]; then
+  LL_FILE="$(find "$YCPL_LSP_OUT_DIR" -name '*.ll' -print | sort | head -1)"
+fi
 if [ -z "$LL_FILE" ]; then
   printf 'No LLVM IR generated in %s\n' "$YCPL_LSP_OUT_DIR" >&2
   exit 1
@@ -90,4 +93,5 @@ fi
 "$CLANG" -std=c11 -c "$YCPL_RUNTIME_SRC" -o "$YCPL_LSP_OUT_DIR/yc_runtime.o"
 "$CLANG" $LINKFLAGS "$YCPL_LSP_OUT_DIR/YCPL-lsp.o" "$YCPL_LSP_OUT_DIR/yc_runtime.o" -o "$YCPL_LSP_OUT_DIR/YCPL-lsp" -lm
 
-exec python3 "$RUNFILES_ROOT/tools/lsp/check_protocol.py" "$YCPL_LSP_OUT_DIR/YCPL-lsp"
+python3 "$RUNFILES_ROOT/tools/lsp/check_protocol.py" "$YCPL_LSP_OUT_DIR/YCPL-lsp"
+exec python3 "$RUNFILES_ROOT/tools/lsp/check_common_protocol.py" "$YCPL_LSP_OUT_DIR/YCPL-lsp"

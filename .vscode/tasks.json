@@ -47,6 +47,24 @@
       "problemMatcher": []
     },
     {
+      "label": "YCPL: test VSCode Extension Host",
+      "type": "shell",
+      "command": "npm run test:extension --prefix editors/vscode/extension",
+      "problemMatcher": []
+    },
+    {
+      "label": "YCPL: test native LSP in Extension Host",
+      "type": "shell",
+      "command": "npm run test:extension:native --prefix editors/vscode/extension",
+      "problemMatcher": []
+    },
+    {
+      "label": "YCPL: package VSIX",
+      "type": "shell",
+      "command": "npm run package --prefix editors/vscode/extension && npm run check-package --prefix editors/vscode/extension",
+      "problemMatcher": []
+    },
+    {
       "label": "YCPL: build LSP",
       "type": "shell",
       "command": "tools/lsp/build.sh",

@@ -161,3 +161,19 @@ test("retired language words are ordinary identifiers", () => {
   assert.equal(document.symbols.some((symbol) => symbol.name === "match" && symbol.category === "variable"), true);
   assert.equal(document.symbols.some((symbol) => symbol.name === "go" && symbol.category === "variable"), true);
 });
+
+test("parser preserves Vec and Map generic types", () => {
+  const document = parser.parse("file:///generic-types.yc", 1, [
+    "fn collect(values Vec<i32>, lookup Map<string, Vec<i32>>) Vec<i32> {",
+    "    result: Vec<i32> := Vec<i32>{capacity: 16}",
+    "    return result",
+    "}"
+  ].join("\n"));
+  const fn = document.symbols.find((symbol) => symbol.name === "collect");
+  assert.deepEqual(fn?.parameters?.map((parameter) => parameter.typeName), [
+    "Vec<i32>",
+    "Map<string,Vec<i32>>"
+  ]);
+  assert.equal(fn?.returnType, "Vec<i32>");
+  assert.equal(document.symbols.find((symbol) => symbol.name === "result")?.typeName, "Vec<i32>");
+});

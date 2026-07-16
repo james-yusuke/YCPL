@@ -66,15 +66,18 @@
       "patterns": [
         {
           "name": "meta.function.declaration.ycpl",
-          "match": "\\b(?:(pub|extern|intrinsic)\\s+)?(fn)\\s+([A-Za-z_][A-Za-z0-9_]*)",
+          "match": "\\b(?:(pub)\\s+)?(?:(extern|intrinsic)\\s+)?(fn)\\s+([A-Za-z_][A-Za-z0-9_]*)",
           "captures": {
             "1": {
               "name": "storage.modifier.ycpl"
             },
             "2": {
-              "name": "keyword.declaration.ycpl"
+              "name": "storage.modifier.ycpl"
             },
             "3": {
+              "name": "keyword.declaration.ycpl"
+            },
+            "4": {
               "name": "entity.name.function.ycpl"
             }
           }
@@ -149,7 +152,35 @@
       "patterns": [
         {
           "name": "entity.name.type.ycpl",
-          "match": "\\b(i32|i64|bool|char|byte|string|float|double|void|size_t|Type|T|any)\\b"
+          "match": "\\b(i32|i64|bool|char|byte|string|float|double|void|size_t|Type|T|any|Bytes|Vec|Map)\\b"
+        },
+        {
+          "name": "meta.generic.type.ycpl",
+          "begin": "\\b(Vec|Map)\\s*(<)",
+          "beginCaptures": {
+            "1": {
+              "name": "entity.name.type.ycpl"
+            },
+            "2": {
+              "name": "punctuation.definition.typeparameters.begin.ycpl"
+            }
+          },
+          "end": ">",
+          "endCaptures": {
+            "0": {
+              "name": "punctuation.definition.typeparameters.end.ycpl"
+            }
+          },
+          "patterns": [
+            {
+              "name": "entity.name.type.ycpl",
+              "match": "\\b(?:i32|i64|bool|char|byte|string|float|double|void|size_t|Type|T|any|Bytes|Vec|Map|[A-Z][A-Za-z0-9_]*)\\b"
+            },
+            {
+              "name": "punctuation.separator.typeparameters.ycpl",
+              "match": ","
+            }
+          ]
         },
         {
           "name": "entity.name.type.ycpl",
@@ -161,7 +192,7 @@
       "patterns": [
         {
           "name": "constant.numeric.ycpl",
-          "match": "\\b(0x[0-9A-Fa-f]+|0b[01]+|[0-9]+(?:\\.[0-9]+)?)\\b"
+          "match": "\\b(0x[0-9A-Fa-f]+|0b[01]+|[0-9]+(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?)\\b"
         }
       ]
     },

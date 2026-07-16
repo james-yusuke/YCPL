@@ -27,6 +27,7 @@ docs/
 | [Standard Library](stdlib.en.md) | `std/*` source modules and intrinsic bridges |
 | [Implementation Status](status.en.md) | Stable, experimental, and reserved features |
 | [YCPL LSP](../tools/lsp/README.md) | Editor protocol support |
+| [VS Code extension](../editors/vscode/extension/README.md) | Native LSP selection, compiler commands, and VSIX packaging |
 
 ```text
 Documented here        -> supported by current examples

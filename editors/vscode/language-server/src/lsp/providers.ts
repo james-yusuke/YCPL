@@ -125,8 +125,15 @@ export class YcplProviders {
         label: "defer",
         kind: CompletionItemKind.Snippet,
         insertTextFormat: InsertTextFormat.Snippet,
-        insertText: "defer ${1:value}.free()",
-        detail: "YCPL defer cleanup"
+        insertText: "defer ${1:cleanup}()",
+        detail: "YCPL deferred action"
+      },
+      {
+        label: "Vec",
+        kind: CompletionItemKind.Snippet,
+        insertTextFormat: InsertTextFormat.Snippet,
+        insertText: "Vec<${1:i32}>{capacity: ${2:16}}",
+        detail: "YCPL managed dynamic array"
       },
       {
         label: "scope",
@@ -407,7 +414,8 @@ export class YcplProviders {
 
   /** Returns incoming calls for a function. */
   incomingCalls(item: CallHierarchyItem): CallHierarchyIncomingCall[] {
-    const symbolId = callHierarchySymbolId(item);
+    const symbolId = callHierarchySymbolId(item)
+      ?? this.index.getDocument(item.uri)?.symbols.find((symbol) => symbol.category === "function" && symbol.name === item.name)?.id;
     if (!symbolId) {
       return [];
     }
@@ -432,7 +440,8 @@ export class YcplProviders {
 
   /** Returns outgoing calls for a function. */
   outgoingCalls(item: CallHierarchyItem): CallHierarchyOutgoingCall[] {
-    const symbolId = callHierarchySymbolId(item);
+    const symbolId = callHierarchySymbolId(item)
+      ?? this.index.getDocument(item.uri)?.symbols.find((symbol) => symbol.category === "function" && symbol.name === item.name)?.id;
     if (!symbolId) {
       return [];
     }

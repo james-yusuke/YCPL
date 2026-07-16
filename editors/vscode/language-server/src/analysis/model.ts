@@ -48,7 +48,10 @@ export const primitiveTypes = [
   "size_t",
   "Type",
   "T",
-  "any"
+  "any",
+  "Bytes",
+  "Vec",
+  "Map"
 ] as const;
 
 export const semanticTokenTypes = [

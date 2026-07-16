@@ -2,7 +2,8 @@
 
 The YCPL language server is a TypeScript ES module implementation of the
 Language Server Protocol. It is separate from the VS Code extension and can be
-run by any LSP-capable editor.
+run by any LSP-capable editor. The VSIX bundles it as the portable fallback
+when the native YCPL-written server cannot be discovered.
 
 ## Architecture
 
@@ -12,8 +13,9 @@ run by any LSP-capable editor.
   reference index keyed by `SymbolID`, not by identifier text.
 - `analysis/workspaceScanner.ts` lazily scans `.yc` files, skipping build and
   dependency directories.
-- `analysis/stdlib.ts` discovers YCPL standard-library modules, exported
-  functions, and exported structs from `stl/std`.
+- `analysis/stdlib.ts` recursively discovers YCPL standard-library modules,
+  exported functions, and exported structs from `stl/std`. A bundled manifest
+  covers the managed foundation modules when no source tree exists.
 - `compiler/compilerBridge.ts` defines the boundary for reusing the real YCPL
   compiler lexer, parser, AST, symbol table, type checker, formatter, and
   diagnostics without coupling LSP providers to compiler internals.
@@ -51,6 +53,9 @@ npm run check --prefix editors/vscode/language-server
 
 ## Compiler Integration
 
-`NullCompilerBridge` is intentionally small. Replace it with an implementation
-that calls the YCPL compiler frontend when that API is stable. The VS Code
-extension does not need to change because it only speaks LSP.
+`NullCompilerBridge` remains the integration seam for a future stable compiler
+editor API. Today the VS Code extension runs self-hosted `ycc check` separately
+and publishes its diagnostics alongside the incremental editor parser.
+
+`tools/lsp/check_common_protocol.py` applies the shared capability fixture to
+this server and the native YCPL-written server.

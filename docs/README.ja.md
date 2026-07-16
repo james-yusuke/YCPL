@@ -27,6 +27,7 @@ docs/
 | [標準ライブラリ](stdlib.ja.md) | `std/*` ソースモジュールと intrinsic bridge |
 | [実装状況](status.ja.md) | 安定、実験中、予約済み機能 |
 | [YCPL LSP](../tools/lsp/README.md) | エディタプロトコル対応 |
+| [VS Code拡張](../editors/vscode/extension/README.md) | native LSP選択、compiler command、VSIX packaging |
 
 ```text
 ここに載っている      -> 現在の examples で対象

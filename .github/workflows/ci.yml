@@ -51,6 +51,7 @@ jobs:
             lld \
             python3 \
             wget \
+            xvfb \
             zlib1g-dev
 
       - name: Install LLVM 22
@@ -218,10 +219,29 @@ jobs:
           npm run check --prefix editors/vscode/extension
           npm run check --prefix editors/vscode/language-server
 
+      - name: Test VSCode Extension Host
+        run: xvfb-run -a npm run test:extension --prefix editors/vscode/extension
+
       - name: Run LSP protocol tests
         run: |
           source "$RUNNER_TEMP/ycpl-llvm-env.sh"
           tools/lsp/run_tests.sh
+
+      - name: Test native LSP in VSCode Extension Host
+        run: xvfb-run -a npm run test:extension:native --prefix editors/vscode/extension
+
+      - name: Package VSCode extension
+        run: |
+          npm run package --prefix editors/vscode/extension
+          npm run check-package --prefix editors/vscode/extension
+
+      - name: Upload VSCode extension
+        uses: actions/upload-artifact@v7
+        with:
+          name: ycpl-vscode
+          path: editors/vscode/extension/artifacts/ycpl-vscode.vsix
+          archive: false
+          if-no-files-found: error
 
       - name: Summarize verification
         if: always()
@@ -235,6 +255,7 @@ jobs:
             echo "| Self-host chain | \`bazel build //:ycc-bootstrap //:ycc-stage1 //:ycc-stage2 //:ycc-stage3 //:ycc //:ycc-ycpl\` |"
             echo "| Fixed point and conformance | \`bazel test --test_timeout=1800 //...\` |"
             echo "| C++ regression | \`tests/run_bootstrap_regression.sh\` |"
-            echo "| VSCode extension | \`npm run check\` |"
-            echo "| LSP protocol | \`tools/lsp/run_tests.sh\` |"
+            echo "| VSCode extension | \`npm run check && npm run test:extension && npm run test:extension:native\` |"
+            echo "| VSIX package | \`npm run package && npm run check-package\` |"
+            echo "| Native and TypeScript LSP protocol | \`tools/lsp/run_tests.sh\` |"
           } >> "$GITHUB_STEP_SUMMARY"

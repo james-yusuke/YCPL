@@ -63,7 +63,7 @@ fn send_initialize(id i32) {
     at: i32 := 0
     at = append_str(body, at, "{\"jsonrpc\":\"2.0\",\"id\":")
     at = append_i32(body, at, id)
-    at = append_str(body, at, ",\"result\":{\"capabilities\":{\"textDocumentSync\":1,\"hoverProvider\":true,\"completionProvider\":{\"resolveProvider\":false,\"triggerCharacters\":[\".\"]},\"documentSymbolProvider\":true,\"semanticTokensProvider\":{\"legend\":{\"tokenTypes\":[\"namespace\",\"type\",\"function\",\"variable\",\"property\",\"keyword\",\"string\",\"number\",\"operator\",\"comment\"],\"tokenModifiers\":[\"declaration\",\"readonly\"]},\"full\":true},\"documentFormattingProvider\":true,\"documentRangeFormattingProvider\":true,\"foldingRangeProvider\":true,\"signatureHelpProvider\":{\"triggerCharacters\":[\"(\",\",\"]},\"definitionProvider\":true,\"declarationProvider\":true,\"typeDefinitionProvider\":true,\"referencesProvider\":true,\"documentHighlightProvider\":true,\"renameProvider\":{\"prepareProvider\":true},\"selectionRangeProvider\":true,\"workspaceSymbolProvider\":true}}}")
+    at = append_str(body, at, ",\"result\":{\"capabilities\":{\"textDocumentSync\":1,\"hoverProvider\":true,\"completionProvider\":{\"resolveProvider\":false,\"triggerCharacters\":[\".\",\"\\\"\",\"/\"]},\"documentSymbolProvider\":true,\"semanticTokensProvider\":{\"legend\":{\"tokenTypes\":[\"namespace\",\"type\",\"function\",\"variable\",\"property\",\"keyword\",\"string\",\"number\",\"operator\",\"comment\"],\"tokenModifiers\":[\"declaration\",\"readonly\"]},\"full\":true},\"documentFormattingProvider\":true,\"documentRangeFormattingProvider\":true,\"foldingRangeProvider\":true,\"signatureHelpProvider\":{\"triggerCharacters\":[\"(\",\",\"]},\"definitionProvider\":true,\"declarationProvider\":true,\"typeDefinitionProvider\":true,\"implementationProvider\":true,\"referencesProvider\":true,\"documentHighlightProvider\":true,\"renameProvider\":{\"prepareProvider\":true},\"selectionRangeProvider\":true,\"workspaceSymbolProvider\":true,\"inlayHintProvider\":true,\"codeActionProvider\":true,\"codeLensProvider\":{\"resolveProvider\":false},\"callHierarchyProvider\":true}}}")
     send_json_body(body)
     mem.free(body)
 }
@@ -71,12 +71,14 @@ fn send_initialize(id i32) {
 fn send_shutdown(id i32) {
     size := 37 + jsonrpc.digits_i32(id)
     fmt.printf("Content-Length: %d\r\n\r\n{\"jsonrpc\":\"2.0\",\"id\":%d,\"result\":null}", size, id)
+    io.flush()
 }
 
 fn send_hover(id i32) {
     value := "YCPL symbol"
     size := 76 + jsonrpc.digits_i32(id) + text.len(value)
     fmt.printf("Content-Length: %d\r\n\r\n{\"jsonrpc\":\"2.0\",\"id\":%d,\"result\":{\"contents\":{\"kind\":\"markdown\",\"value\":\"%s\"}}}", size, id, value)
+    io.flush()
 }
 
 fn send_hover_value(id i32, value string) {
@@ -134,8 +136,13 @@ fn send_hover_for_word(id i32, source string, word string) {
 }
 
 fn send_completion(id i32) {
-    size := 530 + jsonrpc.digits_i32(id)
-    fmt.printf("Content-Length: %d\r\n\r\n{\"jsonrpc\":\"2.0\",\"id\":%d,\"result\":{\"isIncomplete\":false,\"items\":[{\"label\":\"fn\",\"kind\":14},{\"label\":\"main\",\"kind\":15,\"insertTextFormat\":2,\"insertText\":\"fn main() i32 {\\n    $1\\n}\"},{\"label\":\"struct\",\"kind\":14},{\"label\":\"import\",\"kind\":14},{\"label\":\"const\",\"kind\":14},{\"label\":\"i32\",\"kind\":7},{\"label\":\"string\",\"kind\":7},{\"label\":\"bool\",\"kind\":7},{\"label\":\"std/fmt\",\"kind\":9},{\"label\":\"std/array\",\"kind\":9},{\"label\":\"std/json\",\"kind\":9},{\"label\":\"std/io\",\"kind\":9},{\"label\":\"fmt.println\",\"kind\":3},{\"label\":\"array.append\",\"kind\":3}]}}", size, id)
+    body: string := mem.calloc(4096, 1)
+    at: i32 := 0
+    at = append_str(body, at, "{\"jsonrpc\":\"2.0\",\"id\":")
+    at = append_i32(body, at, id)
+    at = append_str(body, at, ",\"result\":{\"isIncomplete\":false,\"items\":[{\"label\":\"fn\",\"kind\":14},{\"label\":\"main\",\"kind\":15,\"insertTextFormat\":2,\"insertText\":\"fn main() i32 {\\n    $1\\n    return 0\\n}\"},{\"label\":\"Vec\",\"kind\":15,\"insertTextFormat\":2,\"insertText\":\"Vec<${1:i32}>{capacity: ${2:16}}\"},{\"label\":\"struct\",\"kind\":14},{\"label\":\"import\",\"kind\":14},{\"label\":\"const\",\"kind\":14},{\"label\":\"i32\",\"kind\":7},{\"label\":\"string\",\"kind\":7},{\"label\":\"bool\",\"kind\":7},{\"label\":\"std/fmt\",\"kind\":9},{\"label\":\"std/json\",\"kind\":9},{\"label\":\"std/utf8\",\"kind\":9},{\"label\":\"std/strconv\",\"kind\":9},{\"label\":\"std/path\",\"kind\":9},{\"label\":\"std/sort\",\"kind\":9},{\"label\":\"std/time\",\"kind\":9},{\"label\":\"std/random\",\"kind\":9},{\"label\":\"fmt.println\",\"kind\":3},{\"label\":\"utf8.valid\",\"kind\":3},{\"label\":\"path.join\",\"kind\":3}]}}")
+    send_json_body(body)
+    mem.free(body)
 }
 
 fn is_ident_char(ch i32) bool {
@@ -207,11 +214,11 @@ fn slice_eq(source string, start i32, len i32, value string) bool {
 }
 
 fn is_keyword_token(source string, start i32, len i32) bool {
-    return slice_eq(source, start, len, "module") || slice_eq(source, start, len, "package") || slice_eq(source, start, len, "import") || slice_eq(source, start, len, "pub") || slice_eq(source, start, len, "extern") || slice_eq(source, start, len, "intrinsic") || slice_eq(source, start, len, "fn") || slice_eq(source, start, len, "struct") || slice_eq(source, start, len, "const") || slice_eq(source, start, len, "if") || slice_eq(source, start, len, "else") || slice_eq(source, start, len, "for") || slice_eq(source, start, len, "in") || slice_eq(source, start, len, "return") || slice_eq(source, start, len, "break") || slice_eq(source, start, len, "continue") || slice_eq(source, start, len, "as") || slice_eq(source, start, len, "none") || slice_eq(source, start, len, "true") || slice_eq(source, start, len, "false") || slice_eq(source, start, len, "enum") || slice_eq(source, start, len, "switch")
+    return slice_eq(source, start, len, "module") || slice_eq(source, start, len, "package") || slice_eq(source, start, len, "import") || slice_eq(source, start, len, "pub") || slice_eq(source, start, len, "extern") || slice_eq(source, start, len, "intrinsic") || slice_eq(source, start, len, "fn") || slice_eq(source, start, len, "struct") || slice_eq(source, start, len, "const") || slice_eq(source, start, len, "owned") || slice_eq(source, start, len, "if") || slice_eq(source, start, len, "else") || slice_eq(source, start, len, "for") || slice_eq(source, start, len, "in") || slice_eq(source, start, len, "return") || slice_eq(source, start, len, "break") || slice_eq(source, start, len, "continue") || slice_eq(source, start, len, "defer") || slice_eq(source, start, len, "scope") || slice_eq(source, start, len, "as") || slice_eq(source, start, len, "none") || slice_eq(source, start, len, "true") || slice_eq(source, start, len, "false") || slice_eq(source, start, len, "enum") || slice_eq(source, start, len, "type") || slice_eq(source, start, len, "switch") || slice_eq(source, start, len, "case") || slice_eq(source, start, len, "default")
 }
 
 fn is_type_token(source string, start i32, len i32) bool {
-    return slice_eq(source, start, len, "i32") || slice_eq(source, start, len, "i64") || slice_eq(source, start, len, "bool") || slice_eq(source, start, len, "char") || slice_eq(source, start, len, "byte") || slice_eq(source, start, len, "string") || slice_eq(source, start, len, "float") || slice_eq(source, start, len, "double") || slice_eq(source, start, len, "void") || slice_eq(source, start, len, "size_t") || slice_eq(source, start, len, "Type") || slice_eq(source, start, len, "T") || slice_eq(source, start, len, "any")
+    return slice_eq(source, start, len, "i32") || slice_eq(source, start, len, "i64") || slice_eq(source, start, len, "bool") || slice_eq(source, start, len, "char") || slice_eq(source, start, len, "byte") || slice_eq(source, start, len, "string") || slice_eq(source, start, len, "float") || slice_eq(source, start, len, "double") || slice_eq(source, start, len, "void") || slice_eq(source, start, len, "size_t") || slice_eq(source, start, len, "Type") || slice_eq(source, start, len, "T") || slice_eq(source, start, len, "any") || slice_eq(source, start, len, "Bytes") || slice_eq(source, start, len, "Vec") || slice_eq(source, start, len, "Map")
 }
 
 fn is_upper_ident(source string, start i32) bool {
@@ -246,6 +253,7 @@ fn append_semantic_token(out string, at i32, first bool, delta_line i32, delta_c
 fn send_empty_result(id i32) {
     size := 35 + jsonrpc.digits_i32(id)
     fmt.printf("Content-Length: %d\r\n\r\n{\"jsonrpc\":\"2.0\",\"id\":%d,\"result\":[]}", size, id)
+    io.flush()
 }
 
 fn send_semantic_tokens(id i32, source string) {
@@ -1515,6 +1523,7 @@ fn send_formatting(id i32, source string) {
     escaped_len := text.len(escaped)
     size := 122 + jsonrpc.digits_i32(id) + jsonrpc.digits_i32(end_line) + escaped_len
     fmt.printf("Content-Length: %d\r\n\r\n{\"jsonrpc\":\"2.0\",\"id\":%d,\"result\":[{\"range\":{\"start\":{\"line\":0,\"character\":0},\"end\":{\"line\":%d,\"character\":0}},\"newText\":\"%s\"}]}", size, id, end_line, escaped)
+    io.flush()
     mem.free(escaped)
     mem.free(formatted)
 }
@@ -1546,22 +1555,326 @@ fn send_folding_ranges(id i32, source string) {
 
     size := 76 + jsonrpc.digits_i32(id) + jsonrpc.digits_i32(start_line) + jsonrpc.digits_i32(end_line)
     fmt.printf("Content-Length: %d\r\n\r\n{\"jsonrpc\":\"2.0\",\"id\":%d,\"result\":[{\"startLine\":%d,\"endLine\":%d,\"kind\":\"region\"}]}", size, id, start_line, end_line)
+    io.flush()
 }
 
 fn send_signature_help(id i32) {
     size := 179 + jsonrpc.digits_i32(id)
     fmt.printf("Content-Length: %d\r\n\r\n{\"jsonrpc\":\"2.0\",\"id\":%d,\"result\":{\"signatures\":[{\"label\":\"fmt.println(value any)\",\"documentation\":\"Print a value followed by a newline.\"}],\"activeSignature\":0,\"activeParameter\":0}}", size, id)
+    io.flush()
+}
+
+fn send_inlay_hints(id i32, source string) {
+    if source == none {
+        send_empty_result(id)
+        return
+    }
+
+    body: string := mem.calloc(text.len(source) * 12 + 1024, 1)
+    at: i32 := 0
+    at = append_str(body, at, "{\"jsonrpc\":\"2.0\",\"id\":")
+    at = append_i32(body, at, id)
+    at = append_str(body, at, ",\"result\":[")
+    first := true
+    search := text.find(source, ":=")
+    for (; search >= 0; ) {
+        end_pos := search
+        for (; end_pos > 0 && (source[end_pos - 1] == ' ' || source[end_pos - 1] == 9); end_pos--) {
+        }
+        start := end_pos
+        for (; start > 0 && is_ident_char(source[start - 1]); start--) {
+        }
+        if start < end_pos {
+            if !first {
+                at = append_str(body, at, ",")
+            }
+            at = append_str(body, at, "{\"position\":{\"line\":")
+            at = append_i32(body, at, text.line_of_offset(source, end_pos))
+            at = append_str(body, at, ",\"character\":")
+            at = append_i32(body, at, text.utf16_col(source, end_pos))
+            at = append_str(body, at, "},\"label\":\": inferred\",\"kind\":1}")
+            first = false
+        }
+        search = text.find_from(source, ":=", search + 2)
+    }
+    at = append_str(body, at, "]}")
+    send_json_body(body)
+    mem.free(body)
+}
+
+fn send_code_actions(id i32) {
+    body: string := mem.calloc(512, 1)
+    at: i32 := 0
+    at = append_str(body, at, "{\"jsonrpc\":\"2.0\",\"id\":")
+    at = append_i32(body, at, id)
+    at = append_str(body, at, ",\"result\":[{\"title\":\"Check with self-hosted ycc\",\"kind\":\"quickfix\",\"command\":{\"title\":\"Check with self-hosted ycc\",\"command\":\"YCPL.check\"}}]}")
+    send_json_body(body)
+    mem.free(body)
+}
+
+fn count_word(source string, word string) i32 {
+    count: i32 := 0
+    pos := find_word_from(source, word, 0)
+    for (; pos >= 0; ) {
+        count += 1
+        pos = find_word_from(source, word, pos + text.len(word))
+    }
+    return count
+}
+
+fn send_code_lenses(id i32, source string) {
+    if source == none {
+        send_empty_result(id)
+        return
+    }
+
+    body: string := mem.calloc(text.len(source) * 12 + 1024, 1)
+    at: i32 := 0
+    at = append_str(body, at, "{\"jsonrpc\":\"2.0\",\"id\":")
+    at = append_i32(body, at, id)
+    at = append_str(body, at, ",\"result\":[")
+    first := true
+    search := text.find(source, "fn ")
+    for (; search >= 0; ) {
+        name_start := next_non_ws(source, search + 3)
+        len := ident_len_at(source, name_start)
+        if len > 0 {
+            name := text.slice(source, name_start, len)
+            if !first {
+                at = append_str(body, at, ",")
+            }
+            line := text.line_of_offset(source, name_start)
+            ch := text.utf16_col(source, name_start)
+            at = append_str(body, at, "{\"range\":")
+            at = append_range_json(body, at, line, ch, ch + len)
+            at = append_str(body, at, ",\"command\":{\"title\":\"")
+            at = append_i32(body, at, count_word(source, name) - 1)
+            at = append_str(body, at, " references\",\"command\":\"\"}}")
+            first = false
+            mem.free(name)
+        }
+        search = text.find_from(source, "fn ", search + 3)
+    }
+    at = append_str(body, at, "]}")
+    send_json_body(body)
+    mem.free(body)
+}
+
+fn send_call_hierarchy_prepare(id i32, uri string, source string, word string) {
+    if uri == none || source == none || word == none {
+        send_empty_result(id)
+        return
+    }
+    offset := find_declaration_offset(source, word)
+    if offset < 0 || !word_before_eq(source, offset, "fn") {
+        send_empty_result(id)
+        return
+    }
+    escaped_uri := json_escape_string(uri)
+    escaped_name := json_escape_string(word)
+    line := text.line_of_offset(source, offset)
+    ch := text.utf16_col(source, offset)
+    body: string := mem.calloc(2048 + text.len(escaped_uri) + text.len(escaped_name), 1)
+    at: i32 := 0
+    at = append_str(body, at, "{\"jsonrpc\":\"2.0\",\"id\":")
+    at = append_i32(body, at, id)
+    at = append_str(body, at, ",\"result\":[{\"name\":\"")
+    at = append_str(body, at, escaped_name)
+    at = append_str(body, at, "\",\"kind\":12,\"uri\":\"")
+    at = append_str(body, at, escaped_uri)
+    at = append_str(body, at, "\",\"range\":")
+    at = append_range_json(body, at, line, ch, ch + text.len(word))
+    at = append_str(body, at, ",\"selectionRange\":")
+    at = append_range_json(body, at, line, ch, ch + text.len(word))
+    at = append_str(body, at, ",\"data\":\"")
+    at = append_str(body, at, escaped_name)
+    at = append_str(body, at, "\"}]}")
+    send_json_body(body)
+    mem.free(body)
+    mem.free(escaped_uri)
+    mem.free(escaped_name)
+}
+
+fn matching_brace(source string, open i32) i32 {
+    if source == none || open < 0 || open >= text.len(source) || source[open] != '{' {
+        return -1
+    }
+    depth := 0
+    i := open
+    for (; i < text.len(source); i++) {
+        if source[i] == '{' {
+            depth += 1
+        } else if source[i] == '}' {
+            depth -= 1
+            if depth == 0 {
+                return i
+            }
+        }
+    }
+    return -1
+}
+
+fn append_call_item_json(out string, at i32, name string, uri string, source string, offset i32) i32 {
+    escaped_name := json_escape_string(name)
+    escaped_uri := json_escape_string(uri)
+    line := text.line_of_offset(source, offset)
+    ch := text.utf16_col(source, offset)
+    at = append_str(out, at, "{\"name\":\"")
+    at = append_str(out, at, escaped_name)
+    at = append_str(out, at, "\",\"kind\":12,\"uri\":\"")
+    at = append_str(out, at, escaped_uri)
+    at = append_str(out, at, "\",\"range\":")
+    at = append_range_json(out, at, line, ch, ch + text.len(name))
+    at = append_str(out, at, ",\"selectionRange\":")
+    at = append_range_json(out, at, line, ch, ch + text.len(name))
+    at = append_str(out, at, ",\"data\":\"")
+    at = append_str(out, at, escaped_name)
+    at = append_str(out, at, "\"}")
+    mem.free(escaped_name)
+    mem.free(escaped_uri)
+    return at
+}
+
+fn enclosing_function_offset(source string, offset i32) i32 {
+    search := text.find(source, "fn ")
+    found := -1
+    for (; search >= 0 && search < offset; ) {
+        open := text.find_from(source, "{", search + 3)
+        close := matching_brace(source, open)
+        if open >= 0 && close >= offset {
+            found = search
+        }
+        search = text.find_from(source, "fn ", search + 3)
+    }
+    return found
+}
+
+fn send_call_hierarchy_incoming(id i32, target string, uris []string, texts []string) {
+    if target == none {
+        send_empty_result(id)
+        return
+    }
+    body: string := mem.calloc(1048576, 1)
+    at: i32 := 0
+    at = append_str(body, at, "{\"jsonrpc\":\"2.0\",\"id\":")
+    at = append_i32(body, at, id)
+    at = append_str(body, at, ",\"result\":[")
+    first := true
+    i: i32 := 0
+    for (; i < array.len(uris); i++) {
+        doc_uri := array.get(uris, i)
+        source := array.get(texts, i)
+        if doc_uri != none && source != none {
+            pos := find_word_from(source, target, 0)
+            for (; pos >= 0; ) {
+                next := next_non_ws(source, pos + text.len(target))
+                if next < text.len(source) && text.find_from(source, "(", next) == next && !word_before_eq(source, pos, "fn") {
+                    caller_fn := enclosing_function_offset(source, pos)
+                    if caller_fn >= 0 {
+                        caller_start := next_non_ws(source, caller_fn + 3)
+                        caller_len := ident_len_at(source, caller_start)
+                        if caller_len > 0 {
+                            caller := text.slice(source, caller_start, caller_len)
+                            if !first {
+                                at = append_str(body, at, ",")
+                            }
+                            at = append_str(body, at, "{\"from\":")
+                            at = append_call_item_json(body, at, caller, doc_uri, source, caller_start)
+                            at = append_str(body, at, ",\"fromRanges\":[")
+                            line := text.line_of_offset(source, pos)
+                            ch := text.utf16_col(source, pos)
+                            at = append_range_json(body, at, line, ch, ch + text.len(target))
+                            at = append_str(body, at, "]}")
+                            first = false
+                            mem.free(caller)
+                        }
+                    }
+                }
+                pos = find_word_from(source, target, pos + text.len(target))
+            }
+        }
+    }
+    at = append_str(body, at, "]}")
+    send_json_body(body)
+    mem.free(body)
+}
+
+fn send_call_hierarchy_outgoing(id i32, caller string, uri string, source string, uris []string, texts []string) {
+    if caller == none || uri == none || source == none {
+        send_empty_result(id)
+        return
+    }
+    decl := find_declaration_offset(source, caller)
+    if decl < 0 {
+        send_empty_result(id)
+        return
+    }
+    open := text.find_from(source, "{", decl)
+    close := matching_brace(source, open)
+    if open < 0 || close < 0 {
+        send_empty_result(id)
+        return
+    }
+    body: string := mem.calloc(1048576, 1)
+    at: i32 := 0
+    at = append_str(body, at, "{\"jsonrpc\":\"2.0\",\"id\":")
+    at = append_i32(body, at, id)
+    at = append_str(body, at, ",\"result\":[")
+    first := true
+    pos := open + 1
+    for (; pos < close; ) {
+        if is_ident_char(source[pos]) {
+            start := pos
+            len := ident_len_at(source, start)
+            pos += len
+            next := next_non_ws(source, pos)
+            if next < close && source[next] == '(' && !is_keyword_token(source, start, len) {
+                callee := text.slice(source, start, len)
+                doc: i32 := 0
+                emitted := false
+                for (; doc < array.len(uris) && !emitted; doc++) {
+                    target_uri := array.get(uris, doc)
+                    target_source := array.get(texts, doc)
+                    if target_uri != none && target_source != none {
+                        target_offset := find_declaration_offset(target_source, callee)
+                        if target_offset >= 0 && word_before_eq(target_source, target_offset, "fn") {
+                            if !first {
+                                at = append_str(body, at, ",")
+                            }
+                            at = append_str(body, at, "{\"to\":")
+                            at = append_call_item_json(body, at, callee, target_uri, target_source, target_offset)
+                            at = append_str(body, at, ",\"fromRanges\":[")
+                            line := text.line_of_offset(source, start)
+                            ch := text.utf16_col(source, start)
+                            at = append_range_json(body, at, line, ch, ch + len)
+                            at = append_str(body, at, "]}")
+                            first = false
+                            emitted = true
+                        }
+                    }
+                }
+                mem.free(callee)
+            }
+        } else {
+            pos += 1
+        }
+    }
+    at = append_str(body, at, "]}")
+    send_json_body(body)
+    mem.free(body)
 }
 
 fn send_empty_diagnostics(uri string) {
     size := 97 + text.len(uri)
     fmt.printf("Content-Length: %d\r\n\r\n{\"jsonrpc\":\"2.0\",\"method\":\"textDocument/publishDiagnostics\",\"params\":{\"uri\":\"%s\",\"diagnostics\":[]}}", size, uri)
+    io.flush()
 }
 
 fn send_diagnostic(uri string, line i32, ch i32, message string) {
     end_ch := ch + 1
     size := 210 + text.len(uri) + jsonrpc.digits_i32(line) + jsonrpc.digits_i32(ch) + jsonrpc.digits_i32(line) + jsonrpc.digits_i32(end_ch) + text.len(message)
     fmt.printf("Content-Length: %d\r\n\r\n{\"jsonrpc\":\"2.0\",\"method\":\"textDocument/publishDiagnostics\",\"params\":{\"uri\":\"%s\",\"diagnostics\":[{\"range\":{\"start\":{\"line\":%d,\"character\":%d},\"end\":{\"line\":%d,\"character\":%d}},\"severity\":1,\"source\":\"YCPL\",\"message\":\"%s\"}]}}", size, uri, line, ch, line, end_ch, message)
+    io.flush()
 }
 
 fn publish_diagnostics(uri string, source string) {
@@ -1734,7 +2047,7 @@ fn handle_message(message string, uris []string, texts []string) i32 {
         }
     }
 
-    if jsonrpc.method_name_is(message, "textDocument/definition") || jsonrpc.method_name_is(message, "textDocument/declaration") {
+    if jsonrpc.method_name_is(message, "textDocument/definition") || jsonrpc.method_name_is(message, "textDocument/declaration") || jsonrpc.method_name_is(message, "textDocument/implementation") {
         uri := jsonrpc.field_string(message, "\"uri\"")
         source := map.get(uris, texts, uri)
         line := jsonrpc.field_i32(message, "\"line\"")
@@ -1834,6 +2147,64 @@ fn handle_message(message string, uris []string, texts []string) i32 {
         line := jsonrpc.field_i32(message, "\"line\"")
         ch := jsonrpc.field_i32(message, "\"character\"")
         send_selection_range(id, source, line, ch)
+        if uri != none {
+            mem.free(uri)
+        }
+    }
+
+    if jsonrpc.method_name_is(message, "textDocument/inlayHint") {
+        uri := jsonrpc.field_string(message, "\"uri\"")
+        source := map.get(uris, texts, uri)
+        send_inlay_hints(id, source)
+        if uri != none {
+            mem.free(uri)
+        }
+    }
+
+    if jsonrpc.method_name_is(message, "textDocument/codeAction") {
+        send_code_actions(id)
+    }
+
+    if jsonrpc.method_name_is(message, "textDocument/codeLens") {
+        uri := jsonrpc.field_string(message, "\"uri\"")
+        source := map.get(uris, texts, uri)
+        send_code_lenses(id, source)
+        if uri != none {
+            mem.free(uri)
+        }
+    }
+
+    if jsonrpc.method_name_is(message, "textDocument/prepareCallHierarchy") {
+        uri := jsonrpc.field_string(message, "\"uri\"")
+        source := map.get(uris, texts, uri)
+        line := jsonrpc.field_i32(message, "\"line\"")
+        ch := jsonrpc.field_i32(message, "\"character\"")
+        word := word_at_position(source, line, ch)
+        send_call_hierarchy_prepare(id, uri, source, word)
+        if word != none {
+            mem.free(word)
+        }
+        if uri != none {
+            mem.free(uri)
+        }
+    }
+
+    if jsonrpc.method_name_is(message, "callHierarchy/incomingCalls") {
+        target := jsonrpc.field_string(message, "\"name\"")
+        send_call_hierarchy_incoming(id, target, uris, texts)
+        if target != none {
+            mem.free(target)
+        }
+    }
+
+    if jsonrpc.method_name_is(message, "callHierarchy/outgoingCalls") {
+        caller := jsonrpc.field_string(message, "\"name\"")
+        uri := jsonrpc.field_string(message, "\"uri\"")
+        source := map.get(uris, texts, uri)
+        send_call_hierarchy_outgoing(id, caller, uri, source, uris, texts)
+        if caller != none {
+            mem.free(caller)
+        }
         if uri != none {
             mem.free(uri)
         }

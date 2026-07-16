@@ -24,7 +24,9 @@ const declarationKeywords = new Set(["fn", "struct", "enum", "type", "module", "
 const keywordSet = new Set<string>(keywords);
 const primitiveSet = new Set<string>(primitiveTypes);
 const typeCategories: SymbolCategory[] = ["struct", "enum", "typeAlias"];
-const typePatternSource = "(?:owned\\s+)?(?:\\*+\\s*)?(?:(?:\\[\\]\\s*)+)?[A-Za-z_][A-Za-z0-9_.]*";
+const simpleTypeName = "[A-Za-z_][A-Za-z0-9_.]*";
+const genericArgument = `(?:\\*+\\s*)?(?:(?:\\[\\]\\s*)+)?${simpleTypeName}(?:\\s*<\\s*${simpleTypeName}(?:\\s*,\\s*${simpleTypeName})*\\s*>)?`;
+const typePatternSource = `(?:owned\\s+)?(?:\\*+\\s*)?(?:(?:\\[\\]\\s*)+)?${simpleTypeName}(?:\\s*<\\s*${genericArgument}(?:\\s*,\\s*${genericArgument})*\\s*>)?`;
 
 interface Token {
   text: string;
@@ -493,10 +495,14 @@ function parseParameters(text: string, lineOffsets: number[], nameEnd: number, s
     return [];
   }
   const params: ParameterInfo[] = [];
-  const paramPattern = new RegExp(`([A-Za-z_][A-Za-z0-9_]*)\\s+(${typePatternSource})`, "g");
   const body = text.slice(open + 1, close);
-  for (const match of body.matchAll(paramPattern)) {
-    const start = open + 1 + (match.index ?? 0);
+  for (const segment of splitParameters(body)) {
+    const match = segment.text.trim().match(new RegExp(`^([A-Za-z_][A-Za-z0-9_]*)\\s+(${typePatternSource})$`));
+    if (!match) {
+      continue;
+    }
+    const leading = segment.text.length - segment.text.trimStart().length;
+    const start = open + 1 + segment.offset + leading;
     params.push({
       name: match[1],
       typeName: normalizeTypeName(match[2]),
@@ -506,13 +512,33 @@ function parseParameters(text: string, lineOffsets: number[], nameEnd: number, s
   return params;
 }
 
+function splitParameters(body: string): Array<{ text: string; offset: number }> {
+  const result: Array<{ text: string; offset: number }> = [];
+  let depth = 0;
+  let start = 0;
+  for (let index = 0; index < body.length; index += 1) {
+    if (body[index] === "<") {
+      depth += 1;
+    } else if (body[index] === ">") {
+      depth = Math.max(0, depth - 1);
+    } else if (body[index] === "," && depth === 0) {
+      result.push({ text: body.slice(start, index), offset: start });
+      start = index + 1;
+    }
+  }
+  result.push({ text: body.slice(start), offset: start });
+  return result;
+}
+
 function parseReturnType(signatureTail: string): string | undefined {
   const match = signatureTail.match(new RegExp(`\\)\\s+(${typePatternSource})`));
   return match?.[1] ? normalizeTypeName(match[1]) : undefined;
 }
 
 function normalizeTypeName(typeName: string): string {
-  return typeName.trim().replace(/\s+/g, " ").replace(/\s*(\[\]|\*)\s*/g, "$1");
+  return typeName.trim()
+    .replace(/\s+/g, " ")
+    .replace(/\s*(\[\]|\*|<|>|,)\s*/g, "$1");
 }
 
 function canonicalTypeName(typeName: string | undefined): string | undefined {

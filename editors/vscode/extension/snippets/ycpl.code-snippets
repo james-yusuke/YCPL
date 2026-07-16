@@ -9,6 +9,18 @@
     ],
     "description": "Create a YCPL main function"
   },
+  "Project main": {
+    "prefix": "project-main",
+    "body": [
+      "import \"std/fmt\" as fmt",
+      "",
+      "fn main() i32 {",
+      "    fmt.println(\"${1:Hello, YCPL}\")",
+      "    return 0",
+      "}"
+    ],
+    "description": "Create a YCPL project entry point"
+  },
   "Function": {
     "prefix": "fn",
     "body": [
@@ -75,10 +87,29 @@
     "body": "import \"std/base64\" as base64",
     "description": "Import the std/base64 module"
   },
-  "Defer call": {
+  "Managed Vec": {
+    "prefix": "vec",
+    "body": [
+      "${1:values} := Vec<${2:i32}>{capacity: ${3:16}}",
+      "${1:values}.push(${4:value})"
+    ],
+    "description": "Create and append to a managed Vec"
+  },
+  "Result handling": {
+    "prefix": "result",
+    "body": [
+      "${1:result} := ${2:operation}()",
+      "if !${1:result}.ok {",
+      "    ${3:return 1}",
+      "}",
+      "$0"
+    ],
+    "description": "Handle an ok/value/message Result"
+  },
+  "Defer action": {
     "prefix": "defer",
-    "body": "defer ${1:value}.free()",
-    "description": "Defer a cleanup call"
+    "body": "defer ${1:cleanup}()",
+    "description": "Run an action when leaving the current scope"
   },
   "Scope block": {
     "prefix": "scope",
@@ -93,5 +124,15 @@
     "prefix": "import-base32",
     "body": "import \"std/base32\" as base32",
     "description": "Import the std/base32 module"
+  },
+  "Import std path": {
+    "prefix": "import-path",
+    "body": "import \"std/path\" as path",
+    "description": "Import lexical path helpers"
+  },
+  "Import std utf8": {
+    "prefix": "import-utf8",
+    "body": "import \"std/utf8\" as utf8",
+    "description": "Import UTF-8 helpers"
   }
 }

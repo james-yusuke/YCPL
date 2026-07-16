@@ -1,12 +1,12 @@
 {
   "name": "@ycpl/language-server",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "description": "YCPL Language Server Protocol implementation.",
-  "main": "./dist/server.js",
+  "main": "./dist/src/server.js",
   "bin": {
-    "ycpl-language-server": "./dist/server.js"
+    "ycpl-language-server": "./dist/src/server.js"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
