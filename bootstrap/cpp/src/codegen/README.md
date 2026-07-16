@@ -1,7 +1,8 @@
-# C++ Bootstrap Codegen
+# C++ Seed/Reference Codegen
 
-The C++ backend is intentionally split by migration boundary. Keep this layout
-while `compiler/ycpl` ports the compiler one subsystem at a time.
+The C++ backend is intentionally split along compiler subsystem boundaries.
+Keep this layout so the seed/reference implementation remains easy to compare
+with the self-hosted compiler in `compiler/ycpl`.
 
 ```text
 core.cpp          LLVM module/builder setup, primitive LLVM helpers, IR output
@@ -35,9 +36,8 @@ live in named helpers: `formatting/print.h` owns `fmt.print`, `runtime/value_cas
 assignable-address lowering, `arrays/std_intrinsics.h` owns `std/array` calls, and
 `runtime/memory_intrinsics.h`, `runtime/string_intrinsics.h`, and
 `runtime/math_intrinsics.h` own their matching `std` domains. `types/type_shape.h`
-owns lightweight type-name suffix parsing. This keeps the C++
-bootstrap easy to compare with the YCPL self-host modules as they gain
-equivalent AST lowering.
+owns lightweight type-name suffix parsing. This keeps the C++ reference
+implementation easy to compare with the equivalent YCPL AST lowering.
 
 `runtime/c_symbols.h` must remain lazy: declare C/LLVM-facing symbols only when
 the AST actually calls them. Native linking should continue to rely on the CLI's

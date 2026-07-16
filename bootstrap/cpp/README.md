@@ -1,7 +1,9 @@
 # YCPL C++ Bootstrap
 
-This directory contains the emergency/bootstrap compiler used while
-`compiler/ycpl` is becoming fully self-hosting.
+This directory contains the C++ seed and reference compiler. The standard
+compiler is the self-hosted implementation in `compiler/ycpl`; Bazel exposes
+this C++ implementation as `ycc-bootstrap` for stage1 generation and
+differential verification.
 
 ## Layout
 
@@ -14,10 +16,11 @@ src/module/     YCPL.json loading, module resolution, and project linking
 src/codegen/    LLVM IR generation, split into core/scope/dispatch/pipeline
 ```
 
-The public `ycc` binary is intentionally wired through `src/cli/ycc.cpp`,
-which only calls `ycpl::bootstrap_cli::run_ycc`. Keep command-line behavior
-there, and keep compiler pipeline logic in the narrower lexer/parser/module/
-codegen areas so the YCPL implementation can port one subsystem at a time.
+The `ycc-bootstrap` entry point is wired through `src/cli/ycc.cpp`, which only
+calls `ycpl::bootstrap_cli::run_ycc`. Keep command-line behavior there, and keep
+compiler pipeline logic in the narrower lexer/parser/module/codegen areas so
+the reference implementation remains reviewable and useful for differential
+testing.
 
 `src/codegen` follows the same rule: `core.cpp`, `scope.cpp`, `dispatch.cpp`,
 and `pipeline.cpp` contain the stable backend shell, while feature-specific
@@ -36,7 +39,7 @@ pieces to port:
 
 ## LLVM Policy
 
-The bootstrap compiler must not mutate `/usr` or system paths. Native builds
+The C++ seed/reference compiler must not mutate `/usr` or system paths. Native builds
 should discover LLVM tools in this order:
 
 1. Explicit environment variables such as `LLVM_CONFIG`, `LLVM_BINDIR`, `LLC`,

@@ -16,3 +16,17 @@ Run the bootstrap regression suite with:
 ```sh
 tests/run_bootstrap_regression.sh
 ```
+
+Apply the same conformance oracle to the promoted self-hosted compiler with:
+
+```sh
+tests/run_conformance.sh ./bazel-bin/ycc
+```
+
+The Bazel fixed-point gate rebuilds the compiler with stage2 and stage3,
+canonicalizes both LLVM IR modules, compares them exactly, and runs the 70-case
+conformance suite with both generated compilers:
+
+```sh
+bazel test //:self_host_stage_test //:ycc_ycpl_test
+```

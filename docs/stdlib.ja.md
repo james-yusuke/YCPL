@@ -150,16 +150,16 @@ child だけを caller frame へ移し、無関係な local allocation は calle
 array、map、Bytes、StringBuilder、JsonValue の root と backing allocation は同じ
 ownership graph で管理されます。
 
-pointer return は選択的なgraph escapeを使います。aggregate returnについては、
-compiler内部の全bufferがruntime childとして登録されるまで、frame全体を保持する
-互換fallbackも併用します。
+pointer returnとaggregate returnは、callee frameをpopする前に到達可能なmanaged
+valueをcallerへescapeさせます。scope assignmentとbreak/continue/return pathでは、
+対応する決定的なframe unwindを生成します。
 
 `extern fn` は YCPL 名を C/LLVM symbol に対応させます。`intrinsic fn` は bundled
 `std` 専用で、user module では拒否されます。
 
-`std/os` は compiler tooling に必要な最小限の process hook です。
-`YCPL_BOOTSTRAP_YCC` のような明示的な tool path を読む `getenv` と、移行中の
-`ycc-ycpl build` stage driver が使う `system` を提供します。
+`std/os`はcompiler toolingに必要な最小限のprocess hookです。明示的な
+LLVM/runtime pathとnative build/run process executionを提供します。
+self-hosted driverにbootstrap compiler fallbackはありません。
 
 `std/bytes`、`std/hex`、`std/base64`、`std/hash` は zip などのファイル形式や
 学習用暗号処理に向けた基盤です。`std/hash` の FNV-1a32 と CRC32 は検査・識別用で、

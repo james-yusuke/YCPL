@@ -3,7 +3,8 @@
 [English](README.en.md) | [Repository README](../README-JA.md)
 
 この docs は、現在のコンパイラが意図して対応している構文とツールチェーンを
-まとめています。YCPL ソースの拡張子は `.yc` です。
+まとめています。YCPLソースの拡張子は`.yc`です。標準の`ycc`はセルフホスト済みで、
+C++実装はseed/reference用の`ycc-bootstrap`として残しています。
 
 ```text
 docs/

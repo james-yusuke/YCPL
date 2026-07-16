@@ -154,7 +154,7 @@ from the stage2/stage3 execution environment.
 ## Documentation
 
 - [Language reference](docs/language.en.md)
-- [Grammar](docs/grammar.en.md)
+- [Grammar](docs/grammar/ycpl.ebnf)
 - [Standard library](docs/stdlib.en.md)
 - [Current Japanese status](docs/status.ja.md)
 - [Examples](examples/README.md)
