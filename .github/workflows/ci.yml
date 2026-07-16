@@ -135,6 +135,12 @@ jobs:
             --action_env=LLC="$LLC" \
             --action_env=CLANG="$CLANG" \
             --action_env=LINKFLAGS="$LINKFLAGS" \
+            --host_action_env=PATH="$PATH" \
+            --host_action_env=LLVM_CONFIG="$LLVM_CONFIG" \
+            --host_action_env=LLVM_BINDIR="$LLVM_BINDIR" \
+            --host_action_env=LLC="$LLC" \
+            --host_action_env=CLANG="$CLANG" \
+            --host_action_env=LINKFLAGS="$LINKFLAGS" \
             --linkopt=-fuse-ld=lld \
             --host_linkopt=-fuse-ld=lld \
             //:ycc-bootstrap \
@@ -171,6 +177,12 @@ jobs:
             --action_env=LLC="$LLC" \
             --action_env=CLANG="$CLANG" \
             --action_env=LINKFLAGS="$LINKFLAGS" \
+            --host_action_env=PATH="$PATH" \
+            --host_action_env=LLVM_CONFIG="$LLVM_CONFIG" \
+            --host_action_env=LLVM_BINDIR="$LLVM_BINDIR" \
+            --host_action_env=LLC="$LLC" \
+            --host_action_env=CLANG="$CLANG" \
+            --host_action_env=LINKFLAGS="$LINKFLAGS" \
             --test_env=LLVM_CONFIG="$LLVM_CONFIG" \
             --test_env=LLVM_BINDIR="$LLVM_BINDIR" \
             --test_env=LLC="$LLC" \
