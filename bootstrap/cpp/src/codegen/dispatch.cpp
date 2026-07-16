@@ -28,6 +28,8 @@ namespace codegen
             return codegen_array(alit);
         if (auto sl = dynamic_cast<const ast::StructLiteral *>(e))
             return codegen_struct_literal(sl);
+        if (auto vl = dynamic_cast<const ast::VecLiteral *>(e))
+            return codegen_vec_literal(vl);
         if (auto me = dynamic_cast<const ast::MemberExpr *>(e))
             return codegen_member(me);
         if (auto bal = dynamic_cast<const ast::ByteArrayLiteral *>(e))

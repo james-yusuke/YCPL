@@ -47,6 +47,12 @@ Type *CodeGen::resolve_type_from_ast(const ast::Type *at)
         return codegen::detail::getPtrTy(context);
     }
 
+    if (auto vec = dynamic_cast<const ast::VecType *>(at))
+    {
+        (void)vec;
+        return codegen::detail::getPtrTy(context);
+    }
+
     if (auto f = dynamic_cast<const ast::FuncType *>(at))
     {
 
@@ -90,6 +96,8 @@ static std::string namedTypeName(const ast::Type *at)
     {
         return "Map<" + namedTypeName(map->key.get()) + "," + namedTypeName(map->value.get()) + ">";
     }
+    if (auto vec = dynamic_cast<const ast::VecType *>(at))
+        return "Vec<" + namedTypeName(vec->elem.get()) + ">";
     if (auto ft = dynamic_cast<const ast::FuncType *>(at))
     {
         if (ft->ret)
@@ -186,7 +194,7 @@ llvm::Type *CodeGen::resolve_type_by_name(const std::string &typeName)
         return resolve_type_by_name(resolvedTypeName);
 
     TypeShape shape = parse_type_shape(typeName);
-    if (shape.is_map_type())
+    if (shape.is_map_type() || shape.is_vec_type())
         return codegen::detail::getPtrTy(context);
 
     if (typeName == "string")
@@ -545,8 +553,19 @@ Value *CodeGen::codegen_member_addr(const ast::MemberExpr *me)
         if (!objVal)
             return nullptr;
 
-        auto [st, ptr] = resolve_struct_and_ptr(objVal, std::string());
-        if (st)
+        std::string objectTypeName = infer_expr_type_name(cur);
+        TypeShape objectShape = parse_type_shape(objectTypeName);
+        auto knownStruct = struct_types.find(objectShape.base);
+        if (knownStruct != struct_types.end())
+        {
+            curStructTy = knownStruct->second;
+            auto knownDecl = struct_decls.find(objectShape.base);
+            if (knownDecl != struct_decls.end())
+                curDecl = knownDecl->second;
+        }
+
+        auto [st, ptr] = resolve_struct_and_ptr(objVal, objectShape.base);
+        if (!curStructTy && st)
             curStructTy = st;
         basePtr = objVal;
 
@@ -753,7 +772,11 @@ llvm::Value *CodeGen::codegen_member(const ast::MemberExpr *me)
         Value *objVal = codegen_expr(cur);
         if (!objVal)
             return nullptr;
-        auto [st, ptr] = resolve_struct_and_ptr(objVal, std::string());
+        TypeShape objectShape = parse_type_shape(infer_expr_type_name(cur));
+        auto knownDecl = struct_decls.find(objectShape.base);
+        if (knownDecl != struct_decls.end())
+            curDecl = knownDecl->second;
+        auto [st, ptr] = resolve_struct_and_ptr(objVal, objectShape.base);
         if (st && st->hasName())
         {
             auto it = struct_decls.find(st->getName().str());

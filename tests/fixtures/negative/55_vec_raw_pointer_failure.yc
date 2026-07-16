@@ -1,0 +1,4 @@
+fn main() {
+    values := Vec<i32>{}
+    raw: *i32 := values
+}

@@ -121,6 +121,63 @@ namespace codegen
             return "";
         }
 
+        if (auto literal = dynamic_cast<const ast::Literal *>(expr))
+        {
+            switch (literal->t)
+            {
+            case lex::TokenType::INT:
+                return "i32";
+            case lex::TokenType::FLOAT:
+                return "double";
+            case lex::TokenType::CHAR:
+                return "char";
+            case lex::TokenType::STRING:
+                return "string";
+            case lex::TokenType::BOOL:
+                return "bool";
+            case lex::TokenType::NONE:
+                return "none";
+            default:
+                return "";
+            }
+        }
+
+        if (auto structure = dynamic_cast<const ast::StructLiteral *>(expr))
+            return resolve_type_name(const_cast<ast::Type *>(structure->type.get()));
+
+        if (auto vec = dynamic_cast<const ast::VecLiteral *>(expr))
+            return "Vec<" + resolve_type_name(vec->elem_type.get()) + ">";
+
+        if (auto call = dynamic_cast<const ast::CallExpr *>(expr))
+        {
+            if (auto calleeIdent = dynamic_cast<const ast::Ident *>(call->callee.get()))
+            {
+                auto result = function_return_types.find(calleeIdent->name);
+                if (result != function_return_types.end())
+                    return result->second;
+            }
+            if (auto calleeMember = dynamic_cast<const ast::MemberExpr *>(call->callee.get()))
+            {
+                TypeShape objectShape = parse_type_shape(infer_expr_type_name(calleeMember->object.get()));
+                if (objectShape.is_vec_type())
+                {
+                    if (calleeMember->member == "as_slice")
+                        return parse_type_shape(objectShape.vec_element).full_name() + "[]";
+                    if (calleeMember->member == "push" || calleeMember->member == "len" || calleeMember->member == "capacity")
+                        return "i32";
+                }
+            }
+        }
+
+        if (auto index = dynamic_cast<const ast::IndexExpr *>(expr))
+        {
+            TypeShape collectionShape = parse_type_shape(infer_expr_type_name(index->collection.get()));
+            if (collectionShape.is_vec_type())
+                return collectionShape.vec_element;
+            if (collectionShape.is_array())
+                return collectionShape.array_element_type_name();
+        }
+
         if (auto member = dynamic_cast<const ast::MemberExpr *>(expr))
         {
             std::string objectType = infer_expr_type_name(member->object.get());

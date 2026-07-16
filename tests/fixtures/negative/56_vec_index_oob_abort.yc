@@ -1,0 +1,5 @@
+fn main() {
+    values := Vec<i32>{}
+    values.push(10)
+    println(values[1])
+}

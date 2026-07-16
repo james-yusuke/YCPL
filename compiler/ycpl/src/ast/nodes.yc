@@ -1,17 +1,13 @@
 module compiler.ycpl.ast.nodes
 
-import "std/array" as array
-import "std/mem" as mem
 import "std/str" as str
+import "std/text" as text
 
 pub fn invalid_id() i32 { return -1 }
 
 fn retain_string(value string) string {
     if value == none { return none }
-    n := str.len(value)
-    copy: string := mem.calloc(n + 1, 1)
-    if copy != none && n > 0 { mem.copy(copy, value, n) }
-    return mem.keep(copy)
+    return text.slice(value, 0, str.len(value))
 }
 
 pub fn name_hash(value string) i64 {
@@ -51,6 +47,7 @@ pub fn type_none() i32 { return 15 }
 pub fn type_any() i32 { return 16 }
 pub fn type_meta() i32 { return 17 }
 pub fn type_generic() i32 { return 18 }
+pub fn type_vec() i32 { return 19 }
 
 pub fn decl_import() i32 { return 1 }
 pub fn decl_function() i32 { return 2 }
@@ -89,6 +86,14 @@ pub fn expr_struct() i32 { return 14 }
 pub fn expr_type() i32 { return 15 }
 pub fn expr_postfix() i32 { return 16 }
 pub fn expr_cast() i32 { return 17 }
+pub fn expr_vec() i32 { return 18 }
+
+pub fn vec_method_push() i64 { return -1001 }
+pub fn vec_method_len() i64 { return -1002 }
+pub fn vec_method_capacity() i64 { return -1003 }
+pub fn vec_method_reserve() i64 { return -1004 }
+pub fn vec_method_clear() i64 { return -1005 }
+pub fn vec_method_as_slice() i64 { return -1006 }
 
 pub fn flag_public() i32 { return 1 }
 pub fn flag_extern() i32 { return 2 }
@@ -186,52 +191,47 @@ pub struct ExprNode {
 }
 
 pub struct AstArena {
-    types *TypeNode
-    type_kinds *i32
-    type_bases *i32
-    type_resolved_files *i32
-    type_resolved_ids *i32
+    file_id i32
+    types Vec<TypeNode>
+    type_kinds Vec<i32>
+    type_bases Vec<i32>
+    type_resolved_files Vec<i32>
+    type_resolved_ids Vec<i32>
     type_len i32
-    type_cap i32
-    params *ParamNode
-    param_name_ids *i32
-    param_type_ids *i32
-    param_flags *i32
+    params Vec<ParamNode>
+    param_name_ids Vec<i32>
+    param_type_ids Vec<i32>
+    param_flags Vec<i32>
     param_len i32
-    param_cap i32
-    fields *FieldNode
-    field_names *string
-    field_name_ids *i32
-    field_type_ids *i32
-    field_values *i64
+    fields Vec<FieldNode>
+    field_names Vec<string>
+    field_name_ids Vec<i32>
+    field_type_ids Vec<i32>
+    field_values Vec<i64>
     field_len i32
-    field_cap i32
-    decls *DeclNode
-    decl_names *string
-    decl_module_names *string
-    decl_link_names *string
-    decl_kinds *i32
-    decl_type_ids *i32
-    decl_bodies *i32
-    decl_first_params *i32
-    decl_param_counts *i32
-    decl_first_fields *i32
-    decl_field_counts *i32
-    decl_flags *i32
+    decls Vec<DeclNode>
+    decl_names Vec<string>
+    decl_module_names Vec<string>
+    decl_link_names Vec<string>
+    decl_kinds Vec<i32>
+    decl_type_ids Vec<i32>
+    decl_bodies Vec<i32>
+    decl_first_params Vec<i32>
+    decl_param_counts Vec<i32>
+    decl_first_fields Vec<i32>
+    decl_field_counts Vec<i32>
+    decl_flags Vec<i32>
     decl_len i32
-    decl_cap i32
-    stmts *StmtNode
-    stmt_name_ids *i32
+    stmts Vec<StmtNode>
+    stmt_name_ids Vec<i32>
     stmt_len i32
-    stmt_cap i32
-    exprs *ExprNode
-    expr_names *string
-    expr_name_ids *i32
-    expr_int_values *i64
-    expr_syntax_type_ids *i32
+    exprs Vec<ExprNode>
+    expr_names Vec<string>
+    expr_name_ids Vec<i32>
+    expr_int_values Vec<i64>
+    expr_syntax_type_ids Vec<i32>
     expr_len i32
-    expr_cap i32
-    children []i32
+    children Vec<i32>
 }
 
 pub struct ProgramAst {
@@ -243,7 +243,7 @@ pub struct ProgramAst {
     file string
     module_name string
     arena AstArena
-    root_decls []i32
+    root_decls Vec<i32>
 }
 
 pub fn span(file i32, line i32, col i32, end_line i32, end_col i32) Span {
@@ -279,285 +279,97 @@ pub fn make_expr(kind i32, at Span, type_id i32, left i32, right i32, first_arg 
 }
 
 pub fn arena_new() AstArena {
-    arena := AstArena{
-        types: mem.calloc(32, mem.sizeof(TypeNode)), type_kinds: mem.calloc(32, 4), type_bases: mem.calloc(32, 4), type_resolved_files: mem.calloc(32, 4), type_resolved_ids: mem.calloc(32, 4), type_len: 0, type_cap: 32,
-        params: mem.calloc(64, mem.sizeof(ParamNode)), param_name_ids: mem.calloc(64, 4), param_type_ids: mem.calloc(64, 4), param_flags: mem.calloc(64, 4), param_len: 0, param_cap: 64,
-        fields: mem.calloc(64, mem.sizeof(FieldNode)), field_names: mem.calloc(64, 8), field_name_ids: mem.calloc(64, 4), field_type_ids: mem.calloc(64, 4), field_values: mem.calloc(64, 8), field_len: 0, field_cap: 64,
-        decls: mem.calloc(64, mem.sizeof(DeclNode)), decl_names: mem.calloc(64, 8), decl_module_names: mem.calloc(64, 8), decl_link_names: mem.calloc(64, 8), decl_kinds: mem.calloc(64, 4), decl_type_ids: mem.calloc(64, 4), decl_bodies: mem.calloc(64, 4), decl_first_params: mem.calloc(64, 4), decl_param_counts: mem.calloc(64, 4), decl_first_fields: mem.calloc(64, 4), decl_field_counts: mem.calloc(64, 4), decl_flags: mem.calloc(64, 4), decl_len: 0, decl_cap: 64,
-        stmts: mem.calloc(256, mem.sizeof(StmtNode)), stmt_name_ids: mem.calloc(256, 4), stmt_len: 0, stmt_cap: 256,
-        exprs: mem.calloc(512, mem.sizeof(ExprNode)), expr_names: mem.calloc(512, 8), expr_name_ids: mem.calloc(512, 4), expr_int_values: mem.calloc(512, 8), expr_syntax_type_ids: mem.calloc(512, 4), expr_len: 0, expr_cap: 512,
-        children: array.new([]i32, 512),
+    return AstArena{
+        file_id: 0,
+        types: Vec<TypeNode>{capacity: 32}, type_kinds: Vec<i32>{capacity: 32}, type_bases: Vec<i32>{capacity: 32}, type_resolved_files: Vec<i32>{capacity: 32}, type_resolved_ids: Vec<i32>{capacity: 32}, type_len: 0,
+        params: Vec<ParamNode>{capacity: 64}, param_name_ids: Vec<i32>{capacity: 64}, param_type_ids: Vec<i32>{capacity: 64}, param_flags: Vec<i32>{capacity: 64}, param_len: 0,
+        fields: Vec<FieldNode>{capacity: 64}, field_names: Vec<string>{capacity: 64}, field_name_ids: Vec<i32>{capacity: 64}, field_type_ids: Vec<i32>{capacity: 64}, field_values: Vec<i64>{capacity: 64}, field_len: 0,
+        decls: Vec<DeclNode>{capacity: 64}, decl_names: Vec<string>{capacity: 64}, decl_module_names: Vec<string>{capacity: 64}, decl_link_names: Vec<string>{capacity: 64}, decl_kinds: Vec<i32>{capacity: 64}, decl_type_ids: Vec<i32>{capacity: 64}, decl_bodies: Vec<i32>{capacity: 64}, decl_first_params: Vec<i32>{capacity: 64}, decl_param_counts: Vec<i32>{capacity: 64}, decl_first_fields: Vec<i32>{capacity: 64}, decl_field_counts: Vec<i32>{capacity: 64}, decl_flags: Vec<i32>{capacity: 64}, decl_len: 0,
+        stmts: Vec<StmtNode>{capacity: 256}, stmt_name_ids: Vec<i32>{capacity: 256}, stmt_len: 0,
+        exprs: Vec<ExprNode>{capacity: 512}, expr_names: Vec<string>{capacity: 512}, expr_name_ids: Vec<i32>{capacity: 512}, expr_int_values: Vec<i64>{capacity: 512}, expr_syntax_type_ids: Vec<i32>{capacity: 512}, expr_len: 0,
+        children: Vec<i32>{capacity: 512},
     }
-    // AstArena lives inside ProgramAst.  It crosses several recursive parser
-    // frames, so its backing stores must not remain owned by arena_new's frame.
-    arena.types = mem.keep(arena.types)
-    arena.type_kinds = mem.keep(arena.type_kinds)
-    arena.type_bases = mem.keep(arena.type_bases)
-    arena.type_resolved_files = mem.keep(arena.type_resolved_files)
-    arena.type_resolved_ids = mem.keep(arena.type_resolved_ids)
-    arena.params = mem.keep(arena.params)
-    arena.param_name_ids = mem.keep(arena.param_name_ids)
-    arena.param_type_ids = mem.keep(arena.param_type_ids)
-    arena.param_flags = mem.keep(arena.param_flags)
-    arena.fields = mem.keep(arena.fields)
-    arena.field_names = mem.keep(arena.field_names)
-    arena.field_name_ids = mem.keep(arena.field_name_ids)
-    arena.field_type_ids = mem.keep(arena.field_type_ids)
-    arena.field_values = mem.keep(arena.field_values)
-    arena.decls = mem.keep(arena.decls)
-    arena.decl_names = mem.keep(arena.decl_names)
-    arena.decl_module_names = mem.keep(arena.decl_module_names)
-    arena.decl_link_names = mem.keep(arena.decl_link_names)
-    arena.decl_kinds = mem.keep(arena.decl_kinds)
-    arena.decl_type_ids = mem.keep(arena.decl_type_ids)
-    arena.decl_bodies = mem.keep(arena.decl_bodies)
-    arena.decl_first_params = mem.keep(arena.decl_first_params)
-    arena.decl_param_counts = mem.keep(arena.decl_param_counts)
-    arena.decl_first_fields = mem.keep(arena.decl_first_fields)
-    arena.decl_field_counts = mem.keep(arena.decl_field_counts)
-    arena.decl_flags = mem.keep(arena.decl_flags)
-    arena.stmts = mem.keep(arena.stmts)
-    arena.stmt_name_ids = mem.keep(arena.stmt_name_ids)
-    arena.exprs = mem.keep(arena.exprs)
-    arena.expr_names = mem.keep(arena.expr_names)
-    arena.expr_name_ids = mem.keep(arena.expr_name_ids)
-    arena.expr_int_values = mem.keep(arena.expr_int_values)
-    arena.expr_syntax_type_ids = mem.keep(arena.expr_syntax_type_ids)
-    arena.children = cast([]i32, mem.keep(cast(*byte, arena.children)))
-    return arena
 }
 
 pub fn program_new(file string) ProgramAst {
-    roots := array.new([]i32, 32)
-    roots = cast([]i32, mem.keep(cast(*byte, roots)))
-    return ProgramAst{ok: true, message: "", error_line: 1, error_col: 1, file_id: 0, file: file, module_name: "", arena: arena_new(), root_decls: roots}
+    return ProgramAst{ok: true, message: "", error_line: 1, error_col: 1, file_id: 0, file: file, module_name: "", arena: arena_new(), root_decls: Vec<i32>{capacity: 32}}
 }
 
 pub fn add_type(arena AstArena, node TypeNode) AstArena {
-    if arena.type_len >= arena.type_cap {
-        arena.type_cap = arena.type_cap * 2
-        arena.types = mem.realloc(arena.types, arena.type_cap * mem.sizeof(TypeNode))
-        arena.type_kinds = mem.realloc(arena.type_kinds, arena.type_cap * 4)
-        arena.type_bases = mem.realloc(arena.type_bases, arena.type_cap * 4)
-        arena.type_resolved_files = mem.realloc(arena.type_resolved_files, arena.type_cap * 4)
-        arena.type_resolved_ids = mem.realloc(arena.type_resolved_ids, arena.type_cap * 4)
-    }
-    arena.types = mem.keep(arena.types)
-    arena.type_kinds = mem.keep(arena.type_kinds)
-    arena.type_bases = mem.keep(arena.type_bases)
-    arena.type_resolved_files = mem.keep(arena.type_resolved_files)
-    arena.type_resolved_ids = mem.keep(arena.type_resolved_ids)
     if node.name != none { node.name = retain_string(node.name) }
-    // Do not copy a struct through `*T[index]`: that was interpreted as a
-    // dynamic-array access by older bootstrap codegen paths.  Field stores via
-    // a typed pointer are both ABI-correct and the representation needed by
-    // the self-host AST arena.
-    slot: *TypeNode := arena.types + arena.type_len
-    slot.kind = node.kind
-    slot.span = node.span
-    slot.name = node.name
-    slot.base = node.base
-    slot.key = node.key
-    slot.value = node.value
-    slot.flags = node.flags
-    slot.resolved_file = node.resolved_file
-    slot.resolved_id = node.resolved_id
-    arena.type_kinds[arena.type_len] = node.kind
-    arena.type_bases[arena.type_len] = node.base
-    arena.type_resolved_files[arena.type_len] = node.resolved_file
-    arena.type_resolved_ids[arena.type_len] = node.resolved_id
-    arena.type_len += 1
+    id := arena.types.push(node)
+    arena.type_kinds.push(node.kind)
+    arena.type_bases.push(node.base)
+    arena.type_resolved_files.push(node.resolved_file)
+    arena.type_resolved_ids.push(node.resolved_id)
+    arena.type_len = id + 1
     return arena
 }
 
 pub fn add_param(arena AstArena, node ParamNode) AstArena {
-    if arena.param_len >= arena.param_cap {
-        arena.param_cap = arena.param_cap * 2
-        arena.params = mem.realloc(arena.params, arena.param_cap * mem.sizeof(ParamNode))
-        arena.param_name_ids = mem.realloc(arena.param_name_ids, arena.param_cap * 4)
-        arena.param_type_ids = mem.realloc(arena.param_type_ids, arena.param_cap * 4)
-        arena.param_flags = mem.realloc(arena.param_flags, arena.param_cap * 4)
-    }
-    arena.params = mem.keep(arena.params)
-    arena.param_name_ids = mem.keep(arena.param_name_ids)
-    arena.param_type_ids = mem.keep(arena.param_type_ids)
-    arena.param_flags = mem.keep(arena.param_flags)
     if node.name != none { node.name = retain_string(node.name) }
-    slot: *ParamNode := arena.params + arena.param_len
-    slot.span = node.span
-    slot.name = node.name
-    slot.name_id = node.name_id
-    slot.type_id = node.type_id
-    slot.flags = node.flags
-    arena.param_name_ids[arena.param_len] = node.name_id
-    arena.param_type_ids[arena.param_len] = node.type_id
-    arena.param_flags[arena.param_len] = node.flags
-    arena.param_len += 1
+    id := arena.params.push(node)
+    arena.param_name_ids.push(node.name_id)
+    arena.param_type_ids.push(node.type_id)
+    arena.param_flags.push(node.flags)
+    arena.param_len = id + 1
     return arena
 }
 
 pub fn add_field(arena AstArena, node FieldNode) AstArena {
-    if arena.field_len >= arena.field_cap {
-        arena.field_cap = arena.field_cap * 2
-        arena.fields = mem.realloc(arena.fields, arena.field_cap * mem.sizeof(FieldNode))
-        arena.field_names = mem.realloc(arena.field_names, arena.field_cap * 8)
-        arena.field_name_ids = mem.realloc(arena.field_name_ids, arena.field_cap * 4)
-        arena.field_type_ids = mem.realloc(arena.field_type_ids, arena.field_cap * 4)
-        arena.field_values = mem.realloc(arena.field_values, arena.field_cap * 8)
-    }
-    arena.fields = mem.keep(arena.fields)
-    arena.field_names = mem.keep(arena.field_names)
-    arena.field_name_ids = mem.keep(arena.field_name_ids)
-    arena.field_type_ids = mem.keep(arena.field_type_ids)
-    arena.field_values = mem.keep(arena.field_values)
     if node.name != none { node.name = retain_string(node.name) }
-    slot: *FieldNode := arena.fields + arena.field_len
-    slot.span = node.span
-    slot.name = node.name
-    slot.type_id = node.type_id
-    slot.flags = node.flags
-    slot.name_id = node.name_id
-    slot.value = node.value
-    arena.field_name_ids[arena.field_len] = node.name_id
-    arena.field_names[arena.field_len] = node.name
-    arena.field_type_ids[arena.field_len] = node.type_id
-    arena.field_values[arena.field_len] = node.value
-    arena.field_len += 1
+    id := arena.fields.push(node)
+    arena.field_name_ids.push(node.name_id)
+    arena.field_names.push(node.name)
+    arena.field_type_ids.push(node.type_id)
+    arena.field_values.push(node.value)
+    arena.field_len = id + 1
     return arena
 }
 
 pub fn add_decl(arena AstArena, node DeclNode) AstArena {
-    if arena.decl_len >= arena.decl_cap {
-        arena.decl_cap = arena.decl_cap * 2
-        arena.decls = mem.realloc(arena.decls, arena.decl_cap * mem.sizeof(DeclNode))
-        arena.decl_names = mem.realloc(arena.decl_names, arena.decl_cap * 8)
-        arena.decl_module_names = mem.realloc(arena.decl_module_names, arena.decl_cap * 8)
-        arena.decl_link_names = mem.realloc(arena.decl_link_names, arena.decl_cap * 8)
-        arena.decl_kinds = mem.realloc(arena.decl_kinds, arena.decl_cap * 4)
-        arena.decl_type_ids = mem.realloc(arena.decl_type_ids, arena.decl_cap * 4)
-        arena.decl_bodies = mem.realloc(arena.decl_bodies, arena.decl_cap * 4)
-        arena.decl_first_params = mem.realloc(arena.decl_first_params, arena.decl_cap * 4)
-        arena.decl_param_counts = mem.realloc(arena.decl_param_counts, arena.decl_cap * 4)
-        arena.decl_first_fields = mem.realloc(arena.decl_first_fields, arena.decl_cap * 4)
-        arena.decl_field_counts = mem.realloc(arena.decl_field_counts, arena.decl_cap * 4)
-        arena.decl_flags = mem.realloc(arena.decl_flags, arena.decl_cap * 4)
-    }
-    arena.decls = mem.keep(arena.decls)
-    arena.decl_names = mem.keep(arena.decl_names)
-    arena.decl_module_names = mem.keep(arena.decl_module_names)
-    arena.decl_link_names = mem.keep(arena.decl_link_names)
-    arena.decl_kinds = mem.keep(arena.decl_kinds)
-    arena.decl_type_ids = mem.keep(arena.decl_type_ids)
-    arena.decl_bodies = mem.keep(arena.decl_bodies)
-    arena.decl_first_params = mem.keep(arena.decl_first_params)
-    arena.decl_param_counts = mem.keep(arena.decl_param_counts)
-    arena.decl_first_fields = mem.keep(arena.decl_first_fields)
-    arena.decl_field_counts = mem.keep(arena.decl_field_counts)
-    arena.decl_flags = mem.keep(arena.decl_flags)
     if node.name != none { node.name = retain_string(node.name) }
     if node.module_name != none { node.module_name = retain_string(node.module_name) }
     if node.link_name != none { node.link_name = retain_string(node.link_name) }
-    slot: *DeclNode := arena.decls + arena.decl_len
-    slot.kind = node.kind
-    slot.span = node.span
-    slot.name = node.name
-    slot.module_name = node.module_name
-    slot.link_name = node.link_name
-    slot.type_id = node.type_id
-    slot.body = node.body
-    slot.first_param = node.first_param
-    slot.param_count = node.param_count
-    slot.first_field = node.first_field
-    slot.field_count = node.field_count
-    slot.flags = node.flags
-    slot.resolved_file = node.resolved_file
-    slot.resolved_id = node.resolved_id
-    arena.decl_names[arena.decl_len] = node.name
-    arena.decl_module_names[arena.decl_len] = node.module_name
-    arena.decl_link_names[arena.decl_len] = node.link_name
-    arena.decl_kinds[arena.decl_len] = node.kind
-    arena.decl_type_ids[arena.decl_len] = node.type_id
-    arena.decl_bodies[arena.decl_len] = node.body
-    arena.decl_first_params[arena.decl_len] = node.first_param
-    arena.decl_param_counts[arena.decl_len] = node.param_count
-    arena.decl_first_fields[arena.decl_len] = node.first_field
-    arena.decl_field_counts[arena.decl_len] = node.field_count
-    arena.decl_flags[arena.decl_len] = node.flags
-    arena.decl_len += 1
+    id := arena.decls.push(node)
+    arena.decl_names.push(node.name)
+    arena.decl_module_names.push(node.module_name)
+    arena.decl_link_names.push(node.link_name)
+    arena.decl_kinds.push(node.kind)
+    arena.decl_type_ids.push(node.type_id)
+    arena.decl_bodies.push(node.body)
+    arena.decl_first_params.push(node.first_param)
+    arena.decl_param_counts.push(node.param_count)
+    arena.decl_first_fields.push(node.first_field)
+    arena.decl_field_counts.push(node.field_count)
+    arena.decl_flags.push(node.flags)
+    arena.decl_len = id + 1
     return arena
 }
 
 pub fn add_stmt(arena AstArena, node StmtNode) AstArena {
-    if arena.stmt_len >= arena.stmt_cap {
-        arena.stmt_cap = arena.stmt_cap * 2
-        arena.stmts = mem.realloc(arena.stmts, arena.stmt_cap * mem.sizeof(StmtNode))
-        arena.stmt_name_ids = mem.realloc(arena.stmt_name_ids, arena.stmt_cap * 4)
-    }
-    arena.stmts = mem.keep(arena.stmts)
-    arena.stmt_name_ids = mem.keep(arena.stmt_name_ids)
     if node.name != none { node.name = retain_string(node.name) }
     if node.op != none { node.op = retain_string(node.op) }
-    slot: *StmtNode := arena.stmts + arena.stmt_len
-    slot.kind = node.kind
-    slot.span = node.span
-    slot.first_child = node.first_child
-    slot.child_count = node.child_count
-    slot.a = node.a
-    slot.b = node.b
-    slot.c = node.c
-    slot.name = node.name
-    slot.name_id = node.name_id
-    slot.op = node.op
-    slot.flags = node.flags
-    slot.symbol_file = node.symbol_file
-    slot.symbol_id = node.symbol_id
-    arena.stmt_name_ids[arena.stmt_len] = node.name_id
-    arena.stmt_len += 1
+    id := arena.stmts.push(node)
+    arena.stmt_name_ids.push(node.name_id)
+    arena.stmt_len = id + 1
     return arena
 }
 
 pub fn add_expr(arena AstArena, node ExprNode) AstArena {
-    if arena.expr_len >= arena.expr_cap {
-        arena.expr_cap = arena.expr_cap * 2
-        arena.exprs = mem.realloc(arena.exprs, arena.expr_cap * mem.sizeof(ExprNode))
-        arena.expr_names = mem.realloc(arena.expr_names, arena.expr_cap * 8)
-        arena.expr_name_ids = mem.realloc(arena.expr_name_ids, arena.expr_cap * 4)
-        arena.expr_int_values = mem.realloc(arena.expr_int_values, arena.expr_cap * 8)
-        arena.expr_syntax_type_ids = mem.realloc(arena.expr_syntax_type_ids, arena.expr_cap * 4)
-    }
-    arena.exprs = mem.keep(arena.exprs)
-    arena.expr_names = mem.keep(arena.expr_names)
-    arena.expr_name_ids = mem.keep(arena.expr_name_ids)
-    arena.expr_int_values = mem.keep(arena.expr_int_values)
-    arena.expr_syntax_type_ids = mem.keep(arena.expr_syntax_type_ids)
     if node.name != none { node.name = retain_string(node.name) }
     if node.text != none { node.text = retain_string(node.text) }
-    slot: *ExprNode := arena.exprs + arena.expr_len
-    slot.kind = node.kind
-    slot.span = node.span
-    slot.type_id = node.type_id
-    slot.left = node.left
-    slot.right = node.right
-    slot.first_arg = node.first_arg
-    slot.arg_count = node.arg_count
-    slot.name = node.name
-    slot.text = node.text
-    slot.int_value = node.int_value
-    slot.float_value = node.float_value
-    slot.flags = node.flags
-    slot.type_file = node.type_file
-    slot.symbol_file = node.symbol_file
-    slot.symbol_id = node.symbol_id
-    arena.expr_name_ids[arena.expr_len] = node.flags
-    arena.expr_names[arena.expr_len] = node.name
-    arena.expr_int_values[arena.expr_len] = node.int_value
-    arena.expr_syntax_type_ids[arena.expr_len] = node.type_id
-    arena.expr_len += 1
+    id := arena.exprs.push(node)
+    arena.expr_name_ids.push(node.flags)
+    arena.expr_names.push(node.name)
+    arena.expr_int_values.push(node.int_value)
+    arena.expr_syntax_type_ids.push(node.type_id)
+    arena.expr_len = id + 1
     return arena
 }
 
 pub fn add_child(arena AstArena, id i32) AstArena {
-    arena.children = array.append(arena.children, id)
+    arena.children.push(id)
     return arena
 }
 
@@ -579,12 +391,13 @@ pub fn decl_link_name(arena AstArena, id i32) string {
 }
 pub fn stmt_count(arena AstArena) i32 { return arena.stmt_len }
 pub fn expr_count(arena AstArena) i32 { return arena.expr_len }
-pub fn child_count(arena AstArena) i32 { return array.len(arena.children) }
+pub fn child_count(arena AstArena) i32 { return arena.children.len() }
 
 // Assign a stable project file id after parsing. The parser can stay focused
 // on syntax while every retained span and cross-file reference uses the same
 // project-local identity.
 pub fn assign_file_id(program ProgramAst, file_id i32) ProgramAst {
     program.file_id = file_id
+    program.arena.file_id = file_id
     return program
 }

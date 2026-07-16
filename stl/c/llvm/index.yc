@@ -1,5 +1,7 @@
 module c.llvm
 
+import "std/mem" as mem
+
 // LLVM 22 C API. This module intentionally exposes the raw foreign boundary;
 // compiler-specific type construction and lowering live under compiler/ycpl.
 pub extern fn context_create() *byte as "LLVMContextCreate"
@@ -96,6 +98,87 @@ pub extern fn build_phi(builder *byte, typ *byte, name string) *byte as "LLVMBui
 pub extern fn add_incoming(phi *byte, values *byte, blocks *byte, count i32) as "LLVMAddIncoming"
 pub extern fn build_extract_value(builder *byte, value *byte, index i32, name string) *byte as "LLVMBuildExtractValue"
 pub extern fn build_insert_value(builder *byte, aggregate *byte, value *byte, index i32, name string) *byte as "LLVMBuildInsertValue"
+
+// The compiler stores temporary LLVMRef arrays in managed Vec<i64> values.
+// Raw backing storage is exposed only at this FFI boundary; normal YCPL code
+// has no Vec-to-pointer conversion.
+pub intrinsic fn vec_data_i64(values Vec<i64>) *byte
+
+// Opaque managed storage for arrays of foreign LLVM references. Keeping this
+// allocation in c/llvm prevents compiler code from depending on std.mem or
+// exposing a general Vec-to-pointer conversion.
+pub fn refs(count i32) *i64 {
+    if count < 0 { return none }
+    data: *i64 := mem.calloc(count, 8)
+    return mem.keep(data)
+}
+
+pub fn storage(count i32, element_size i32) *byte {
+    if count < 0 || element_size < 0 { return none }
+    return mem.keep(mem.calloc(count, element_size))
+}
+
+pub fn refs_get(values *i64, index i32) *byte {
+    if values == none || index < 0 { return none }
+    return cast(*byte, values[index])
+}
+
+pub fn refs_set(values *i64, index i32, value *byte) {
+    if values == none || index < 0 { return }
+    values[index] = cast(i64, value)
+}
+
+fn refs_data(values *i64) *byte {
+    return cast(*byte, values)
+}
+
+pub fn struct_type_refs(ctx *byte, fields *i64, count i32, packed i32) *byte {
+    return struct_type(ctx, refs_data(fields), count, packed)
+}
+
+pub fn set_struct_body_refs(typ *byte, fields *i64, count i32, packed i32) {
+    set_struct_body(typ, refs_data(fields), count, packed)
+}
+
+pub fn function_type_refs(result *byte, params *i64, count i32, variadic i32) *byte {
+    return function_type(result, refs_data(params), count, variadic)
+}
+
+pub fn build_call_refs(builder *byte, typ *byte, function *byte, args *i64, count i32, name string) *byte {
+    return build_call(builder, typ, function, refs_data(args), count, name)
+}
+
+pub fn build_gep_refs(builder *byte, typ *byte, address *byte, indices *i64, count i32, name string) *byte {
+    return build_gep(builder, typ, address, refs_data(indices), count, name)
+}
+
+pub fn add_incoming_refs(phi *byte, values *i64, blocks *i64, count i32) {
+    add_incoming(phi, refs_data(values), refs_data(blocks), count)
+}
+
+pub fn struct_type_vec(ctx *byte, fields Vec<i64>, count i32, packed i32) *byte {
+    return struct_type(ctx, vec_data_i64(fields), count, packed)
+}
+
+pub fn set_struct_body_vec(typ *byte, fields Vec<i64>, count i32, packed i32) {
+    set_struct_body(typ, vec_data_i64(fields), count, packed)
+}
+
+pub fn function_type_vec(result *byte, params Vec<i64>, count i32, variadic i32) *byte {
+    return function_type(result, vec_data_i64(params), count, variadic)
+}
+
+pub fn build_call_vec(builder *byte, typ *byte, function *byte, args Vec<i64>, count i32, name string) *byte {
+    return build_call(builder, typ, function, vec_data_i64(args), count, name)
+}
+
+pub fn build_gep_vec(builder *byte, typ *byte, address *byte, indices Vec<i64>, count i32, name string) *byte {
+    return build_gep(builder, typ, address, vec_data_i64(indices), count, name)
+}
+
+pub fn add_incoming_vec(phi *byte, values Vec<i64>, blocks Vec<i64>, count i32) {
+    add_incoming(phi, vec_data_i64(values), vec_data_i64(blocks), count)
+}
 
 pub fn verify_module(mod *byte) bool {
     message: string := none

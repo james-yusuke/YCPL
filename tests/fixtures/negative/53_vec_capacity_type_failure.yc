@@ -1,0 +1,3 @@
+fn main() {
+    values := Vec<i32>{capacity: "invalid"}
+}

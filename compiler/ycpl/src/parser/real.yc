@@ -5,7 +5,6 @@ import "lexer/lexer" as lexer
 import "lexer/token" as tok
 import "c/stdlib" as cstdlib
 import "std/array" as array
-import "std/mem" as mem
 import "std/str" as str
 import "std/text" as text
 
@@ -26,10 +25,7 @@ struct TokenArena {
 }
 
 fn retain_token_text(value string) string {
-    n := str.len(value)
-    copy: string := mem.calloc(n + 1, 1)
-    if copy != none && n > 0 { mem.copy(copy, value, n) }
-    return mem.keep(copy)
+    return text.slice(value, 0, str.len(value))
 }
 
 struct TokenResult {
@@ -107,7 +103,7 @@ fn token_text_at(p *Parser, index i32) string {
     if index < 0 || index >= array.len(p.tokens.kinds) {
         return ""
     }
-    return mem.keep(text.slice(p.tokens.source, p.tokens.starts[index], p.tokens.lengths[index]))
+    return text.slice(p.tokens.source, p.tokens.starts[index], p.tokens.lengths[index])
 }
 
 fn current_text(p *Parser) string {
@@ -172,6 +168,22 @@ fn expect(p *Parser, kind i32, message string) *Parser {
     return advance(p)
 }
 
+fn expect_type_gt(p *Parser, message string) *Parser {
+    if !p.ok {
+        return p
+    }
+    if current(p).kind == tok.gt() {
+        return advance(p)
+    }
+    if current(p).kind == tok.shr() {
+        p.tokens.kinds[p.pos] = tok.gt()
+        p.tokens.starts[p.pos] += 1
+        p.tokens.lengths[p.pos] = 1
+        return p
+    }
+    return fail(p, message)
+}
+
 fn skip_lines(p *Parser) *Parser {
     for (; p.ok && current(p).kind == tok.newline(); ) {
         p = advance(p)
@@ -189,9 +201,8 @@ fn literal_contents_text(value string) string {
         first := value[0]
         last := value[n - 1]
         if (first == '"' && last == '"') || (first == 39 && last == 39) || (first == '`' && last == '`') {
-            if first == '`' { return mem.keep(text.slice(value, 1, n - 2)) }
-            out: string := mem.calloc(n, 1)
-            at := 0
+            if first == '`' { return text.slice(value, 1, n - 2) }
+            out := text.builder(n - 2)
             i := 1
             for (; i < n - 1; i++) {
                 ch := value[i]
@@ -204,10 +215,9 @@ fn literal_contents_text(value string) string {
                     } else if escaped == '0' { ch = 0
                     } else { ch = escaped }
                 }
-                out[at] = ch
-                at += 1
+                out = text.append_char(out, ch)
             }
-            return out
+            return text.to_string(out)
         }
     }
     return value
@@ -279,14 +289,22 @@ fn parse_type(p *Parser) *Parser {
     flags := 0
     if owner_marker { flags = ast.flag_owned() }
 
-    if current(p).kind == tok.lt() {
+    if current(p).kind == tok.lt() && str.eq(type_name, "Vec") {
+        p = advance(p)
+        p = parse_type(p)
+        element := p.type_result
+        p = expect_type_gt(p, "expected '>' after Vec element type")
+        p = add_type(p, ast.make_type(ast.type_slice(), at_span(at), "", element, ast.invalid_id(), ast.invalid_id(), flags))
+        slice_type := p.type_result
+        p = add_type(p, ast.make_type(ast.type_vec(), at_span(at), "Vec", element, ast.invalid_id(), slice_type, flags))
+    } else if current(p).kind == tok.lt() {
         p = advance(p)
         p = parse_type(p)
         key := p.type_result
         p = expect(p, tok.comma(), "expected ',' in Map type")
         p = parse_type(p)
         value := p.type_result
-        p = expect(p, tok.gt(), "expected '>' after Map type")
+        p = expect_type_gt(p, "expected '>' after Map type")
         p = add_type(p, ast.make_type(ast.type_map(), at_span(at), "Map", ast.invalid_id(), key, value, flags))
     } else {
         p = add_type(p, ast.make_type(builtin_type_kind(type_name), at_span(at), type_name, ast.invalid_id(), ast.invalid_id(), ast.invalid_id(), flags))
@@ -324,7 +342,29 @@ fn parse_primary(p *Parser) *Parser {
     at_text := token_text_at(p, at_pos)
     kind := at.kind
     primary_is_cast := kind == tok.kw_cast()
-    if kind == tok.ident() || kind == tok.kw_cast() {
+    if kind == tok.ident() && str.eq(at_text, "Vec") && look(p, 1).kind == tok.lt() {
+        p = parse_type(p)
+        vec_type := p.type_result
+        p = expect(p, tok.lbrace(), "expected '{' after Vec<T>")
+        p = skip_lines(p)
+        capacity := ast.invalid_id()
+        if current(p).kind != tok.rbrace() {
+            field_text := current_text(p)
+            if !str.eq(field_text, "capacity") { return fail(p, "Vec literal only supports the 'capacity' field") }
+            p = expect(p, tok.ident(), "expected 'capacity' in Vec literal")
+            p = expect(p, tok.colon(), "expected ':' after Vec capacity")
+            p = parse_expression(p, 1)
+            capacity = p.expr_result
+            p = skip_lines(p)
+            if current(p).kind == tok.comma() {
+                p = advance(p)
+                p = skip_lines(p)
+                if current(p).kind != tok.rbrace() { return fail(p, "Vec literal accepts only one capacity field") }
+            }
+        }
+        p = expect(p, tok.rbrace(), "expected '}' to close Vec literal")
+        p = add_expr(p, ast.make_expr(ast.expr_vec(), at_span(at), vec_type, capacity, ast.invalid_id(), 0, 0, "Vec", "", 0, 0.0, 0))
+    } else if kind == tok.ident() || kind == tok.kw_cast() {
         p = advance(p)
         type_kind := builtin_type_kind(at_text)
         type_argument_context := look(p, -2).kind == tok.lparen() && (str.eq(token_text_at(p, p.pos - 3), "sizeof") || str.eq(token_text_at(p, p.pos - 3), "new"))
@@ -858,12 +898,8 @@ pub fn parse(path string, source string) ProgramAst {
         program.error_col = scanned.col
         return program
     }
-    p: *Parser = mem.calloc(1, mem.sizeof(Parser))
-    if p == none {
-        program.ok = false
-        program.message = "failed to allocate parser state"
-        return program
-    }
+    parser_state := Parser{ok: true, message: "", line: 1, col: 1, pos: 0, tokens: scanned.tokens, program: program, type_result: ast.invalid_id(), expr_result: ast.invalid_id(), stmt_result: ast.invalid_id(), decl_result: ast.invalid_id()}
+    p: *Parser := &parser_state
     p.ok = true
     p.message = ""
     p.line = 1
@@ -889,7 +925,7 @@ pub fn parse(path string, source string) ProgramAst {
             part := current(p)
             part_text := token_text_at(p, part_pos)
             p = expect(p, tok.ident(), "expected module name component")
-            p.program.module_name = mem.keep(text.concat3(p.program.module_name, ".", part_text))
+            p.program.module_name = text.concat3(p.program.module_name, ".", part_text)
         }
         p = skip_lines(p)
     }
@@ -906,12 +942,12 @@ pub fn parse(path string, source string) ProgramAst {
             p = expect(p, tok.ident(), "expected alias after 'as'")
         }
         p = add_decl(p, ast.make_decl(ast.decl_import(), at_span(start), alias, p.program.module_name, literal_contents_text(token_text_at(p, path_pos)), ast.invalid_id(), ast.invalid_id(), 0, 0, 0, 0, 0))
-        p.program.root_decls = array.append(p.program.root_decls, p.decl_result)
+        p.program.root_decls.push(p.decl_result)
         p = skip_lines(p)
     }
     for (; p.ok && current(p).kind != tok.eof(); ) {
         p = parse_declaration(p)
-        if p.ok { p.program.root_decls = array.append(p.program.root_decls, p.decl_result) }
+        if p.ok { p.program.root_decls.push(p.decl_result) }
         p = skip_lines(p)
     }
     if !p.ok {

@@ -46,8 +46,29 @@ Value *CodeGen::codegen_std_intrinsic_call(const std::string &name, const ast::C
 
 Value *CodeGen::codegen_call(const ast::CallExpr *ce)
 {
+    if (auto member = dynamic_cast<const ast::MemberExpr *>(ce->callee.get()))
+    {
+        TypeShape shape = parse_type_shape(infer_expr_type_name(member->object.get()));
+        if (shape.is_vec_type())
+            return codegen_vec_method(member, ce);
+    }
+
     if (auto ident = dynamic_cast<const ast::Ident *>(ce->callee.get()))
     {
+        if (ident->name == "__YCPL_c__llvm_vec_data_i64")
+        {
+            if (ce->args.size() != 1)
+            {
+                error("c.llvm.vec_data_i64 expects one Vec argument");
+                return nullptr;
+            }
+            Value *header = codegen_expr(ce->args[0].get());
+            if (!header)
+                return nullptr;
+            Value *dataAddress = array_header_field_ptr(header, detail::RuntimeArrayField::Data, "llvm.vec.data.ptr");
+            return builder.CreateLoad(get_i8ptr_type(), dataAddress, "llvm.vec.data");
+        }
+
         if (is_YCPL_std_intrinsic(ident->name))
         {
             return codegen_std_intrinsic_call(ident->name, ce);

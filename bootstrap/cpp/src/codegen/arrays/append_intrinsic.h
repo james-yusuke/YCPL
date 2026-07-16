@@ -4,6 +4,8 @@
 #include <llvm/IR/Constants.h>
 #include <llvm/IR/DerivedTypes.h>
 #include <llvm/IR/Intrinsics.h>
+#include <functional>
+#include <limits>
 
 namespace codegen
 {
@@ -13,6 +15,17 @@ Value *CodeGen::codegen_append_call(const ast::CallExpr *ce)
     if (ce->args.size() != 2)
     {
         error("append expects 2 arguments (array, elem)");
+        return nullptr;
+    }
+
+    return codegen_append_value(ce->args[0].get(), ce->args[1].get(), false);
+}
+
+Value *CodeGen::codegen_append_value(const ast::Expr *arrayExpr, const ast::Expr *elementExpr, bool returnIndex)
+{
+    if (!arrayExpr || !elementExpr)
+    {
+        error("append requires an array and an element");
         return nullptr;
     }
 
@@ -29,7 +42,7 @@ Value *CodeGen::codegen_append_call(const ast::CallExpr *ce)
     Value *array_target_value = nullptr;
     const ast::IndexExpr *idxExpr = nullptr;
 
-    auto e = ce->args[0].get();
+    auto e = arrayExpr;
     if (!e)
         return nullptr;
 
@@ -92,11 +105,11 @@ Value *CodeGen::codegen_append_call(const ast::CallExpr *ce)
         return nullptr;
     }
 
-    Value *elem = codegen_expr(ce->args[1].get());
+    Value *elem = codegen_expr(elementExpr);
     if (!elem)
         return nullptr;
 
-    bool elemPointerCopiesPointee = dynamic_cast<const ast::StructLiteral *>(ce->args[1].get()) != nullptr;
+    bool elemPointerCopiesPointee = dynamic_cast<const ast::StructLiteral *>(elementExpr) != nullptr;
 
     if (array_target_value && array_target_value->getType()->isPointerTy())
     {
@@ -224,6 +237,20 @@ Value *CodeGen::codegen_append_call(const ast::CallExpr *ce)
     if (rawDataPtr->getType() != i8ptrTy)
         rawDataPtr = builder.CreatePointerCast(rawDataPtr, i8ptrTy, "raw_data_as_i8ptr");
 
+    if (returnIndex)
+    {
+        Value *indexOverflow = builder.CreateICmpUGT(lenVal, ConstantInt::get(i64Ty, static_cast<uint64_t>(std::numeric_limits<int32_t>::max())), "vec.push.index_overflow");
+        Function *function = builder.GetInsertBlock()->getParent();
+        BasicBlock *abortBlock = BasicBlock::Create(context, "vec.push.overflow", function);
+        BasicBlock *okBlock = BasicBlock::Create(context, "vec.push.index.ok", function);
+        builder.CreateCondBr(indexOverflow, abortBlock, okBlock);
+        builder.SetInsertPoint(abortBlock);
+        FunctionType *abortType = FunctionType::get(Type::getVoidTy(context), {}, false);
+        builder.CreateCall(M->getOrInsertFunction("abort", abortType), {});
+        builder.CreateUnreachable();
+        builder.SetInsertPoint(okBlock);
+    }
+
     Value *cmpHasSpace = builder.CreateICmpULT(lenVal, capVal, "has_space");
     Function *curFn = builder.GetInsertBlock()->getParent();
     BasicBlock *bbHasSpace = BasicBlock::Create(context, "append_has_space", curFn);
@@ -307,8 +334,17 @@ Value *CodeGen::codegen_append_call(const ast::CallExpr *ce)
         Value *newCap = builder.CreateSelect(capIsZero, one64, capDbl, "new_cap");
 
         Value *newBytes = builder.CreateMul(newCap, elemSizeValFinal, "new_bytes");
-        FunctionCallee mallocFn = detail::getMalloc(M);
-        Value *newRawOpaque = builder.CreateCall(mallocFn, {newBytes}, "new_data_raw_opaque");
+        Value *newRawOpaque = nullptr;
+        if (returnIndex)
+        {
+            if (Function *allocateManaged = get_or_declare_c_function("yc_alloc"))
+                newRawOpaque = builder.CreateCall(allocateManaged, {newBytes}, "new_data_raw_opaque");
+        }
+        if (!newRawOpaque)
+        {
+            FunctionCallee mallocFn = detail::getMalloc(M);
+            newRawOpaque = builder.CreateCall(mallocFn, {newBytes}, "new_data_raw_opaque");
+        }
         Value *newRawData = builder.CreatePointerCast(newRawOpaque, i8ptrTy, "new_data_raw_i8");
 
         Value *oldBytesToCopy = builder.CreateMul(lenVal, elemSizeValFinal, "bytes_to_copy");
@@ -347,6 +383,47 @@ Value *CodeGen::codegen_append_call(const ast::CallExpr *ce)
 
     builder.SetInsertPoint(bbCont);
 
+    if (returnIndex)
+    {
+        Function *attachFn = get_or_declare_c_function("yc_attach_child");
+        TypeShape containerShape = parse_type_shape(infer_expr_type_name(arrayExpr));
+        Type *expectedElementType = containerShape.is_vec_type()
+            ? resolve_llvm_type_name(containerShape.vec_element)
+            : nullptr;
+        Value *ownedValue = elem;
+        if (expectedElementType && expectedElementType->isStructTy() && elem->getType()->isPointerTy())
+            ownedValue = builder.CreateLoad(expectedElementType, elem, "vec.element.aggregate");
+
+        std::function<void(Value *)> attachManagedChildren = [&](Value *value)
+        {
+            if (!value || !attachFn)
+                return;
+            Type *valueType = value->getType();
+            if (valueType->isPointerTy())
+            {
+                builder.CreateCall(attachFn, {
+                    builder.CreatePointerCast(array_header_ptr, i8ptrTy, "vec.element.parent"),
+                    builder.CreatePointerCast(value, i8ptrTy, "vec.element.child"),
+                });
+                return;
+            }
+            if (auto *structType = dyn_cast<StructType>(valueType))
+            {
+                for (unsigned field = 0; field < structType->getNumElements(); ++field)
+                    attachManagedChildren(builder.CreateExtractValue(value, {field}, "vec.element.field"));
+                return;
+            }
+            if (auto *arrayType = dyn_cast<ArrayType>(valueType))
+            {
+                for (uint64_t index = 0; index < arrayType->getNumElements(); ++index)
+                    attachManagedChildren(builder.CreateExtractValue(value, {static_cast<unsigned>(index)}, "vec.element.item"));
+            }
+        };
+        attachManagedChildren(ownedValue);
+    }
+
+    if (returnIndex)
+        return builder.CreateTrunc(lenVal, get_int_type(), "vec.push.index");
     return array_header_ptr;
 }
 

@@ -1,0 +1,73 @@
+import "std/fmt" as fmt
+
+extern fn runtime_live_allocations() i64 as "yc_runtime_live_allocations"
+extern fn keep_string(value string) string as "yc_keep_string"
+
+struct Box {
+    value string
+}
+
+fn score(before i64, allocated i64, released i64) i64 {
+    result: i64 := 0
+    if allocated > before {
+        result += 1
+    }
+    if released == before {
+        result += 1
+    }
+    return result
+}
+
+fn check_string() i64 {
+    values := Vec<string>{}
+    before := runtime_live_allocations()
+    value := keep_string("YCPL")
+    values.push(value)
+    allocated := runtime_live_allocations()
+    values.clear()
+    released := runtime_live_allocations()
+    return score(before, allocated, released)
+}
+
+fn check_struct() i64 {
+    values := Vec<Box>{}
+    before := runtime_live_allocations()
+    value := keep_string("managed field")
+    values.push(Box{value: value})
+    allocated := runtime_live_allocations()
+    values.clear()
+    released := runtime_live_allocations()
+    return score(before, allocated, released)
+}
+
+fn check_nested() i64 {
+    values := Vec<Vec<i32>>{}
+    before := runtime_live_allocations()
+    child := Vec<i32>{}
+    child.push(42)
+    values.push(child)
+    allocated := runtime_live_allocations()
+    values.clear()
+    released := runtime_live_allocations()
+    return score(before, allocated, released)
+}
+
+fn check_overwrite() i64 {
+    values := Vec<string>{}
+    first := keep_string("first")
+    values.push(first)
+    before := runtime_live_allocations()
+    second := keep_string("second")
+    allocated := runtime_live_allocations()
+    values[0] = second
+    replaced := runtime_live_allocations()
+    values.clear()
+    return score(before, allocated, replaced)
+}
+
+fn main() {
+    fmt.println(check_string())
+    fmt.println(check_struct())
+    fmt.println(check_nested())
+    fmt.println(check_overwrite())
+}
