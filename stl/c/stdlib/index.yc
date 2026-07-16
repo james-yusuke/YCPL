@@ -5,5 +5,9 @@ pub extern fn calloc(count size_t, size size_t) *byte as "calloc"
 pub extern fn realloc(ptr *byte, size size_t) *byte as "realloc"
 pub extern fn free(ptr *byte) as "free"
 
+pub extern fn atoi(text string) i32 as "atoi"
+pub extern fn atoll(text string) i64 as "atoll"
+pub extern fn atof(text string) double as "atof"
+
 pub extern fn getenv(name string) string as "getenv"
 pub extern fn system(command string) i32 as "system"

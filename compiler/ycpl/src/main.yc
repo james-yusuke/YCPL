@@ -1,85 +1,22 @@
 import "driver/driver" as driver
-import "checker/checker" as checker
-import "codegen/irgen" as irgen
+import "codegen/backend" as backend
 import "lexer/lexer" as lexer
+import "lexer/token" as tok
 import "parser/parser" as parser
-import "resolver/resolver" as resolver
 import "resolver/semantic" as semantic
 import "source/source" as source
-import "lexer/token" as tok
-import "ast/nodes" as astnodes
-import "ast/project" as astproject
+import "ast/nodes" as ast
+import "c/yc_runtime" as runtime
 import "std/fmt" as fmt
+import "std/mem" as mem
 import "std/str" as str
 import "std/fs" as fs
 import "std/os" as os
+import "std/text" as text
 
 fn usage() {
-    fmt.println("usage: ycc-ycpl <lex|parse|resolve|check|build|build-ir|build-ir-self> [options] <file.yc | dir>")
-    fmt.println("       ycc-ycpl build compiler/ycpl -o build/self")
-    fmt.println("       ycc-ycpl build-ir compiler/ycpl -o build/self")
-    fmt.println("options for build/build-ir:")
-    fmt.println("       --bootstrap <path-to-ycc>")
-}
-
-fn run_lex(path string, text string) i32 {
-    lx := lexer.new(path, text)
-    for (; true; ) {
-        lx = lexer.next(lx)
-        if !lx.ok {
-            fmt.printf("%s:%d:%d: %s\n", path, lx.tok_line, lx.tok_col, lx.message)
-            return 1
-        }
-        if lx.kind == tok.eof() {
-            return 0
-        }
-        if lx.kind != tok.newline() {
-            fmt.printf("%d:%d %s %s\n", lx.tok_line, lx.tok_col, tok.name(lx.kind), lx.lexeme)
-        }
-    }
-    return 0
-}
-
-fn run_parse(path string, text string) i32 {
-    // Keep the legacy summary stable for callers during the migration, but do
-    // not let it accept a program the real typed AST frontend cannot retain.
-    parsed_ast := parser.parse_ast(path, text)
-    if !parsed_ast.ok {
-        fmt.printf("%s:%d:%d: %s\n", path, parsed_ast.error_line, parsed_ast.error_col, parsed_ast.message)
-        return 1
-    }
-    result := parser.parse(path, text)
-    if !result.ok {
-        fmt.printf("%s:%d:%d: %s\n", path, result.line, result.col, result.message)
-        return 1
-    }
-    fmt.printf("parse ok: tokens=%d decls=%d funcs=%d structs=%d imports=%d nodes=%d depth=%d\n", result.tokens, result.decls, result.functions, result.structs, result.imports, result.program.arena.nodes, result.max_depth)
-    return 0
-}
-
-fn run_parse_ast(path string, text string) i32 {
-    result := parser.parse_ast(path, text)
-    if !result.ok {
-        fmt.printf("%s:%d:%d: %s\n", path, result.error_line, result.error_col, result.message)
-        return 1
-    }
-    fmt.printf("ast ok: decls=%d types=%d stmts=%d exprs=%d fields=%d params=%d\n", astnodes.decl_count(result.arena), astnodes.type_count(result.arena), astnodes.stmt_count(result.arena), astnodes.expr_count(result.arena), astnodes.field_count(result.arena), astnodes.param_count(result.arena))
-    return 0
-}
-
-fn run_parse_ast_project(path string) i32 {
-    result := astproject.parse_project(path)
-    if !result.ok {
-        fmt.printf("%s:%d:%d: %s\n", result.file, result.line, result.col, result.message)
-        return 1
-    }
-    resolved := semantic.collect(result)
-    if !resolved.ok {
-        fmt.printf("%s:%d:%d: %s\n", resolved.file, resolved.line, resolved.col, resolved.message)
-        return 1
-    }
-    fmt.printf("ast project ok: files=%d decls=%d types=%d stmts=%d exprs=%d fields=%d params=%d imports=%d funcs=%d structs=%d enums=%d aliases=%d symbols=%d digest=%d\n", result.files, result.decls, result.types, result.stmts, result.exprs, result.fields, result.params, result.imports, result.functions, result.structs, result.enums, result.aliases, resolved.symbol_len, result.digest)
-    return 0
+    fmt.println("usage: ycc <build|build-ir|run|debug|lex|parse|check|resolve|help> [options] <file.yc | dir>")
+    fmt.println("options: -o <directory>  --keep-obj  --link-llvm  -- <program arguments>")
 }
 
 fn standard_library_root() string {
@@ -87,16 +24,79 @@ fn standard_library_root() string {
     if explicit != none && str.len(explicit) > 0 { return explicit }
     if fs.exists("stl") { return "stl" }
     if fs.exists("../../stl") { return "../../stl" }
+    executable_dir := runtime.executable_dir()
+    if executable_dir != none && str.len(executable_dir) > 0 {
+        adjacent := text.concat3(executable_dir, "/", "stl")
+        if fs.exists(adjacent) { return adjacent }
+    }
     return ""
 }
 
-fn run_resolve_project(path string) i32 {
-    stl_root := standard_library_root()
-    if str.len(stl_root) == 0 {
-        fmt.println("standard library root not found; set YCPL_STL_ROOT")
+fn output_dir(argc i32, argv *string) string {
+    i := 2
+    for (; i < argc; i++) {
+        if str.eq(argv[i], "-o") || str.eq(argv[i], "--output") {
+            if i + 1 < argc { return argv[i + 1] }
+        }
+    }
+    return "build"
+}
+
+fn input_path(argc i32, argv *string) string {
+    i := 2
+    for (; i < argc; i++) {
+        value := argv[i]
+        if str.eq(value, "-o") || str.eq(value, "--output") {
+            i += 1
+        } else if str.eq(value, "--keep-obj") || str.eq(value, "--link-llvm") {
+        } else if str.eq(value, "--") {
+            return ""
+        } else {
+            return value
+        }
+    }
+    return ""
+}
+
+fn source_stem(path string) string {
+    n := str.len(path)
+    start := 0
+    i := 0
+    for (; i < n; i++) { if path[i] == '/' { start = i + 1 } }
+    end := n
+    if end - start >= 3 && path[end - 3] == '.' && path[end - 2] == 'y' && path[end - 1] == 'c' { end -= 3 }
+    count := end - start
+    result: string := mem.calloc(count + 1, 1)
+    if result != none && count > 0 { mem.copy(result, path + start, count) }
+    return result
+}
+
+fn run_lex(path string, source_text string) i32 {
+    lx := lexer.new(path, source_text)
+    for (; true; ) {
+        lx = lexer.next(lx)
+        if !lx.ok {
+            fmt.printf("%s:%d:%d: %s\n", path, lx.tok_line, lx.tok_col, lx.message)
+            return 1
+        }
+        if lx.kind == tok.eof() { return 0 }
+        if lx.kind != tok.newline() { fmt.printf("%d:%d %s %s\n", lx.tok_line, lx.tok_col, tok.name(lx.kind), lx.lexeme) }
+    }
+    return 0
+}
+
+fn run_parse(path string, source_text string) i32 {
+    result := parser.parse_ast(path, source_text)
+    if !result.ok {
+        fmt.printf("%s:%d:%d: %s\n", path, result.error_line, result.error_col, result.message)
         return 1
     }
-    result := semantic.load(path, stl_root)
+    fmt.printf("parse ok: decls=%d types=%d stmts=%d exprs=%d fields=%d params=%d\n", ast.decl_count(result.arena), ast.type_count(result.arena), ast.stmt_count(result.arena), ast.expr_count(result.arena), ast.field_count(result.arena), ast.param_count(result.arena))
+    return 0
+}
+
+fn run_resolve(path string) i32 {
+    result := semantic.load(path, standard_library_root())
     if !result.ok {
         fmt.printf("%s:%d:%d: %s\n", result.file, result.line, result.col, result.message)
         return 1
@@ -105,200 +105,43 @@ fn run_resolve_project(path string) i32 {
     return 0
 }
 
-fn run_parse_project(path string) i32 {
-    parsed_ast := astproject.parse_project(path)
-    if !parsed_ast.ok {
-        fmt.printf("%s:%d:%d: %s\n", parsed_ast.file, parsed_ast.line, parsed_ast.col, parsed_ast.message)
-        return 1
+fn emit_ir(argc i32, argv *string) i32 {
+    path := input_path(argc, argv)
+    if str.len(path) == 0 {
+        if fs.exists("YCPL.json") { path = "."
+        } else {
+            usage()
+            return 1
+        }
     }
-    result := resolver.parse_project(path)
+    out := output_dir(argc, argv)
+    fs.mkdir(out)
+    out_file := text.concat3(out, "/", "merged.ll")
+    result := backend.emit(path, standard_library_root(), out_file)
     if !result.ok {
         fmt.printf("%s:%d:%d: %s\n", result.file, result.line, result.col, result.message)
         return 1
     }
-    main_value := 0
-    if result.has_main {
-        main_value = 1
-    }
-    typed_nodes := result.typed_decl_nodes + result.typed_stmt_nodes + result.typed_expr_nodes + result.typed_type_nodes
-    fmt.printf("parse ok: files=%d tokens=%d decls=%d funcs=%d structs=%d imports=%d nodes=%d typed_nodes=%d typed_digest=%d symbols=%d symbol_structs=%d symbol_imports=%d std_imports=%d import_aliases=%d public_symbols=%d local_decl_symbols=%d fn_zero_params=%d fn_nonzero_params=%d fn_params=%d fn_max_params=%d fn_returns=%d fn_sig_digest=%d call_sites=%d zero_arg_calls=%d nonzero_arg_calls=%d call_args=%d max_call_args=%d call_arity_digest=%d sig_nodes=%d sig_fns=%d sig_calls=%d sig_arity_slots=%d sig_max_arity=%d sig_returns=%d sig_digest=%d symbol_digest=%d import_digest=%d module_digest=%d bodies=%d body_tokens=%d body_nodes=%d body_slots=%d body_nonempty=%d body_max_nodes=%d body_slot_digest=%d transitions=%d payload_ids=%d payload_literals=%d payload_types=%d payload_controls=%d payload_digest=%d local_symbols=%d assignment_targets=%d call_targets=%d return_symbols=%d return_literals=%d type_refs=%d control_refs=%d semantic_digest=%d returns=%d return_exprs=%d digest=%d fn_digest=%d body_digest=%d node_digest=%d transition_digest=%d ret_digest=%d main=%d\n", result.files, result.tokens, result.decls, result.functions, result.structs, result.imports, result.nodes, typed_nodes, result.typed_digest, result.symbol_functions, result.symbol_structs, result.symbol_imports, result.symbol_std_imports, result.symbol_import_aliases, result.symbol_public, result.symbol_local, result.symbol_zero_param_functions, result.symbol_nonzero_param_functions, result.symbol_total_function_params, result.symbol_max_function_params, result.symbol_functions_with_return_type, result.symbol_function_signature_digest, result.symbol_call_sites, result.symbol_zero_arg_calls, result.symbol_nonzero_arg_calls, result.symbol_total_call_args, result.symbol_max_call_args, result.symbol_call_arity_digest, result.signature_nodes, result.signature_function_nodes, result.signature_call_nodes, result.signature_arity_slots, result.signature_max_arity, result.signature_return_functions, result.signature_digest, result.symbol_digest, result.symbol_import_digest, result.symbol_module_digest, result.function_bodies, result.function_body_tokens, result.body_node_count, result.body_slot_count, result.body_nonempty_slots, result.body_max_nodes_per_slot, result.body_slot_digest, result.body_local_assign_edges + result.body_assign_call_edges + result.body_call_return_edges + result.body_return_local_edges, result.body_identifier_payloads, result.body_literal_payloads, result.body_type_payloads, result.body_control_payloads, result.body_payload_digest, result.body_local_symbol_refs, result.body_assignment_target_refs, result.body_call_target_refs, result.body_return_symbol_refs, result.body_return_literal_refs, result.body_type_refs, result.body_control_refs, result.body_semantic_digest, result.returns, result.return_exprs, result.digest, result.function_name_digest, result.function_body_digest, result.body_node_digest, result.body_transition_digest, result.return_expr_digest, main_value)
-    fmt.printf("expr_table: nodes=%d primary=%d ids=%d literals=%d strings=%d bools=%d nones=%d calls=%d members=%d indexes=%d binary=%d unary=%d slots=%d nonempty=%d max_slot=%d slot_digest=%d digest=%d\n", result.expr_table_nodes, result.expr_primary_nodes, result.expr_identifier_nodes, result.expr_literal_nodes, result.expr_string_nodes, result.expr_bool_nodes, result.expr_none_nodes, result.expr_call_nodes, result.expr_member_nodes, result.expr_index_nodes, result.expr_binary_nodes, result.expr_unary_nodes, result.expr_slot_count, result.expr_nonempty_slots, result.expr_max_nodes_per_slot, result.expr_slot_digest, result.expr_table_digest)
-    fmt.printf("stmt_expr: links=%d tail=%d digest=%d\n", result.stmt_expr_links, result.stmt_expr_tail_nodes, result.stmt_expr_digest)
-    return 0
-}
-
-fn is_yc_file(path string) bool {
-    n := str.len(path)
-    if n < 3 {
-        return false
-    }
-    return path[n - 3] == '.' && path[n - 2] == 'y' && path[n - 1] == 'c'
-}
-
-fn output_dir(argc i32, argv *string) string {
-    i: i32 := 2
-    for (; i < argc; i++) {
-        if str.eq(argv[i], "-o") || str.eq(argv[i], "--output") {
-            if i + 1 < argc {
-                return argv[i + 1]
-            }
-        }
-    }
-    return "."
-}
-
-fn input_path(argc i32, argv *string) string {
-    i: i32 := 2
-    for (; i < argc; i++) {
-        if str.eq(argv[i], "-o") || str.eq(argv[i], "--output") || str.eq(argv[i], "--bootstrap") {
-            i += 1
-        } else {
-            return argv[i]
-        }
-    }
-    return ""
-}
-
-fn run_check(path string, text string) i32 {
-    checked := checker.check_tiny_main(path, text)
-    if !checked.ok {
-        fmt.printf("%s:%d:%d: %s\n", path, checked.line, checked.col, checked.message)
-        if !checked.supported {
-            return 2
-        }
-        return 1
-    }
-    fmt.printf("check ok: main returns %s value=%d\n", checked.return_type, checked.return_value)
-    return 0
-}
-
-fn run_check_project(path string) i32 {
-    checked := resolver.check_project(path)
-    if !checked.ok {
-        fmt.printf("%s:%d:%d: %s\n", checked.file, checked.line, checked.col, checked.message)
-        if !checked.supported {
-            return 2
-        }
-        return 1
-    }
-    main_value := 0
-    if checked.has_main {
-        main_value = 1
-    }
-    typed_nodes := checked.typed_decl_nodes + checked.typed_stmt_nodes + checked.typed_expr_nodes + checked.typed_type_nodes
-    fmt.printf("check ok: files=%d tokens=%d decls=%d funcs=%d structs=%d imports=%d nodes=%d typed_nodes=%d typed_digest=%d symbols=%d symbol_structs=%d symbol_imports=%d std_imports=%d import_aliases=%d public_symbols=%d local_decl_symbols=%d fn_zero_params=%d fn_nonzero_params=%d fn_params=%d fn_max_params=%d fn_returns=%d fn_sig_digest=%d call_sites=%d zero_arg_calls=%d nonzero_arg_calls=%d call_args=%d max_call_args=%d call_arity_digest=%d sig_nodes=%d sig_fns=%d sig_calls=%d sig_arity_slots=%d sig_max_arity=%d sig_returns=%d sig_digest=%d symbol_digest=%d import_digest=%d module_digest=%d bodies=%d body_tokens=%d body_nodes=%d body_slots=%d body_nonempty=%d body_max_nodes=%d body_slot_digest=%d local_nodes=%d assign_nodes=%d call_nodes=%d return_nodes=%d if_nodes=%d for_nodes=%d transitions=%d local_assign_edges=%d assign_call_edges=%d call_return_edges=%d return_local_edges=%d if_for_edges=%d for_return_edges=%d payload_ids=%d payload_literals=%d payload_types=%d payload_controls=%d payload_digest=%d local_symbols=%d assignment_targets=%d call_targets=%d return_symbols=%d return_literals=%d type_refs=%d control_refs=%d semantic_digest=%d calls=%d branches=%d loops=%d return_exprs=%d return_calls=%d digest=%d fn_digest=%d body_digest=%d node_digest=%d transition_digest=%d ret_digest=%d main=%d\n", checked.files, checked.tokens, checked.decls, checked.functions, checked.structs, checked.imports, checked.nodes, typed_nodes, checked.typed_digest, checked.symbol_functions, checked.symbol_structs, checked.symbol_imports, checked.symbol_std_imports, checked.symbol_import_aliases, checked.symbol_public, checked.symbol_local, checked.symbol_zero_param_functions, checked.symbol_nonzero_param_functions, checked.symbol_total_function_params, checked.symbol_max_function_params, checked.symbol_functions_with_return_type, checked.symbol_function_signature_digest, checked.symbol_call_sites, checked.symbol_zero_arg_calls, checked.symbol_nonzero_arg_calls, checked.symbol_total_call_args, checked.symbol_max_call_args, checked.symbol_call_arity_digest, checked.signature_nodes, checked.signature_function_nodes, checked.signature_call_nodes, checked.signature_arity_slots, checked.signature_max_arity, checked.signature_return_functions, checked.signature_digest, checked.symbol_digest, checked.symbol_import_digest, checked.symbol_module_digest, checked.function_bodies, checked.function_body_tokens, checked.body_node_count, checked.body_slot_count, checked.body_nonempty_slots, checked.body_max_nodes_per_slot, checked.body_slot_digest, checked.body_local_nodes, checked.body_assignment_nodes, checked.body_call_nodes, checked.body_return_nodes, checked.body_if_nodes, checked.body_for_nodes, checked.body_local_assign_edges + checked.body_assign_call_edges + checked.body_call_return_edges + checked.body_return_local_edges + checked.body_if_for_edges + checked.body_for_return_edges, checked.body_local_assign_edges, checked.body_assign_call_edges, checked.body_call_return_edges, checked.body_return_local_edges, checked.body_if_for_edges, checked.body_for_return_edges, checked.body_identifier_payloads, checked.body_literal_payloads, checked.body_type_payloads, checked.body_control_payloads, checked.body_payload_digest, checked.body_local_symbol_refs, checked.body_assignment_target_refs, checked.body_call_target_refs, checked.body_return_symbol_refs, checked.body_return_literal_refs, checked.body_type_refs, checked.body_control_refs, checked.body_semantic_digest, checked.calls, checked.branches, checked.loops, checked.return_exprs, checked.return_call_exprs, checked.digest, checked.function_name_digest, checked.function_body_digest, checked.body_node_digest, checked.body_transition_digest, checked.return_expr_digest, main_value)
-    fmt.printf("expr_table: nodes=%d primary=%d ids=%d literals=%d strings=%d bools=%d nones=%d calls=%d members=%d indexes=%d binary=%d unary=%d slots=%d nonempty=%d max_slot=%d slot_digest=%d digest=%d\n", checked.expr_table_nodes, checked.expr_primary_nodes, checked.expr_identifier_nodes, checked.expr_literal_nodes, checked.expr_string_nodes, checked.expr_bool_nodes, checked.expr_none_nodes, checked.expr_call_nodes, checked.expr_member_nodes, checked.expr_index_nodes, checked.expr_binary_nodes, checked.expr_unary_nodes, checked.expr_slot_count, checked.expr_nonempty_slots, checked.expr_max_nodes_per_slot, checked.expr_slot_digest, checked.expr_table_digest)
-    fmt.printf("stmt_expr: links=%d tail=%d digest=%d\n", checked.stmt_expr_links, checked.stmt_expr_tail_nodes, checked.stmt_expr_digest)
-    return 0
-}
-
-fn run_build_ir_self(argc i32, argv *string) i32 {
-    path := input_path(argc, argv)
-    if str.len(path) == 0 {
-        usage()
-        return 1
-    }
-
-    result := irgen.emit_file(path, output_dir(argc, argv))
-    if !result.ok {
-        fmt.printf("%s:%d:%d: %s\n", path, result.line, result.col, result.message)
-        if !result.supported {
-            return 2
-        }
-        return 1
+    path_len := str.len(path)
+    if path_len >= 3 && str.eq(path + path_len - 3, ".yc") {
+        ir := fs.read_file(result.out_file)
+        compatibility_name := text.concat3(source_stem(path), ".", "ll")
+        fs.write_file(text.concat3(out, "/", compatibility_name), ir)
     }
     fmt.printf("Wrote IR to \"%s\"\n", result.out_file)
     return 0
 }
 
-fn run_build(mode string, argc i32, argv *string) i32 {
-    path := input_path(argc, argv)
-    if resolver.is_compiler_project(path) {
-        checked := resolver.check_project(path)
-        if !checked.ok {
-            fmt.printf("%s:%d:%d: %s\n", checked.file, checked.line, checked.col, checked.message)
-            return 1
-        }
-        if str.eq(mode, "build-ir") {
-            result := irgen.emit_project(path, output_dir(argc, argv))
-            if result.ok {
-                fmt.printf("Wrote IR to \"%s\"\n", result.out_file)
-                return 0
-            }
-            fmt.printf("%s:%d:%d: %s\n", path, result.line, result.col, result.message)
-            if !result.supported {
-                return 2
-            }
-            return 1
-        }
-        if driver.bootstrap_fallback_disabled() {
-            out := output_dir(argc, argv)
-            result := irgen.emit_project(path, out)
-            if !result.ok {
-                fmt.printf("%s:%d:%d: %s\n", path, result.line, result.col, result.message)
-                if !result.supported {
-                    return 2
-                }
-                return 1
-            }
-            native := driver.build_native_from_ir(out)
-            if !native.ok {
-                fmt.printf("%s\n", native.message)
-                fmt.printf("command: %s\n", native.command)
-                return 1
-            }
-            fmt.printf("Wrote IR to \"%s\"\n", result.out_file)
-            fmt.printf("Wrote native AST smoke binary to \"%s/merged\"\n", out)
-            return 0
-        }
-    }
-
-    if str.eq(mode, "build-ir") {
-        if is_yc_file(path) {
-            result := irgen.emit_file(path, output_dir(argc, argv))
-            if result.ok {
-                fmt.printf("Wrote IR to \"%s\"\n", result.out_file)
-                return 0
-            }
-            if result.supported {
-                fmt.printf("%s:%d:%d: %s\n", path, result.line, result.col, result.message)
-                return 1
-            }
-        }
-    }
-    if str.eq(mode, "build") {
-        if is_yc_file(path) {
-            out := output_dir(argc, argv)
-            result := irgen.emit_file(path, out)
-            if result.ok {
-                native := driver.build_native_from_ir(out)
-                if !native.ok {
-                    fmt.printf("%s\n", native.message)
-                    fmt.printf("command: %s\n", native.command)
-                    return 1
-                }
-                fmt.printf("Wrote IR to \"%s\"\n", result.out_file)
-                fmt.printf("Wrote binary to \"%s/merged\"\n", out)
-                return 0
-            }
-            if result.supported {
-                fmt.printf("%s:%d:%d: %s\n", path, result.line, result.col, result.message)
-                return 1
-            }
-        }
-    }
-
-    if driver.bootstrap_fallback_disabled() {
-        fmt.printf("%s:%d:%d: unsupported by YCPL self-host compiler without bootstrap fallback\n", path, 1, 1)
-        return 2
-    }
-
-    result := driver.run_bootstrap(mode, argc, argv)
+fn build_native(argc i32, argv *string) i32 {
+    code := emit_ir(argc, argv)
+    if code != 0 { return code }
+    out := output_dir(argc, argv)
+    result := driver.build_native_from_ir(out)
     if !result.ok {
         fmt.printf("%s\n", result.message)
-        fmt.printf("command: %s\n", result.command)
-        return 1
+        return result.code
     }
+    fmt.printf("Wrote binary to \"%s/merged\"\n", out)
     return 0
 }
 
@@ -307,59 +150,31 @@ fn main(argc i32, argv *string) i32 {
         usage()
         return 1
     }
-
     mode := argv[1]
-
-    if str.eq(mode, "build") {
-        return run_build("build", argc, argv)
+    if str.eq(mode, "help") || str.eq(mode, "--help") || str.eq(mode, "-h") {
+        usage()
+        return 0
     }
-    if str.eq(mode, "build-ir") || str.eq(mode, "ll") {
-        return run_build("build-ir", argc, argv)
+    if str.eq(mode, "build-ir") || str.eq(mode, "ll") || str.eq(mode, "build-ir-self") || str.eq(mode, "build-ir-real") { return emit_ir(argc, argv) }
+    if str.eq(mode, "build") || str.eq(mode, "debug") { return build_native(argc, argv) }
+    if str.eq(mode, "run") {
+        code := build_native(argc, argv)
+        if code != 0 { return code }
+        return os.system(text.concat3(output_dir(argc, argv), "/", "merged"))
     }
-    if str.eq(mode, "build-ir-self") {
-        return run_build_ir_self(argc, argv)
-    }
-
     if argc < 3 {
         usage()
         return 1
     }
-
     path := argv[2]
-    if resolver.is_compiler_project(path) {
-        if str.eq(mode, "parse-ast") {
-            return run_parse_ast_project(path)
-        }
-        if str.eq(mode, "parse") {
-            return run_parse_project(path)
-        }
-        if str.eq(mode, "check") {
-            return run_check_project(path)
-        }
-        if str.eq(mode, "resolve") {
-            return run_resolve_project(path)
-        }
-    }
-
-    src := source.load(path)
-    if !src.ok {
+    if str.eq(mode, "resolve") || str.eq(mode, "check") { return run_resolve(path) }
+    loaded := source.load(path)
+    if !loaded.ok {
         fmt.printf("%s: could not read file\n", path)
         return 1
     }
-
-    if str.eq(mode, "lex") {
-        return run_lex(path, src.text)
-    }
-    if str.eq(mode, "parse") {
-        return run_parse(path, src.text)
-    }
-    if str.eq(mode, "parse-ast") {
-        return run_parse_ast(path, src.text)
-    }
-    if str.eq(mode, "check") {
-        return run_check(path, src.text)
-    }
-
+    if str.eq(mode, "lex") { return run_lex(path, loaded.text) }
+    if str.eq(mode, "parse") || str.eq(mode, "parse-ast") { return run_parse(path, loaded.text) }
     usage()
     return 1
 }

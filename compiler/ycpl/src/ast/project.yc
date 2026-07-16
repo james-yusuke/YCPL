@@ -118,7 +118,60 @@ fn retain_file(result ProjectAstResult, root string, path string, program Progra
     slot.relative_path = mem.keep(relative_path(root, path))
     slot.import_path = mem.keep(import_path(slot.relative_path))
     slot.module_name = mem.keep(program.module_name)
-    slot.program = program
+    slot.program.ok = program.ok
+    slot.program.message = mem.keep(program.message)
+    slot.program.error_line = program.error_line
+    slot.program.error_col = program.error_col
+    slot.program.file_id = program.file_id
+    slot.program.file = mem.keep(program.file)
+    slot.program.module_name = mem.keep(program.module_name)
+    slot.program.arena.types = program.arena.types
+    slot.program.arena.type_kinds = program.arena.type_kinds
+    slot.program.arena.type_bases = program.arena.type_bases
+    slot.program.arena.type_resolved_files = program.arena.type_resolved_files
+    slot.program.arena.type_resolved_ids = program.arena.type_resolved_ids
+    slot.program.arena.type_len = program.arena.type_len
+    slot.program.arena.type_cap = program.arena.type_cap
+    slot.program.arena.params = program.arena.params
+    slot.program.arena.param_name_ids = program.arena.param_name_ids
+    slot.program.arena.param_type_ids = program.arena.param_type_ids
+    slot.program.arena.param_flags = program.arena.param_flags
+    slot.program.arena.param_len = program.arena.param_len
+    slot.program.arena.param_cap = program.arena.param_cap
+    slot.program.arena.fields = program.arena.fields
+    slot.program.arena.field_names = program.arena.field_names
+    slot.program.arena.field_name_ids = program.arena.field_name_ids
+    slot.program.arena.field_type_ids = program.arena.field_type_ids
+    slot.program.arena.field_values = program.arena.field_values
+    slot.program.arena.field_len = program.arena.field_len
+    slot.program.arena.field_cap = program.arena.field_cap
+    slot.program.arena.decls = program.arena.decls
+    slot.program.arena.decl_names = program.arena.decl_names
+    slot.program.arena.decl_module_names = program.arena.decl_module_names
+    slot.program.arena.decl_link_names = program.arena.decl_link_names
+    slot.program.arena.decl_kinds = program.arena.decl_kinds
+    slot.program.arena.decl_type_ids = program.arena.decl_type_ids
+    slot.program.arena.decl_bodies = program.arena.decl_bodies
+    slot.program.arena.decl_first_params = program.arena.decl_first_params
+    slot.program.arena.decl_param_counts = program.arena.decl_param_counts
+    slot.program.arena.decl_first_fields = program.arena.decl_first_fields
+    slot.program.arena.decl_field_counts = program.arena.decl_field_counts
+    slot.program.arena.decl_flags = program.arena.decl_flags
+    slot.program.arena.decl_len = program.arena.decl_len
+    slot.program.arena.decl_cap = program.arena.decl_cap
+    slot.program.arena.stmts = program.arena.stmts
+    slot.program.arena.stmt_name_ids = program.arena.stmt_name_ids
+    slot.program.arena.stmt_len = program.arena.stmt_len
+    slot.program.arena.stmt_cap = program.arena.stmt_cap
+    slot.program.arena.exprs = program.arena.exprs
+    slot.program.arena.expr_names = program.arena.expr_names
+    slot.program.arena.expr_name_ids = program.arena.expr_name_ids
+    slot.program.arena.expr_int_values = program.arena.expr_int_values
+    slot.program.arena.expr_syntax_type_ids = program.arena.expr_syntax_type_ids
+    slot.program.arena.expr_len = program.arena.expr_len
+    slot.program.arena.expr_cap = program.arena.expr_cap
+    slot.program.arena.children = program.arena.children
+    slot.program.root_decls = program.root_decls
     return result
 }
 
@@ -129,7 +182,55 @@ pub fn file_at(result ProjectAstResult, file_id i32) *ProjectFile {
 
 pub fn program_at(result ProjectAstResult, file_id i32) ProgramAst {
     file: *ProjectFile := file_at(result, file_id)
-    return file.program
+    arena := AstArena{
+        types: file.program.arena.types,
+        type_kinds: file.program.arena.type_kinds,
+        type_bases: file.program.arena.type_bases,
+        type_resolved_files: file.program.arena.type_resolved_files,
+        type_resolved_ids: file.program.arena.type_resolved_ids,
+        type_len: file.program.arena.type_len,
+        type_cap: file.program.arena.type_cap,
+        params: file.program.arena.params,
+        param_name_ids: file.program.arena.param_name_ids,
+        param_type_ids: file.program.arena.param_type_ids,
+        param_flags: file.program.arena.param_flags,
+        param_len: file.program.arena.param_len,
+        param_cap: file.program.arena.param_cap,
+        fields: file.program.arena.fields,
+        field_names: file.program.arena.field_names,
+        field_name_ids: file.program.arena.field_name_ids,
+        field_type_ids: file.program.arena.field_type_ids,
+        field_values: file.program.arena.field_values,
+        field_len: file.program.arena.field_len,
+        field_cap: file.program.arena.field_cap,
+        decls: file.program.arena.decls,
+        decl_names: file.program.arena.decl_names,
+        decl_module_names: file.program.arena.decl_module_names,
+        decl_link_names: file.program.arena.decl_link_names,
+        decl_kinds: file.program.arena.decl_kinds,
+        decl_type_ids: file.program.arena.decl_type_ids,
+        decl_bodies: file.program.arena.decl_bodies,
+        decl_first_params: file.program.arena.decl_first_params,
+        decl_param_counts: file.program.arena.decl_param_counts,
+        decl_first_fields: file.program.arena.decl_first_fields,
+        decl_field_counts: file.program.arena.decl_field_counts,
+        decl_flags: file.program.arena.decl_flags,
+        decl_len: file.program.arena.decl_len,
+        decl_cap: file.program.arena.decl_cap,
+        stmts: file.program.arena.stmts,
+        stmt_name_ids: file.program.arena.stmt_name_ids,
+        stmt_len: file.program.arena.stmt_len,
+        stmt_cap: file.program.arena.stmt_cap,
+        exprs: file.program.arena.exprs,
+        expr_names: file.program.arena.expr_names,
+        expr_name_ids: file.program.arena.expr_name_ids,
+        expr_int_values: file.program.arena.expr_int_values,
+        expr_syntax_type_ids: file.program.arena.expr_syntax_type_ids,
+        expr_len: file.program.arena.expr_len,
+        expr_cap: file.program.arena.expr_cap,
+        children: file.program.arena.children,
+    }
+    return ProgramAst{ok: file.program.ok, message: file.program.message, error_line: file.program.error_line, error_col: file.program.error_col, file_id: file.program.file_id, file: file.program.file, module_name: file.program.module_name, arena: arena, root_decls: file.program.root_decls}
 }
 
 pub fn path_at(result ProjectAstResult, file_id i32) string {
@@ -174,7 +275,8 @@ fn append_path(result ProjectAstResult, relative_root string, path string) Proje
         result.message = "could not read source file"
         return result
     }
-    program := parser.parse_ast_with_file(path, loaded.text, result.files)
+    program := parser.parse_ast(path, loaded.text)
+    program.file_id = result.files
     if !program.ok {
         result.ok = false
         result.file = path
@@ -281,5 +383,6 @@ pub fn parse_compilation(root string, stl_root string) ProjectAstResult {
         result.message = "failed to discover standard library sources"
         return result
     }
-    return append_path_lines(result, stl_root, std_paths)
+    result = append_path_lines(result, stl_root, std_paths)
+    return result
 }

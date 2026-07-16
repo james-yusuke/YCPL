@@ -1,5 +1,5 @@
 {
-  "name": "ycc-ycpl",
+  "name": "ycc",
   "version": "0.1.0",
   "entry": "src/main.yc",
   "src": ["src/"],
