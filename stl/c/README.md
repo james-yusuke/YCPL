@@ -1,7 +1,8 @@
 # YCPL C API bindings
 
-This directory contains thin, public declarations for C and POSIX APIs. Each
-module follows the header that declares the corresponding functions:
+This directory is the canonical home for thin, public declarations of C,
+POSIX, runtime, and LLVM APIs. Each module follows the header or ABI surface
+that declares the corresponding functions:
 
 ```text
 c/
@@ -28,3 +29,9 @@ fn main() i32 {
 
 These modules intentionally expose raw foreign-function boundaries. Managed
 allocation, ownership, and higher-level convenience APIs belong in `std`.
+New raw bindings should be added here rather than under `stl/std`. Compatibility
+wrappers already present in `std` may remain while callers migrate.
+
+`c/llvm` also provides narrow `Vec<i64>` argument bridges for LLVM APIs that
+require contiguous arrays of references. The raw backing pointer is kept
+inside the binding module and is not exposed as a general `Vec<T>` conversion.

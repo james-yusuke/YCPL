@@ -28,13 +28,15 @@ ycc-bootstrap (C++ seed/reference)
 - File IDs follow a stable sort of project-relative paths.
 - Cross-file references retain file/node IDs and resolved symbol IDs.
 - Source discovery follows symlinks with `stat` and prevents cycles with device/inode tracking.
-- Locals, functions, arguments, and struct fields use dynamic arenas without the former fixed limits.
+- AST node sequences, project files, symbols, imports, and locals use `Vec<T>`-backed dynamic arenas.
+- Regression fixtures exercise more than 64 locals/functions, more than 32 arguments, and structs with more than four fields, removing the former fixed limits.
 - Declarations, types, literals, operators, assignments, functions, structs, enums, aliases, pointers, slices, maps, ownership, defer, scope, switch, loops, UFCS, externs, intrinsics, and variadics are resolved on the real AST.
+- `compiler/ycpl` directly imports no `std/mem`; its AST, resolver, and project-loader variable-length data use `Vec<T>`.
 
 ## LLVM Backend
 
 - Named types, structs, functions, and externs are declared before bodies are lowered.
-- Primitive, pointer, slice, struct, array, map, alias, and enum ABIs are supported.
+- Primitive, pointer, slice, Vec, struct, array, map, alias, and enum ABIs are supported.
 - Resolved AST directly lowers short-circuit logic, bounds checks, break/continue, switch, LIFO defer, scope unwind, compound assignment, casts, UFCS, and variadic calls.
 - Managed-allocation function/scope frames, escape, child ownership, and main initialization/shutdown are emitted by the compiler.
 - Every generated module must pass the LLVM verifier.
@@ -42,8 +44,9 @@ ycc-bootstrap (C++ seed/reference)
 
 ## C API Boundary
 
-Raw C and LLVM declarations live under `stl/c/*`. The compiler uses `c/llvm`,
-`c/stdlib`, and `c/yc_runtime` for its external boundary. `stl/std/*` contains
+The canonical location for raw C and LLVM declarations is `stl/c/*`. The
+compiler uses `c/llvm`, `c/stdlib`, and `c/yc_runtime` for its external
+boundary. Except for existing compatibility wrappers, `stl/std/*` contains
 language-level APIs.
 
 ## Driver
@@ -60,9 +63,10 @@ The runtime is resolved in this order:
 
 ## Verification
 
-- Reusable conformance harness: 70/70 cases
+- Reusable conformance harness: 77/77 cases
 - All examples, stdlib, `c/*` FFI, projects/modules, and runtime ownership tests
 - Negative exit classes, source locations, and diagnostic substrings
+- Vec growth, shared handles, managed elements, nested Vec, index overwrite, and clear
 - Dynamic locals, functions, arguments, and struct fields
 - The compiler itself, hello, compound stdlib examples, and the LSP protocol
 - Exact stage2/stage3 equality after LLVM 22 canonicalization

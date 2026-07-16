@@ -2,20 +2,25 @@
 
 [English](stdlib.en.md) | [Docs index](README.ja.md)
 
-標準ライブラリは `stl/std` 配下の YCPL ソースです。一部の低レベル API は
-`intrinsic fn` として宣言され、compiler/runtime bridge で実装されます。
+標準ライブラリは`stl/std`配下のYCPLソースです。新しいC、POSIX、LLVMの
+公開宣言は`stl/c`へ集約します。一部の低レベルAPIは`intrinsic fn`として
+宣言され、compiler/runtime bridgeで実装されます。
 
 ```text
 stl/std/<module>/index.yc
 ├─ YCPL source wrappers   -> 通常の module codegen
 ├─ intrinsic declarations -> compiler/runtime bridge
-└─ unsafe/mem             -> FFI 境界用 raw C allocation
+└─ unsafe/mem             -> 明示的unsafe互換wrapper
+
+stl/c/<module>/index.yc
+└─ extern declarations    -> C、POSIX、LLVMのraw ABI境界
 ```
 
 ## モジュール地図
 
 ```text
 std/
+├─ Vec<T> compiler builtin managed dynamic array
 ├─ fmt    print, println, printf
 ├─ array  make, push, get, set, free 互換
 ├─ mem    managed alloc, copy, sizeof
@@ -31,8 +36,16 @@ std/
 ├─ hex    bytes <-> hexadecimal text
 ├─ base64 bytes <-> base64 text
 ├─ hash   FNV-1a32, CRC32
-├─ llvm   LLVM C API bridge
-└─ unsafe/mem FFI 専用 raw C malloc/calloc/realloc/free
+├─ llvm   LLVM互換wrapper
+└─ unsafe/mem 明示的unsafe用途のmalloc/calloc/realloc/free wrapper
+
+c/
+├─ stdlib malloc, calloc, realloc, free, getenv, system
+├─ string memcpy, memset, strlenなど
+├─ stdio / unistd / fcntl / sys.stat
+├─ math
+├─ llvm   LLVM 22 C APIとVec引数bridge
+└─ yc_runtime runtime/source traversal bridge
 ```
 
 ## フォルダ構成
@@ -40,8 +53,10 @@ std/
 `stl/std/<module>/index.yc` が標準ライブラリの本線です。Go の `src/fmt`
 のような形で、`std/base32`、`std/base64`、`std/bytes`、`std/hex`、
 `std/hash` などを `import "std/base32" as base32` の形で使えます。
-raw C allocation は `std/unsafe/mem` だけに置き、通常の container/buffer は
-YCPL runtime allocator を使います。
+raw C symbolの正規の宣言場所は`stl/c`です。`std/unsafe/mem`は明示的unsafe
+用途の互換wrapperです。通常のcontainer/bufferには`Vec<T>`または
+runtime-managedな標準型を使います。セルフホストコンパイラ本体は
+`std/mem`を直接importしません。
 
 ```YCPL
 b: owned Bytes := bytes.from_string("YCPL")
@@ -78,6 +93,11 @@ fmt.println(b.eq(decoded))
 ```text
 fmt.println(value) -> stdout
 
+Vec<T>{} / Vec<T>{capacity: n}
+    -> compiler builtin managed header
+    -> push / len / capacity / reserve / clear / index / as_slice
+    -> reference semantics、manual freeなし
+
 array.make([]T)
     -> { data, len, cap, elem_size }
     -> array.push / array.get / array.set
@@ -106,14 +126,13 @@ map.make_i32(cap) / map.make_string(cap)
 
 ```YCPL
 import "std/fmt" as fmt
-import "std/array" as array
 import "std/map" as map
 import "std/text" as text
 
 fn main() {
-    xs := array.make([]i32)
-    xs = array.push(xs, 10)
-    fmt.println(array.get(xs, 0))
+    xs := Vec<i32>{capacity: 4}
+    xs.push(10)
+    fmt.println(xs[0])
 
     message := text.join("YCPL", " ", "runtime")
     fmt.println(message)
@@ -127,7 +146,7 @@ fn main() {
 ## メモリ所有
 
 ```text
-array.make / json.parse / bytes.from_string / map.make_*
+Vec<T>{} / array.make / json.parse / bytes.from_string / map.make_*
     -> static link される YCPL runtime 経由で確保
     -> 所有している function frame の終了時に解放
     -> return される managed root は caller frame へ移動
@@ -137,7 +156,10 @@ json.get / json.at
     -> non-owning views
 
 std/unsafe/mem
-    -> FFI 境界だけで使う raw C malloc/calloc/realloc/free
+    -> explicit unsafe wrapper。通常のYCPLコードでは使用しない
+
+c/*
+    -> raw C/LLVM ABI declaration。安全なownershipは提供しない
 ```
 
 `ycc build` は `bootstrap/cpp/runtime/yc_runtime.c` を各 native binary に
@@ -147,7 +169,7 @@ static link します。runtime は `yc_runtime_init`、`yc_runtime_shutdown`、
 background tracing GC は入れず、frame ownership による deterministic cleanup
 を行います。managed value が escape する場合は、その ownership root と到達可能な
 child だけを caller frame へ移し、無関係な local allocation は callee frame に残します。
-array、map、Bytes、StringBuilder、JsonValue の root と backing allocation は同じ
+Vec、array、map、Bytes、StringBuilder、JsonValueのrootとbacking allocationは同じ
 ownership graph で管理されます。
 
 pointer returnとaggregate returnは、callee frameをpopする前に到達可能なmanaged
@@ -168,17 +190,21 @@ self-hosted driverにbootstrap compiler fallbackはありません。
 ## LLVM C API
 
 ```YCPL
-import "std/llvm" as llvm
+import "c/llvm" as llvm
 
 fn main() {
     ctx := llvm.context_create()
-    mod := llvm.module_create_with_name_in_context("demo", ctx)
-    ir := llvm.print_module_to_string(mod)
+    mod := llvm.module_create("demo", ctx)
+    ir := llvm.module_to_string(mod)
     llvm.dispose_message(ir)
-    llvm.dispose_module(mod)
+    llvm.module_dispose(mod)
     llvm.context_dispose(ctx)
 }
 ```
+
+`std/llvm`は既存コードとの互換性のため残っていますが、新しい低レベルbindingは
+`c/llvm`へ追加します。`c/llvm`はLLVM参照列を`Vec<i64>`から渡す専用bridgeを持ち、
+一般のYCPLコードへVecのraw pointer変換を公開しません。
 
 生成 IR が `LLVM...` の C API symbol を参照する場合、`ycc build` は LLVM を自動 link
 します。LLVM prefix を選ぶ場合は `/usr` に symlink を作らず

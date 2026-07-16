@@ -2,21 +2,25 @@
 
 [Japanese](stdlib.ja.md) | [Docs index](README.en.md)
 
-The standard library is stored as YCPL source under `stl/std`. Some low-level
-APIs are declared as `intrinsic fn` and implemented by compiler/runtime bridge
-code.
+The standard library is stored as YCPL source under `stl/std`. New public C,
+POSIX, and LLVM declarations are collected under `stl/c`. Some low-level APIs
+are declared as `intrinsic fn` and implemented by compiler/runtime bridge code.
 
 ```text
 stl/std/<module>/index.yc
 ├─ YCPL source wrappers   -> normal module codegen
 ├─ intrinsic declarations -> compiler/runtime bridge
-└─ unsafe/mem             -> raw C allocation for FFI boundaries
+└─ unsafe/mem             -> explicit unsafe compatibility wrapper
+
+stl/c/<module>/index.yc
+└─ extern declarations    -> raw C, POSIX, and LLVM ABI boundary
 ```
 
 ## Module Map
 
 ```text
 std/
+├─ Vec<T> compiler-built-in managed dynamic array
 ├─ fmt    print, println, printf
 ├─ array  make, push, get, set, free compatibility
 ├─ mem    managed alloc/copy/sizeof
@@ -32,8 +36,16 @@ std/
 ├─ hex    bytes <-> hexadecimal text
 ├─ base64 bytes <-> base64 text
 ├─ hash   FNV-1a32, CRC32
-├─ llvm   LLVM C API bridge
-└─ unsafe/mem raw C malloc/calloc/realloc/free for FFI-only use
+├─ llvm   LLVM compatibility wrapper
+└─ unsafe/mem explicit unsafe malloc/calloc/realloc/free wrapper
+
+c/
+├─ stdlib malloc, calloc, realloc, free, getenv, system
+├─ string memcpy, memset, strlen, and related functions
+├─ stdio / unistd / fcntl / sys.stat
+├─ math
+├─ llvm   LLVM 22 C API and Vec argument bridges
+└─ yc_runtime runtime/source-traversal bridge
 ```
 
 ## Folder Layout
@@ -41,8 +53,10 @@ std/
 `stl/std/<module>/index.yc` is the primary standard-library layout, similar to
 Go's `src/fmt` shape. Modules such as `std/base32`, `std/base64`, `std/bytes`,
 `std/hex`, and `std/hash` can be imported with paths like
-`import "std/base32" as base32`. Raw C allocation lives only in
-`std/unsafe/mem`; normal containers and buffers use the YCPL runtime allocator.
+`import "std/base32" as base32`. The canonical location for raw C symbol
+declarations is `stl/c`; `std/unsafe/mem` is an explicitly unsafe compatibility
+wrapper. Normal containers and buffers should use `Vec<T>` or runtime-managed
+standard types. The self-hosted compiler directly imports no `std/mem`.
 
 ```YCPL
 b: owned Bytes := bytes.from_string("YCPL")
@@ -79,6 +93,11 @@ fmt.println(b.eq(decoded))
 ```text
 fmt.println(value) -> stdout
 
+Vec<T>{} / Vec<T>{capacity: n}
+    -> compiler-built-in managed header
+    -> push / len / capacity / reserve / clear / index / as_slice
+    -> reference semantics with no manual free
+
 array.make([]T)
     -> { data, len, cap, elem_size }
     -> array.push / array.get / array.set
@@ -107,14 +126,13 @@ map.make_i32(cap) / map.make_string(cap)
 
 ```YCPL
 import "std/fmt" as fmt
-import "std/array" as array
 import "std/map" as map
 import "std/text" as text
 
 fn main() {
-    xs := array.make([]i32)
-    xs = array.push(xs, 10)
-    fmt.println(array.get(xs, 0))
+    xs := Vec<i32>{capacity: 4}
+    xs.push(10)
+    fmt.println(xs[0])
 
     message := text.join("YCPL", " ", "runtime")
     fmt.println(message)
@@ -128,7 +146,7 @@ fn main() {
 ## Memory Ownership
 
 ```text
-array.make / json.parse / bytes.from_string / map.make_*
+Vec<T>{} / array.make / json.parse / bytes.from_string / map.make_*
     -> allocated through the statically linked YCPL runtime
     -> released when the owning function frame exits
     -> returned managed roots are moved to the caller frame
@@ -138,7 +156,10 @@ json.get / json.at
     -> non-owning views
 
 std/unsafe/mem
-    -> raw C malloc/calloc/realloc/free for FFI boundaries only
+    -> explicit unsafe wrapper, not for ordinary YCPL code
+
+c/*
+    -> raw C/LLVM ABI declarations without safe ownership semantics
 ```
 
 `ycc build` links `bootstrap/cpp/runtime/yc_runtime.c` into every native binary.
@@ -148,7 +169,7 @@ The runtime currently provides `yc_runtime_init`, `yc_runtime_shutdown`,
 not part of this milestone; the design is deterministic frame ownership with
 manual-free compatibility during migration. When a managed value escapes, the
 runtime moves only its ownership root and reachable children to the caller
-frame. Unrelated local allocations remain in the callee frame. Array, map,
+frame. Unrelated local allocations remain in the callee frame. Vec, array, map,
 Bytes, StringBuilder, and JsonValue roots keep their backing allocations in the
 same ownership graph.
 
@@ -171,17 +192,22 @@ cryptographic security.
 ## LLVM C API
 
 ```YCPL
-import "std/llvm" as llvm
+import "c/llvm" as llvm
 
 fn main() {
     ctx := llvm.context_create()
-    mod := llvm.module_create_with_name_in_context("demo", ctx)
-    ir := llvm.print_module_to_string(mod)
+    mod := llvm.module_create("demo", ctx)
+    ir := llvm.module_to_string(mod)
     llvm.dispose_message(ir)
-    llvm.dispose_module(mod)
+    llvm.module_dispose(mod)
     llvm.context_dispose(ctx)
 }
 ```
+
+`std/llvm` remains for compatibility with existing code, but new low-level
+bindings belong in `c/llvm`. The `c/llvm` module provides dedicated bridges for
+passing LLVM reference sequences from `Vec<i64>` without exposing a general
+Vec-to-pointer conversion to YCPL programs.
 
 `ycc build` auto-links LLVM when the generated IR references `LLVM...` C API
 symbols. Use `LLVM_CONFIG=/path/to/llvm-config` to select the LLVM prefix

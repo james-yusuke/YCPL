@@ -17,17 +17,6 @@ Since 2026, I've gone through periods of mental instability, which has made deve
 Because of that, this project has no fixed roadmap or release schedule.
 I simply work on it whenever I'm able to.
 
-### Technical Milestone
-
-YCPL has reached a fully self-hosted compiler fixed point. The standard `ycc`
-is written in YCPL and reproduces itself through stage2 and stage3 without
-calling the C++ compiler. The C++ implementation remains only as the initial
-seed and reference compiler, `ycc-bootstrap`.
-
-This milestone does not mean the language is production-ready. YCPL remains an
-early-alpha project, and its language, runtime, tooling, and compatibility may
-continue to change.
-
 ---
 
 ## What I Hope This Project Can Be

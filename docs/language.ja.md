@@ -31,7 +31,7 @@ fn main() { ... }       -> 実行コードを置ける
 ```text
 module package import pub extern intrinsic fn struct enum type const owned
 if else for in switch case default return break continue defer scope as
-true false none byte
+true false none byte cast
 ```
 
 `case` と `default` は `switch` 本体のラベルとして使います。
@@ -95,6 +95,7 @@ Types
 ├─ primitive: i32 i64 bool char byte string float double void size_t
 ├─ pointer:   *T
 ├─ slice:     []T
+├─ vector:    Vec<T>
 ├─ map slice: []Map<string, T>
 ├─ owned:     owned T
 ├─ map:       Map<string, T>
@@ -103,10 +104,11 @@ Types
 └─ nested:    [][]T
 ```
 
-runtime slice は `{ data, len, cap, elem_size }` です。`std/array`、
-`std/mem`、`std/bytes`、`std/json`、`std/map` で作った値は static link される
-YCPL runtime 経由で確保します。古い free helper は deterministic frame cleanup
-後に残る precise destructor 完成までの互換 release として残します。
+runtime slice は `{ data, len, cap, elem_size }` ですが、言語上の`[]T`は
+非拡張viewです。`Vec<T>`は別の静的型を持つmanaged dynamic arrayで、内部の
+headerとbacking storageはstatic linkされるYCPL runtimeが所有します。
+`std/array`、`std/mem`、`std/bytes`、`std/json`、`std/map`で作った値も同じ
+runtime ownership基盤を使います。古いfree helperは互換APIとして残します。
 `owned T`は所有値の意図を示す型修飾子として受け付け、現時点ではABI上は`T`と
 同じです。
 `Map<string, T>`はmap handle型として受け付けます。現在のABIでは
@@ -123,6 +125,43 @@ enum Color {
 type Score = i32
 type Symbols = Map<string, i32>
 ```
+
+## Vec
+
+`Vec<T>`は`Map<K,V>`と同様にコンパイラが認識する組み込みparameterized typeです。
+ユーザー定義genericsではありません。
+
+```YCPL
+values := Vec<i32>{}
+nodes := Vec<ExprNode>{capacity: 512}
+
+first := values.push(10)
+values.push(20)
+values.reserve(64)
+
+values[first] = 11
+length := values.len()
+reserved := values.capacity()
+view := values.as_slice()
+
+values.clear()
+```
+
+| 操作 | 結果 |
+|---|---|
+| `push(value)` | 挿入位置を`i32`で返す |
+| `len()` | 現在の要素数 |
+| `capacity()` | 現在の予約容量 |
+| `reserve(n)` | 容量を最低`n`まで増やす |
+| `clear()` | 全要素をreleaseし、長さを0にする |
+| `vec[index]` | bounds check付きread |
+| `vec[index] = value` | ownership置換を伴うwrite |
+| `as_slice()` | 同じ要素を参照する`[]T` view |
+
+Vecは参照セマンティクスです。Vecを代入・引数渡し・returnしても同じmanaged
+containerを参照します。`as_slice()`で得た`[]T`には`push`や`reserve`はありません。
+負のcapacity、容量計算overflow、範囲外indexはruntime errorです。公開APIには
+`free`、raw data pointer、暗黙の`Vec<T> -> *T`変換を設けていません。
 
 ## 変数とリテラル
 

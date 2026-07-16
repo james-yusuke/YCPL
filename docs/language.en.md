@@ -33,7 +33,7 @@ Identifiers start with a letter or `_`, followed by letters, digits, or `_`.
 ```text
 module package import pub extern intrinsic fn struct enum type const owned
 if else for in switch case default return break continue defer scope as
-true false none byte
+true false none byte cast
 ```
 
 `case` and `default` are labels inside `switch` bodies.
@@ -97,6 +97,7 @@ Types
 ├─ primitive: i32 i64 bool char byte string float double void size_t
 ├─ pointer:   *T
 ├─ slice:     []T
+├─ vector:    Vec<T>
 ├─ map slice: []Map<string, T>
 ├─ owned:     owned T
 ├─ map:       Map<string, T>
@@ -105,11 +106,12 @@ Types
 └─ nested:    [][]T
 ```
 
-Runtime slices use `{ data, len, cap, elem_size }`. Values created by
-`std/array`, `std/mem`, `std/bytes`, `std/json`, and `std/map` are allocated
-through the statically linked YCPL runtime. The old free helpers remain as
-compatibility releases while precise destructors for arbitrary composite values
-are completed.
+Runtime slices use `{ data, len, cap, elem_size }`, but the language-level
+`[]T` type is a non-growing view. `Vec<T>` is a distinct managed dynamic-array
+type whose header and backing storage are owned by the statically linked YCPL
+runtime. Values created by `std/array`, `std/mem`, `std/bytes`, `std/json`, and
+`std/map` use the same runtime ownership foundation. Older free helpers remain
+as compatibility APIs.
 `owned T` is accepted as an ownership-intent type qualifier and currently has
 the same ABI as `T`.
 `Map<string, T>` is accepted as a map-handle type. In the current ABI it lowers
@@ -126,6 +128,44 @@ enum Color {
 type Score = i32
 type Symbols = Map<string, i32>
 ```
+
+## Vec
+
+`Vec<T>` is a compiler-recognized parameterized type like `Map<K,V>`, not a
+general user-defined generics feature.
+
+```YCPL
+values := Vec<i32>{}
+nodes := Vec<ExprNode>{capacity: 512}
+
+first := values.push(10)
+values.push(20)
+values.reserve(64)
+
+values[first] = 11
+length := values.len()
+reserved := values.capacity()
+view := values.as_slice()
+
+values.clear()
+```
+
+| Operation | Result |
+|---|---|
+| `push(value)` | Appends and returns the insertion index as `i32` |
+| `len()` | Current element count |
+| `capacity()` | Current reserved capacity |
+| `reserve(n)` | Grows capacity to at least `n` |
+| `clear()` | Releases all elements and resets length to zero |
+| `vec[index]` | Bounds-checked read |
+| `vec[index] = value` | Write with ownership replacement |
+| `as_slice()` | A `[]T` view of the same elements |
+
+Vec has reference semantics. Assignment, argument passing, and returns retain
+the same managed container handle. The `[]T` returned by `as_slice()` has no
+`push` or `reserve`. Negative capacity, capacity arithmetic overflow, and
+out-of-range indexes are runtime errors. The public API does not expose
+`free`, a raw data pointer, or an implicit `Vec<T> -> *T` conversion.
 
 ## Variables And Literals
 
