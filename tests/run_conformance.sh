@@ -24,4 +24,5 @@ esac
 # negative diagnostic locations/substrings, so the same oracle can be applied
 # to stage0 and every self-host stage.
 cd "$ROOT_DIR"
+export YCPL_STL_ROOT="${YCPL_STL_ROOT:-$ROOT_DIR/stl}"
 YCC="$COMPILER" exec "$ROOT_DIR/tests/run_bootstrap_regression.sh"

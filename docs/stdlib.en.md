@@ -152,16 +152,16 @@ frame. Unrelated local allocations remain in the callee frame. Array, map,
 Bytes, StringBuilder, and JsonValue roots keep their backing allocations in the
 same ownership graph.
 
-Pointer returns use selective graph escape. Aggregate returns also retain a
-temporary whole-frame compatibility fallback until every compiler-internal
-aggregate registers all of its related buffers as runtime children.
+Pointer and aggregate returns escape their reachable managed values to the
+caller before the callee frame is popped. Scope assignments and
+break/continue/return paths emit the corresponding deterministic frame unwind.
 
 `extern fn` maps YCPL names to C/LLVM symbols. `intrinsic fn` is reserved for
 bundled `std` modules and is rejected in user modules.
 
-`std/os` exposes the narrow process hooks currently needed by compiler tooling:
-`getenv` for explicit tool paths such as `YCPL_BOOTSTRAP_YCC`, and `system` for
-the transitional `ycc-ycpl build` stage driver.
+`std/os` exposes the narrow process hooks needed by compiler tooling, including
+explicit LLVM/runtime paths and native build/run process execution. The
+self-hosted driver has no bootstrap compiler fallback.
 
 `std/bytes`, `std/hex`, `std/base64`, and `std/hash` are foundation modules for
 file formats such as zip and for educational cryptography experiments. The

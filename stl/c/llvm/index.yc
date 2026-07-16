@@ -10,6 +10,7 @@ pub extern fn module_to_string(mod *byte) string as "LLVMPrintModuleToString"
 pub extern fn module_to_file_raw(mod *byte, path string, error *string) i32 as "LLVMPrintModuleToFile"
 pub extern fn dispose_message(message string) as "LLVMDisposeMessage"
 pub extern fn verify_module_raw(mod *byte, action i32, message *string) i32 as "LLVMVerifyModule"
+extern fn c_puts(message string) i32 as "puts"
 
 pub extern fn builder_create(ctx *byte) *byte as "LLVMCreateBuilderInContext"
 pub extern fn builder_dispose(builder *byte) as "LLVMDisposeBuilder"
@@ -29,6 +30,7 @@ pub extern fn pointer_type(element *byte, address_space i32) *byte as "LLVMPoint
 pub extern fn array_type(element *byte, count i64) *byte as "LLVMArrayType2"
 pub extern fn struct_type(ctx *byte, fields *byte, count i32, packed i32) *byte as "LLVMStructTypeInContext"
 pub extern fn named_struct(ctx *byte, name string) *byte as "LLVMStructCreateNamed"
+pub extern fn named_type(ctx *byte, name string) *byte as "LLVMGetTypeByName2"
 pub extern fn set_struct_body(typ *byte, fields *byte, count i32, packed i32) as "LLVMStructSetBody"
 pub extern fn function_type(result *byte, params *byte, count i32, variadic i32) *byte as "LLVMFunctionType"
 
@@ -36,6 +38,7 @@ pub extern fn add_function(mod *byte, name string, typ *byte) *byte as "LLVMAddF
 pub extern fn named_function(mod *byte, name string) *byte as "LLVMGetNamedFunction"
 pub extern fn get_param(function *byte, index i32) *byte as "LLVMGetParam"
 pub extern fn type_of(value *byte) *byte as "LLVMTypeOf"
+pub extern fn type_kind(typ *byte) i32 as "LLVMGetTypeKind"
 pub extern fn set_value_name(value *byte, name string, length i64) as "LLVMSetValueName2"
 pub extern fn add_global(mod *byte, typ *byte, name string) *byte as "LLVMAddGlobal"
 pub extern fn set_initializer(global *byte, value *byte) as "LLVMSetInitializer"
@@ -45,6 +48,8 @@ pub extern fn const_int(typ *byte, value i64, sign_extend i32) *byte as "LLVMCon
 pub extern fn const_real(typ *byte, value double) *byte as "LLVMConstReal"
 pub extern fn const_null(typ *byte) *byte as "LLVMConstNull"
 pub extern fn const_pointer_null(typ *byte) *byte as "LLVMConstPointerNull"
+pub extern fn undef(typ *byte) *byte as "LLVMGetUndef"
+pub extern fn sizeof_type(typ *byte) *byte as "LLVMSizeOf"
 
 pub extern fn build_alloca(builder *byte, typ *byte, name string) *byte as "LLVMBuildAlloca"
 pub extern fn build_load(builder *byte, typ *byte, address *byte, name string) *byte as "LLVMBuildLoad2"
@@ -95,7 +100,10 @@ pub extern fn build_insert_value(builder *byte, aggregate *byte, value *byte, in
 pub fn verify_module(mod *byte) bool {
     message: string := none
     ok := verify_module_raw(mod, 2, &message) == 0
-    if message != none { dispose_message(message) }
+    if message != none {
+        if !ok { c_puts(message) }
+        dispose_message(message)
+    }
     return ok
 }
 
