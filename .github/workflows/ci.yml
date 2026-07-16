@@ -24,9 +24,14 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@v5
         with:
           fetch-depth: 0
+
+      - name: Set up Node.js 24
+        uses: actions/setup-node@v5
+        with:
+          node-version: 24
 
       - name: Install dependencies
         run: |
@@ -44,8 +49,6 @@ jobs:
             libxml2-dev \
             libzstd-dev \
             lld \
-            nodejs \
-            npm \
             python3 \
             wget \
             zlib1g-dev
@@ -168,8 +171,12 @@ jobs:
       - name: Test with Bazel
         run: |
           source "$RUNNER_TEMP/ycpl-llvm-env.sh"
+          export YCPL_STL_ROOT="$PWD/stl"
+          export YCPL_RUNTIME_SRC="$PWD/bootstrap/cpp/runtime/yc_runtime.c"
           test -n "$CLANG"
           test -x "$CLANG"
+          test -d "$YCPL_STL_ROOT"
+          test -f "$YCPL_RUNTIME_SRC"
           bazel test \
             --action_env=PATH="$PATH" \
             --action_env=LLVM_CONFIG="$LLVM_CONFIG" \
@@ -188,6 +195,8 @@ jobs:
             --test_env=LLC="$LLC" \
             --test_env=CLANG="$CLANG" \
             --test_env=LINKFLAGS="$LINKFLAGS" \
+            --test_env=YCPL_STL_ROOT="$YCPL_STL_ROOT" \
+            --test_env=YCPL_RUNTIME_SRC="$YCPL_RUNTIME_SRC" \
             --linkopt=-fuse-ld=lld \
             --host_linkopt=-fuse-ld=lld \
             --test_timeout=1800 \
