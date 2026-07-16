@@ -24,5 +24,4 @@ fn main() {
     fmt.println(nested)
     fmt.println(json.get_i32(point_json, "x") + json.get_i32(point_json, "y") + point.x + point.y)
     fmt.println(roundtrip)
-
 }
