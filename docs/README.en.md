@@ -3,7 +3,8 @@
 [Japanese](README.ja.md) | [Repository README](../README.md)
 
 These docs describe the syntax and toolchain supported by the current compiler.
-YCPL source files use `.yc`.
+YCPL source files use `.yc`. The standard `ycc` is self-hosted; the C++
+implementation remains available as the seed/reference `ycc-bootstrap`.
 
 ```text
 docs/

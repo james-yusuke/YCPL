@@ -107,11 +107,11 @@ runtime slice は `{ data, len, cap, elem_size }` です。`std/array`、
 `std/mem`、`std/bytes`、`std/json`、`std/map` で作った値は static link される
 YCPL runtime 経由で確保します。古い free helper は deterministic frame cleanup
 後に残る precise destructor 完成までの互換 release として残します。
-`owned T` は bootstrap C++ compiler では所有値の意図を示す型修飾子として受け付け、
-現時点では ABI 上は `T` と同じです。
-`Map<string, T>` は map handle 型として受け付けます。現在の bootstrap ABI では
-opaque pointer に lower され、実ストレージは `std/map` と `std/map` の
-runtime-backed key/value arrays API を使います。
+`owned T`は所有値の意図を示す型修飾子として受け付け、現時点ではABI上は`T`と
+同じです。
+`Map<string, T>`はmap handle型として受け付けます。現在のABIでは
+opaque pointerにlowerされ、実ストレージは`std/map`のruntime-backed
+key/value arrays APIを使います。
 
 ```YCPL
 enum Color {
@@ -181,14 +181,14 @@ switch color {
 }
 ```
 
-`switch` は `switch expression { case expression { ... } default { ... } }` の形です。
-現在の self-host checker/codegen では i32 selector と integer literal case の対応が
-先行しています。
+`switch`は`switch expression { case expression { ... } default { ... } }`の形です。
+selectorとcase expressionはresolver/type checkerで解決され、LLVM backendへ
+lowerされます。
 
 ## defer、scope、UFCS
 
-bootstrap C++ compiler は `defer` 文をサポートします。`defer expr` または
-`defer { ... }` は現在の関数を抜ける直前に LIFO 順で実行されます。
+標準の`ycc`は`defer`文をサポートします。`defer expr`または
+`defer { ... }`は現在のscopeまたは関数を抜ける際にLIFO順で実行されます。
 
 ```YCPL
 defer fmt.println("leaving scope")

@@ -23,11 +23,11 @@ can:
 - Reproduction steps or a minimal `.yc` file
 - Expected behavior and actual behavior
 - Potential impact
-- Whether the issue requires `ycc`, `ycc-ycpl`, Bazel, CMake, or native build
+- Whether the issue requires `ycc`, `ycc-bootstrap`, Bazel, CMake, or native build
 
 I will try to acknowledge reports promptly. Because YCPL is still early-stage,
-fix timelines may vary by severity and by whether the report affects the
-bootstrap compiler, the YCPL compiler, or the build driver.
+fix timelines may vary by severity and by whether the report affects the C++
+seed/reference compiler, the self-hosted compiler, or the build driver.
 
 ## Scope
 
@@ -44,8 +44,7 @@ Out of scope:
 
 - Issues that require arbitrary local write access to the repository
 - Vulnerabilities in third-party LLVM, Bazel, CMake, or system toolchains
-- Denial-of-service reports based only on extremely large generated files during
-  active self-hosting development, unless they also show an unchecked memory
-  safety issue
+- Denial-of-service reports based only on intentionally extreme stress inputs,
+  unless they also show an unchecked memory-safety issue
 
 Thank you for helping make YCPL safer.

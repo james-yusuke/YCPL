@@ -110,11 +110,11 @@ Runtime slices use `{ data, len, cap, elem_size }`. Values created by
 through the statically linked YCPL runtime. The old free helpers remain as
 compatibility releases while precise destructors for arbitrary composite values
 are completed.
-In the bootstrap C++ compiler, `owned T` is accepted as an ownership-intent type
-qualifier and currently has the same ABI as `T`.
-`Map<string, T>` is accepted as a map-handle type. In the current bootstrap
-ABI it lowers as an opaque pointer, while `std/map` and `std/map` still expose
-runtime-backed key/value arrays for storage.
+`owned T` is accepted as an ownership-intent type qualifier and currently has
+the same ABI as `T`.
+`Map<string, T>` is accepted as a map-handle type. In the current ABI it lowers
+as an opaque pointer, while `std/map` exposes runtime-backed key/value arrays
+for storage.
 
 ```YCPL
 enum Color {
@@ -185,13 +185,13 @@ switch color {
 ```
 
 `switch` uses `switch expression { case expression { ... } default { ... } }`.
-The self-host checker/codegen path currently leads with i32 selectors and
-integer literal cases.
+Selectors and case expressions are resolved by the resolver/type checker and
+lowered by the LLVM backend.
 
 ## defer, scope, and UFCS
 
-The bootstrap C++ compiler supports `defer`. `defer expr` or `defer { ... }`
-runs just before the current function exits, in LIFO order.
+The standard `ycc` compiler supports `defer`. `defer expr` or `defer { ... }`
+runs in LIFO order when the current scope or function exits.
 
 ```YCPL
 defer fmt.println("leaving scope")
