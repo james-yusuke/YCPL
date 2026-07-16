@@ -1,0 +1,16 @@
+import "std/bytes" as bytes
+import "std/fmt" as fmt
+import "std/fs" as fs
+import "std/os" as os
+import "std/path" as path
+
+fn main() {
+    file := path.join(os.temp_dir(), "ycpl-std-bytes-test.bin")
+    fs.remove(file)
+    value := bytes.from_string("bytes")
+    fmt.println(fs.write_bytes(file, value).ok)
+    read := fs.read_bytes(file)
+    fmt.println(read.ok)
+    fmt.println(bytes.to_string(read.value))
+    fmt.println(fs.remove(file).ok)
+}

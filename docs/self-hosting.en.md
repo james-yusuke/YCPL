@@ -44,7 +44,7 @@ The fixed-point test:
 2. Canonicalizes both through LLVM 22 `llvm-as` and `llvm-dis`.
 3. Stabilizes only ModuleID and source filename, then compares them exactly.
 4. Builds and runs hello with both stage2 and stage3.
-5. Applies the same 77-case conformance suite to both compilers.
+5. Applies the same expanding conformance suite to both compilers.
 6. Checks that promoted `ycc` contains no bootstrap/fallback route strings.
 
 ## Build Only the C++ Bootstrap

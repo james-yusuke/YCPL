@@ -25,17 +25,28 @@ std/
 ├─ array  make, push, get, set, free compatibility
 ├─ mem    managed alloc/copy/sizeof
 ├─ str    len, eq, cmp
-├─ math   abs, sqrt, pow
-├─ io     read/write, LSP frames
-├─ fs     exists, read_file, write_file
-├─ os     getenv, system
-├─ text   find, offsets
-├─ json   parse, get, stringify
-├─ map    runtime-backed arrays and Map<string, T> interop helpers
-├─ bytes  owned/wrapped binary buffers
+├─ math   typed min/max/clamp/abs, rounding, sqrt, pow
+├─ io     read/write helpers that complete partial I/O
+├─ fs     text/bytes I/O, directories, stat, rename/remove
+├─ os     process arguments, capture, cwd/home/temp
+├─ text   trim, replace, split/join, ASCII case conversion
+│  └─ ascii  implementation submodule behind the text facade
+├─ utf8   validation, decode/encode, UTF-16 columns
+├─ strconv strict parsing and formatting
+├─ path   filesystem-independent POSIX lexical paths
+├─ json   strict parsing, access, and stringify
+│  └─ scanner JSON token/value boundaries
+├─ jsonrpc JSON-RPC/LSP fields and Content-Length helpers
+├─ ycpl/syntax YCPL syntax-error estimation
+├─ map    automatic growth, lookup results, managed snapshots
+├─ bytes  growable binary buffers, search, and comparison
+├─ sort   sort/reverse for Vec<i32/i64/string>
 ├─ hex    bytes <-> hexadecimal text
+├─ base32 bytes <-> base32 text
 ├─ base64 bytes <-> base64 text
 ├─ hash   FNV-1a32, CRC32
+├─ time   wall clock, monotonic clock, and sleep
+├─ random seedable non-cryptographic PRNG
 ├─ llvm   LLVM compatibility wrapper
 └─ unsafe/mem explicit unsafe malloc/calloc/realloc/free wrapper
 
@@ -80,13 +91,60 @@ fmt.println(b.eq(decoded))
 | `std/fs` | `stl/std/fs/index.yc` |
 | `std/os` | `stl/std/os/index.yc` |
 | `std/text` | `stl/std/text/index.yc` |
+| `std/text/ascii` | `stl/std/text/ascii/index.yc` |
+| `std/utf8` | `stl/std/utf8/index.yc` |
+| `std/strconv` | `stl/std/strconv/index.yc` |
+| `std/path` | `stl/std/path/index.yc` |
 | `std/json` | `stl/std/json/index.yc` |
+| `std/json/scanner` | `stl/std/json/scanner/index.yc` |
+| `std/jsonrpc` | `stl/std/jsonrpc/index.yc` |
+| `std/ycpl/syntax` | `stl/std/ycpl/syntax/index.yc` |
 | `std/bytes` | `stl/std/bytes/index.yc` |
+| `std/sort` | `stl/std/sort/index.yc` |
 | `std/hex` | `stl/std/hex/index.yc` |
 | `std/base32` | `stl/std/base32/index.yc` |
 | `std/base64` | `stl/std/base64/index.yc` |
 | `std/hash` | `stl/std/hash/index.yc` |
+| `std/time` | `stl/std/time/index.yc` |
+| `std/random` | `stl/std/random/index.yc` |
 | `std/llvm` | `stl/std/llvm/index.yc` |
+
+`index.yc` remains the public entry point and facade. Responsibilities are
+split through explicit paths such as `std/json/scanner` and `std/text/ascii`;
+files are not implicitly merged into one module. Existing public types such as
+`JsonValue` and `StringBuilder` stay in their entry modules because YCPL does
+not yet support type re-export.
+
+## Foundation APIs
+
+- `std/text`: `ends_with`, trimming, replacement, split/join, and ASCII case conversion.
+- `std/utf8`: strict decoding, validation, code-point count, encoding, and UTF-16 columns.
+- `std/strconv`: typed parse results and managed formatting for i32, i64, and double.
+- `std/bytes`: resize, append, search, compare, and reverse; new code does not need `free`.
+- `std/path`: `join`, `normalize`, `base`, `dir`, `ext`, `stem`, and `is_absolute`.
+- `std/fs`: text/byte I/O, append, nested mkdir, rename/remove, and stat.
+- `std/os`: `Vec<string>` process arguments plus cwd/home/temp directories.
+- `std/map`: automatic growth, len/capacity/clear, found-aware lookup, and key/value snapshots.
+- `std/sort`: sort/reverse for `Vec<i32>`, `Vec<i64>`, and `Vec<string>`.
+- `std/time`: Unix milliseconds, monotonic instants, elapsed time, and sleep.
+- `std/random`: deterministic seedable PRNG; it is not cryptographically secure.
+
+New fallible APIs return purpose-specific results with `ok`, `value`, and
+`message`. Encoding decode results and JSON parsing also report an `offset`.
+Legacy `read_file`, `write_file`, `mkdir`, `decode`, and `json.parse` entry
+points remain as compatibility wrappers.
+
+## JSON and LSP Helpers
+
+`std/json.parse_result` strictly checks numbers, decimal/exponent syntax,
+escapes, Unicode surrogate pairs, and trailing text. It provides predicates,
+`has`, `keys`, `items`, `as_*`, `get_*_or`, `escape_string`, and
+`quote_string`.
+
+JSON-RPC field processing now lives in `std/jsonrpc`, while YCPL syntax
+diagnostic estimation lives in `std/ycpl/syntax`. The old functions in
+`std/json` are deprecated forwarding wrappers, and the YCPL LSP imports the new
+modules directly.
 
 ## Common Flows
 

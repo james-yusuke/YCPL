@@ -44,7 +44,7 @@ fixed-point testは次を確認します。
 2. LLVM 22の`llvm-as`と`llvm-dis`でcanonicalizeする。
 3. ModuleIDとsource filenameだけを安定化して完全一致を比較する。
 4. stage2とstage3の両方でhelloをbuild/runする。
-5. 両compilerへ同じ77件のconformance suiteを適用する。
+5. 両compilerへ同じ拡張可能なconformance suiteを適用する。
 6. promoted `ycc`にbootstrap/fallback経路の文字列が残っていないことを確認する。
 
 ## C++ bootstrapだけをbuildする

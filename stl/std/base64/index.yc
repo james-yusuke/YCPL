@@ -4,6 +4,13 @@ import "std/bytes" as bytes
 import "std/mem" as mem
 import "std/str" as str
 
+pub struct DecodeResult {
+    ok bool
+    value Bytes
+    message string
+    offset i32
+}
+
 fn alphabet(index i32) i32 {
     if index < 26 {
         return 'A' + index
@@ -304,4 +311,51 @@ pub fn is_valid_url(text string) bool {
     ok := bytes.is_valid(out)
     bytes.free(out)
     return ok
+}
+
+fn invalid_offset(text string, url bool) i32 {
+    if text == none { return 0 }
+    n: i32 := str.len(text)
+    if n % 4 != 0 { return n }
+    i := 0
+    for (; i < n; i++) {
+        ch := text[i]
+        if ch == '=' {
+            if i < n - 2 { return i }
+            if i == n - 2 && text[n - 1] != '=' { return i }
+            continue
+        }
+        if i >= n - 2 && text[i - 1] == '=' { return i }
+        value := value_of(ch)
+        if url { value = value_of_url(ch) }
+        if value < 0 { return i }
+    }
+    if n >= 4 && text[n - 1] == '=' {
+        if text[n - 2] == '=' {
+            second := value_of(text[n - 3])
+            if url { second = value_of_url(text[n - 3]) }
+            if (second & 15) != 0 { return n - 3 }
+        } else {
+            third := value_of(text[n - 2])
+            if url { third = value_of_url(text[n - 2]) }
+            if (third & 3) != 0 { return n - 2 }
+        }
+    }
+    return -1
+}
+
+pub fn decode_result(text string) DecodeResult {
+    offset := invalid_offset(text, false)
+    if offset >= 0 {
+        return DecodeResult{ok: false, value: bytes.wrap(none, 0), message: "invalid base64 text", offset: offset}
+    }
+    return DecodeResult{ok: true, value: decode(text), message: "", offset: -1}
+}
+
+pub fn decode_url_result(text string) DecodeResult {
+    offset := invalid_offset(text, true)
+    if offset >= 0 {
+        return DecodeResult{ok: false, value: bytes.wrap(none, 0), message: "invalid base64url text", offset: offset}
+    }
+    return DecodeResult{ok: true, value: decode_url(text), message: "", offset: -1}
 }

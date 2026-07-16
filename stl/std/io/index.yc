@@ -1,33 +1,54 @@
 module std.io
 
+import "c/unistd" as unistd
+import "std/bytes" as bytes
 import "std/fmt" as fmt
 import "std/mem" as mem
 import "std/str" as str
 
-extern fn c_read(fd i32, buf string, count i32) i32 as "read"
-extern fn c_write(fd i32, buf string, count i32) i32 as "write"
-
 pub fn read(fd i32, buf string, count i32) i32 {
-    return c_read(fd, buf, count)
+    return unistd.read(fd, cast(*byte, buf), count)
 }
 
 pub fn write(fd i32, buf string, count i32) i32 {
-    return c_write(fd, buf, count)
+    return unistd.write(fd, cast(*byte, buf), count)
+}
+
+fn write_all(fd i32, buf string, count i32) i32 {
+    if buf == none || count < 0 { return -1 }
+    written := 0
+    for (; written < count; ) {
+        rc := unistd.write(fd, cast(*byte, buf + written), count - written)
+        if rc <= 0 { return -1 }
+        written += cast(i32, rc)
+    }
+    return written
 }
 
 pub fn write_str(fd i32, text string) i32 {
-    return c_write(fd, text, str.len(text))
+    return write_all(fd, text, str.len(text))
 }
 
 pub fn print_raw(text string) {
-    c_write(1, text, str.len(text))
+    unistd.write(1, cast(*byte, text), str.len(text))
 }
 
 pub fn read_stdin_all(cap i32) string {
-    buf: string := mem.calloc(cap + 1, 1)
-    c_read(0, buf, cap)
-    return buf
+    initial := cap
+    if initial < 1 { initial = 4096 }
+    out := bytes.new(initial)
+    chunk: string := mem.calloc(4097, 1)
+    for (; true; ) {
+        got := unistd.read(0, cast(*byte, chunk), 4096)
+        if got <= 0 { break }
+        i := 0
+        for (; i < got; i++) { out = bytes.append(out, chunk[i]) }
+    }
+    return bytes.to_string(out)
 }
+
+pub fn write_stdout(text string) i32 { return write_str(1, text) }
+pub fn write_stderr(text string) i32 { return write_str(2, text) }
 
 pub fn send_lsp_body(body string) {
     fmt.printf("Content-Length: %lld\r\n\r\n%s", str.len(body), body)

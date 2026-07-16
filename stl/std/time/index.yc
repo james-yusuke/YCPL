@@ -1,0 +1,24 @@
+module std.time
+
+import "c/yc_runtime" as runtime
+
+pub struct Duration {
+    nanos i64
+}
+
+pub struct Instant {
+    nanos i64
+}
+
+pub fn unix_millis() i64 { return runtime.unix_millis() }
+pub fn monotonic_now() Instant { return Instant{nanos: runtime.monotonic_nanos()} }
+
+pub fn elapsed(start Instant) Duration {
+    now := runtime.monotonic_nanos()
+    if now < start.nanos { return Duration{nanos: 0} }
+    return Duration{nanos: now - start.nanos}
+}
+
+pub fn sleep_ms(millis i64) bool { return runtime.sleep_millis(millis) != 0 }
+pub fn millis(value Duration) i64 { return value.nanos / 1000000 }
+pub fn seconds(value Duration) double { return cast(double, value.nanos) / 1000000000.0 }

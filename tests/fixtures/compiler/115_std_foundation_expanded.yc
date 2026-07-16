@@ -1,0 +1,129 @@
+import "std/base32" as base32
+import "std/base64" as base64
+import "std/bytes" as bytes
+import "std/fmt" as fmt
+import "std/hex" as hex
+import "std/json" as json
+import "std/map" as map
+import "std/math" as math
+import "std/path" as path
+import "std/random" as random
+import "std/sort" as sort
+import "std/strconv" as strconv
+import "std/text" as text
+import "std/utf8" as utf8
+
+fn main() {
+    fmt.println(text.ends_with("hello.yc", ".yc"))
+    fmt.println(text.trim(" \tYCPL\n"))
+    fmt.println(text.replace("a-b-b", "b", "x"))
+    parts := text.split("one,two,three", ",")
+    fmt.println(parts.len())
+    fmt.println(text.join_all(parts, "|"))
+    fmt.println(text.to_lower_ascii("YCPL"))
+    fmt.println(text.to_upper_ascii("ycpl"))
+
+    unicode := "A😀B"
+    fmt.println(utf8.valid(unicode))
+    fmt.println(utf8.codepoint_count(unicode))
+    fmt.println(utf8.utf16_column(unicode, 5))
+    rune := utf8.decode_at(unicode, 1)
+    fmt.println(rune.ok)
+    fmt.println(rune.codepoint)
+
+    i32_value := strconv.parse_i32("-2147483648")
+    i64_value := strconv.parse_i64("9223372036854775807")
+    double_value := strconv.parse_double("-12.5e2")
+    fmt.println(i32_value.ok)
+    fmt.println(i32_value.value)
+    fmt.println(i64_value.ok)
+    fmt.println(strconv.format_i64(i64_value.value))
+    fmt.println(double_value.ok)
+    fmt.println(double_value.value)
+    fmt.println(strconv.format_i32(-42))
+    fmt.println(strconv.format_double(12.5))
+    fmt.println(strconv.parse_i32("12x").ok)
+    fmt.println(strconv.parse_i64("9223372036854775808").ok)
+    fmt.println(strconv.parse_i64("-9223372036854775808").ok)
+
+    data := bytes.from_string("YC")
+    data = bytes.append_string(data, "PL")
+    data = bytes.resize(data, 6, '!')
+    fmt.println(bytes.len(data))
+    fmt.println(bytes.capacity(data) >= bytes.len(data))
+    fmt.println(bytes.to_string(data))
+    fmt.println(bytes.ends_with(data, bytes.from_string("!!")))
+    fmt.println(bytes.index_of(data, bytes.from_string("CP")))
+    bytes.reverse(data)
+    fmt.println(bytes.to_string(data))
+
+    fmt.println(path.normalize("/tmp/a/../b/./file.yc"))
+    fmt.println(path.join("/tmp/a", "../b"))
+    fmt.println(path.base("/tmp/file.yc"))
+    fmt.println(path.dir("/tmp/file.yc"))
+    fmt.println(path.ext("/tmp/file.yc"))
+    fmt.println(path.stem("/tmp/file.yc"))
+    fmt.println(path.is_absolute("/tmp"))
+
+    numbers := Vec<i32>{}
+    numbers.push(4)
+    numbers.push(1)
+    numbers.push(3)
+    numbers.push(2)
+    sort.sort_i32(numbers)
+    fmt.println(numbers[0])
+    fmt.println(numbers[3])
+    sort.reverse_i32(numbers)
+    fmt.println(numbers[0])
+
+    labels := map.make_i32(1)
+    map.set_i32(labels, "one", 1)
+    map.set_i32(labels, "two", 2)
+    map.set_i32(labels, "three", 3)
+    lookup := map.lookup_i32(labels, "two")
+    fmt.println(map.len_i32(labels))
+    fmt.println(map.capacity_i32(labels) >= map.len_i32(labels))
+    fmt.println(lookup.found)
+    fmt.println(lookup.value)
+    fmt.println(map.key_snapshot_i32(labels).len())
+    map.clear_i32(labels)
+    fmt.println(map.len_i32(labels))
+
+    fmt.println(math.min_i32(8, 3))
+    fmt.println(math.max_i64(8, 3))
+    fmt.println(math.clamp_double(8.5, 0.0, 4.0))
+    fmt.println(math.floor(3.8))
+    fmt.println(math.ceil(3.2))
+    fmt.println(math.round(3.6))
+    fmt.println(math.trunc(math.abs_double(3.8)))
+
+    parsed := json.parse_result("{\"name\":\"YCPL\",\"n\":1.25e2,\"emoji\":\"\\uD83D\\uDE00\",\"items\":[1,2]}")
+    fmt.println(parsed.ok)
+    fmt.println(json.is_object(parsed.value))
+    fmt.println(json.has(parsed.value, "name"))
+    fmt.println(json.get_string_or(parsed.value, "name", "missing"))
+    fmt.println(json.get_double_or(parsed.value, "n", 0.0))
+    fmt.println(json.keys(parsed.value).len())
+    fmt.println(json.items(json.get(parsed.value, "items")).len())
+    fmt.println(json.quote_string("a\nb"))
+    fmt.println(json.parse_result("{\"x\":01}").ok)
+    fmt.println(json.parse_result("\"\\uD800\"").ok)
+
+    fmt.println(hex.decode_result("5943").ok)
+    fmt.println(hex.decode_result("59x3").ok)
+    fmt.println(base32.decode_result("LFBVATA=").ok)
+    fmt.println(base32.decode_result("LFBVA!A=").ok)
+    fmt.println(base64.decode_result("WUNQTA==").ok)
+    fmt.println(base64.decode_result("WUNQ=A==").ok)
+
+    first := random.seeded(123)
+    second := random.seeded(123)
+    fmt.println(random.next_u32(&first) == random.next_u32(&second))
+    value := random.range_i32(&first, 10, 20)
+    fmt.println(value >= 10 && value < 20)
+    fmt.println(!random.chance(&first, 0.0))
+    fmt.println(random.chance(&first, 1.0))
+    random_bytes := bytes.resize(bytes.empty(), 4, 0)
+    random.fill_bytes(&first, random_bytes)
+    fmt.println(bytes.len(random_bytes))
+}

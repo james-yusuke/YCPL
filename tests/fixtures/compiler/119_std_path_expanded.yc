@@ -1,0 +1,8 @@
+import "std/fmt" as fmt
+import "std/path" as path
+
+fn main() {
+    fmt.println(path.normalize("/tmp/a/../b"))
+    fmt.println(path.normalize("../../a"))
+    fmt.println(path.join("/tmp/a", "../b"))
+}

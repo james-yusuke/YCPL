@@ -4,6 +4,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT_DIR="$(dirname "$SCRIPT_DIR")"
 YCC="${YCC:-$ROOT_DIR/build/ycc}"
 LINKFLAGS="${LINKFLAGS:--no-pie}"
+export YCPL_STL_ROOT="${YCPL_STL_ROOT:-$ROOT_DIR/stl}"
 
 llvm_bindir() {
     if [ -n "${LLVM_BINDIR:-}" ]; then
@@ -559,6 +560,7 @@ compile_run_and_verify "$ROOT_DIR/examples/stdlib/base64.yc" $'\nZg==\n1\nZm8=\n
 compile_run_and_verify "$ROOT_DIR/examples/stdlib/encoding.yc" $'LFBVATA=\n1\nWUNQTA==\n1\n5943504C\n1\n52232505' "@std__base32__encode" "@std__base64__encode_url" "@std__bytes__eq"
 compile_run_and_verify "$ROOT_DIR/examples/stdlib/managed_runtime.yc" $'9\nYCPL\n7\n21\n"YCPL"' "@yc_runtime_init" "@yc_alloc" "@yc_runtime_shutdown"
 compile_run_and_verify "$ROOT_DIR/examples/stdlib/managed_collections.yc" $'3\n16\nYCPL gogo\n3\n8\n1\n0' "%YCPLArrayHeader" "@yc_attach_child" "@yc_replace_child" "@yc_move_to_ancestor" "@std__text__concat" "@std__map__make_i32"
+compile_run_and_verify "$ROOT_DIR/examples/stdlib/foundation.yc" $'managed | portable | self-hosted\n10\n30\n1\nYCPL\n/tmp/project\n5'
 
 echo ""
 echo "--- Compatibility and Compiler Fixtures ---"
@@ -574,12 +576,18 @@ compile_run_and_verify "$ROOT_DIR/tests/fixtures/compiler/100_retired_keywords_a
 compile_run_and_verify "$ROOT_DIR/tests/fixtures/compiler/108_map_type_syntax.yc" "13" "@std__map__put_i32" "%SymbolTable"
 compile_run_and_verify "$ROOT_DIR/tests/fixtures/compiler/109_vec_builtin.yc" $'0\n1\n2\n3\n16\n60\n30\n9\n0\n7\n2\n8' "%YCPLArrayHeader" "@yc_attach_child" "@yc_replace_child"
 compile_run_and_verify "$ROOT_DIR/tests/fixtures/compiler/110_dynamic_limits.yc" $'160\n48\n64' "f64\"" "dynamic_limits__many"
+compile_run_and_verify "$ROOT_DIR/tests/fixtures/compiler/115_std_foundation_expanded.yc" $'1\nYCPL\na-x-x\n3\none|two|three\nycpl\nYCPL\n1\n3\n3\n1\n128512\n1\n-2147483648\n1\n9223372036854775807\n1\n-1250.000000\n-42\n12.5\n0\n0\n1\n6\n1\nYCPL!!\n1\n1\n!!LPCY\n/tmp/b/file.yc\n/tmp/b\nfile.yc\n/tmp\n.yc\nfile\n1\n1\n4\n4\n3\n1\n1\n2\n3\n0\n3\n8\n4.000000\n3.000000\n4.000000\n4.000000\n3.000000\n1\n1\n1\nYCPL\n125.000000\n4\n2\n"a\\nb"\n0\n0\n1\n0\n1\n0\n1\n0\n1\n1\n1\n1\n4'
+compile_run_and_verify "$ROOT_DIR/tests/fixtures/compiler/118_std_text_expanded.yc" $'3\na|b|c\nYCPL\na+b'
+compile_run_and_verify "$ROOT_DIR/tests/fixtures/compiler/119_std_path_expanded.yc" $'/tmp/b\n../../a\n/tmp/b'
+compile_run_and_verify "$ROOT_DIR/tests/fixtures/compiler/120_std_utf8_expanded.yc" $'1\n3\n3\n😀'
 compile_run_and_verify "$ROOT_DIR/tests/fixtures/compiler/struct_array_index.yc" "7" "load_struct_value_dyn"
 compile_run_and_verify "$ROOT_DIR/tests/fixtures/runtime/107_slice_pointer_extern_abi.yc" $'strap\nstr\n1\n5' "@std__text__slice" "@std__mem__copy" "@memcmp"
 compile_run_and_verify "$ROOT_DIR/tests/fixtures/runtime/111_managed_frame_cleanup.yc" $'12\n0\n6\n1' "@yc_runtime_live_allocations" "@yc_frame_pop" "@yc_move_to_ancestor"
 compile_run_and_verify "$ROOT_DIR/tests/fixtures/runtime/112_managed_child_destructors.yc" $'2\n2' "@yc_attach_child" "@yc_replace_child" "@yc_release"
 compile_run_and_verify "$ROOT_DIR/tests/fixtures/runtime/113_managed_value_roots.yc" $'2\n2\n2' "@yc_attach_child" "@yc_replace_child" "@yc_release"
 compile_run_and_verify "$ROOT_DIR/tests/fixtures/runtime/114_vec_managed_ownership.yc" $'2\n2\n2\n2' "@yc_attach_child" "@yc_release" "vec.clear" "vec.replace"
+compile_run_and_verify "$ROOT_DIR/tests/fixtures/runtime/116_std_system_expanded.yc" $'1\n1\n1\n1\n1\nYCPL\n1\n1\n4\n1\n1\n1\n1\n1\n1\n1\n1\n1\nA-B\n1\n1\n1'
+compile_run_and_verify "$ROOT_DIR/tests/fixtures/runtime/117_std_fs_bytes_expanded.yc" $'1\n1\nbytes\n1'
 compile_run_and_verify "$ROOT_DIR/tests/fixtures/runtime/scope_escape_cleanup.yc" $'scope escape\n0\n0' "@yc_move_to_ancestor" "@yc_frame_push" "@yc_frame_pop"
 compile_run_and_verify "$ROOT_DIR/tests/fixtures/runtime/process_argv.yc" "0" "@yc_process_run_packed"
 

@@ -1,0 +1,25 @@
+import "std/fmt" as fmt
+import "std/json" as json
+import "std/path" as path
+import "std/sort" as sort
+import "std/text" as text
+import "std/utf8" as utf8
+
+fn main() {
+    words := text.split("managed,portable,self-hosted", ",")
+    fmt.println(text.join_all(words, " | "))
+
+    values := Vec<i32>{}
+    values.push(30)
+    values.push(10)
+    values.push(20)
+    sort.sort_i32(values)
+    fmt.println(values[0])
+    fmt.println(values[2])
+
+    parsed := json.parse_result("{\"language\":\"YCPL\",\"ready\":true}")
+    fmt.println(parsed.ok)
+    fmt.println(json.get_string_or(parsed.value, "language", "unknown"))
+    fmt.println(path.normalize("/tmp/ycpl/../project"))
+    fmt.println(utf8.codepoint_count("YCPL😀"))
+}

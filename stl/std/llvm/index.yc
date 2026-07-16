@@ -1,85 +1,6 @@
 module std.llvm
 
-extern fn c_context_create() *byte as "LLVMContextCreate"
-extern fn c_context_dispose(ctx *byte) as "LLVMContextDispose"
-
-extern fn c_module_create_with_name_in_context(name string, ctx *byte) *byte as "LLVMModuleCreateWithNameInContext"
-extern fn c_dispose_module(mod_ref *byte) as "LLVMDisposeModule"
-extern fn c_print_module_to_string(mod_ref *byte) string as "LLVMPrintModuleToString"
-extern fn c_print_module_to_file(mod_ref *byte, path string, error_message *string) i32 as "LLVMPrintModuleToFile"
-extern fn c_dispose_message(message string) as "LLVMDisposeMessage"
-
-extern fn c_create_builder_in_context(ctx *byte) *byte as "LLVMCreateBuilderInContext"
-extern fn c_dispose_builder(builder_ref *byte) as "LLVMDisposeBuilder"
-extern fn c_position_builder_at_end(builder_ref *byte, block_ref *byte) as "LLVMPositionBuilderAtEnd"
-extern fn c_get_insert_block(builder_ref *byte) *byte as "LLVMGetInsertBlock"
-extern fn c_get_basic_block_terminator(block_ref *byte) *byte as "LLVMGetBasicBlockTerminator"
-
-extern fn c_void_type_in_context(ctx *byte) *byte as "LLVMVoidTypeInContext"
-extern fn c_int1_type_in_context(ctx *byte) *byte as "LLVMInt1TypeInContext"
-extern fn c_int8_type_in_context(ctx *byte) *byte as "LLVMInt8TypeInContext"
-extern fn c_int32_type_in_context(ctx *byte) *byte as "LLVMInt32TypeInContext"
-extern fn c_int64_type_in_context(ctx *byte) *byte as "LLVMInt64TypeInContext"
-extern fn c_double_type_in_context(ctx *byte) *byte as "LLVMDoubleTypeInContext"
-extern fn c_pointer_type(element_type *byte, address_space i32) *byte as "LLVMPointerType"
-extern fn c_struct_type_in_context(ctx *byte, element_types *byte, element_count i32, packed i32) *byte as "LLVMStructTypeInContext"
-extern fn c_struct_create_named(ctx *byte, name string) *byte as "LLVMStructCreateNamed"
-extern fn c_struct_set_body(struct_type *byte, element_types *byte, element_count i32, packed i32) as "LLVMStructSetBody"
-extern fn c_array_type(element_type *byte, element_count i32) *byte as "LLVMArrayType"
-extern fn c_function_type(return_type *byte, param_types *byte, param_count i32, is_var_arg i32) *byte as "LLVMFunctionType"
-
-extern fn c_add_function(mod_ref *byte, name string, function_type *byte) *byte as "LLVMAddFunction"
-extern fn c_get_named_function(mod_ref *byte, name string) *byte as "LLVMGetNamedFunction"
-extern fn c_add_global(mod_ref *byte, type_ref *byte, name string) *byte as "LLVMAddGlobal"
-extern fn c_set_initializer(global_ref *byte, constant_ref *byte) as "LLVMSetInitializer"
-extern fn c_set_global_constant(global_ref *byte, is_constant i32) as "LLVMSetGlobalConstant"
-extern fn c_append_basic_block_in_context(ctx *byte, function_ref *byte, name string) *byte as "LLVMAppendBasicBlockInContext"
-extern fn c_get_param(function_ref *byte, index i32) *byte as "LLVMGetParam"
-extern fn c_type_of(value_ref *byte) *byte as "LLVMTypeOf"
-
-extern fn c_const_int(int_type *byte, value i64, sign_extend i32) *byte as "LLVMConstInt"
-extern fn c_const_real(real_type *byte, value double) *byte as "LLVMConstReal"
-extern fn c_const_null(type_ref *byte) *byte as "LLVMConstNull"
-extern fn c_const_pointer_null(pointer_type *byte) *byte as "LLVMConstPointerNull"
-extern fn c_build_alloca(builder_ref *byte, type_ref *byte, name string) *byte as "LLVMBuildAlloca"
-extern fn c_build_load2(builder_ref *byte, type_ref *byte, pointer_ref *byte, name string) *byte as "LLVMBuildLoad2"
-extern fn c_build_store(builder_ref *byte, value_ref *byte, pointer_ref *byte) *byte as "LLVMBuildStore"
-extern fn c_build_ret(builder_ref *byte, value *byte) *byte as "LLVMBuildRet"
-extern fn c_build_ret_void(builder_ref *byte) *byte as "LLVMBuildRetVoid"
-extern fn c_build_add(builder_ref *byte, lhs *byte, rhs *byte, name string) *byte as "LLVMBuildAdd"
-extern fn c_build_sub(builder_ref *byte, lhs *byte, rhs *byte, name string) *byte as "LLVMBuildSub"
-extern fn c_build_mul(builder_ref *byte, lhs *byte, rhs *byte, name string) *byte as "LLVMBuildMul"
-extern fn c_build_sdiv(builder_ref *byte, lhs *byte, rhs *byte, name string) *byte as "LLVMBuildSDiv"
-extern fn c_build_srem(builder_ref *byte, lhs *byte, rhs *byte, name string) *byte as "LLVMBuildSRem"
-extern fn c_build_fadd(builder_ref *byte, lhs *byte, rhs *byte, name string) *byte as "LLVMBuildFAdd"
-extern fn c_build_fsub(builder_ref *byte, lhs *byte, rhs *byte, name string) *byte as "LLVMBuildFSub"
-extern fn c_build_fmul(builder_ref *byte, lhs *byte, rhs *byte, name string) *byte as "LLVMBuildFMul"
-extern fn c_build_fdiv(builder_ref *byte, lhs *byte, rhs *byte, name string) *byte as "LLVMBuildFDiv"
-extern fn c_build_sext(builder_ref *byte, value_ref *byte, dest_type *byte, name string) *byte as "LLVMBuildSExt"
-extern fn c_build_zext(builder_ref *byte, value_ref *byte, dest_type *byte, name string) *byte as "LLVMBuildZExt"
-extern fn c_build_trunc(builder_ref *byte, value_ref *byte, dest_type *byte, name string) *byte as "LLVMBuildTrunc"
-extern fn c_build_sitofp(builder_ref *byte, value_ref *byte, dest_type *byte, name string) *byte as "LLVMBuildSIToFP"
-extern fn c_build_fptosi(builder_ref *byte, value_ref *byte, dest_type *byte, name string) *byte as "LLVMBuildFPToSI"
-extern fn c_build_bitcast(builder_ref *byte, value_ref *byte, dest_type *byte, name string) *byte as "LLVMBuildBitCast"
-extern fn c_build_pointer_cast(builder_ref *byte, value_ref *byte, dest_type *byte, name string) *byte as "LLVMBuildPointerCast"
-extern fn c_build_ptr_to_int(builder_ref *byte, value_ref *byte, dest_type *byte, name string) *byte as "LLVMBuildPtrToInt"
-extern fn c_build_int_to_ptr(builder_ref *byte, value_ref *byte, dest_type *byte, name string) *byte as "LLVMBuildIntToPtr"
-extern fn c_build_icmp(builder_ref *byte, predicate i32, lhs *byte, rhs *byte, name string) *byte as "LLVMBuildICmp"
-extern fn c_build_fcmp(builder_ref *byte, predicate i32, lhs *byte, rhs *byte, name string) *byte as "LLVMBuildFCmp"
-extern fn c_build_br(builder_ref *byte, dest *byte) *byte as "LLVMBuildBr"
-extern fn c_build_cond_br(builder_ref *byte, cond *byte, then_block *byte, else_block *byte) *byte as "LLVMBuildCondBr"
-extern fn c_build_switch(builder_ref *byte, value_ref *byte, else_block *byte, case_count i32) *byte as "LLVMBuildSwitch"
-extern fn c_add_case(switch_ref *byte, on_value *byte, dest *byte) as "LLVMAddCase"
-extern fn c_build_unreachable(builder_ref *byte) *byte as "LLVMBuildUnreachable"
-extern fn c_build_call2(builder_ref *byte, function_type *byte, function_ref *byte, args *byte, arg_count i32, name string) *byte as "LLVMBuildCall2"
-extern fn c_build_struct_gep2(builder_ref *byte, type_ref *byte, pointer_ref *byte, index i32, name string) *byte as "LLVMBuildStructGEP2"
-extern fn c_build_gep2(builder_ref *byte, type_ref *byte, pointer_ref *byte, indices *byte, index_count i32, name string) *byte as "LLVMBuildGEP2"
-extern fn c_build_global_string_ptr(builder_ref *byte, text string, name string) *byte as "LLVMBuildGlobalStringPtr"
-extern fn c_build_phi(builder_ref *byte, type_ref *byte, name string) *byte as "LLVMBuildPhi"
-extern fn c_add_incoming(phi_ref *byte, incoming_values *byte, incoming_blocks *byte, count i32) as "LLVMAddIncoming"
-extern fn c_build_extract_value(builder_ref *byte, aggregate *byte, index i32, name string) *byte as "LLVMBuildExtractValue"
-extern fn c_build_insert_value(builder_ref *byte, aggregate *byte, element *byte, index i32, name string) *byte as "LLVMBuildInsertValue"
-extern fn c_verify_module(mod_ref *byte, action i32, out_message *string) i32 as "LLVMVerifyModule"
+import "c/llvm" as llvm
 
 struct RefArgs2 {
     arg0 *byte
@@ -136,215 +57,215 @@ struct RefArgs16 {
 }
 
 pub fn context_create() *byte {
-    return c_context_create()
+    return llvm.context_create()
 }
 
 pub fn context_dispose(ctx *byte) {
-    c_context_dispose(ctx)
+    llvm.context_dispose(ctx)
 }
 
 pub fn module_create_with_name_in_context(name string, ctx *byte) *byte {
-    return c_module_create_with_name_in_context(name, ctx)
+    return llvm.module_create(name, ctx)
 }
 
 pub fn dispose_module(mod *byte) {
-    c_dispose_module(mod)
+    llvm.module_dispose(mod)
 }
 
 pub fn print_module_to_string(mod *byte) string {
-    return c_print_module_to_string(mod)
+    return llvm.module_to_string(mod)
 }
 
 pub fn print_module_to_file(mod *byte, path string) bool {
     message: string := none
-    rc := c_print_module_to_file(mod, path, &message)
+    rc := llvm.module_to_file_raw(mod, path, &message)
     if message != none {
-        c_dispose_message(message)
+        llvm.dispose_message(message)
     }
     return rc == 0
 }
 
 pub fn dispose_message(message string) {
-    c_dispose_message(message)
+    llvm.dispose_message(message)
 }
 
 pub fn create_builder_in_context(ctx *byte) *byte {
-    return c_create_builder_in_context(ctx)
+    return llvm.builder_create(ctx)
 }
 
 pub fn dispose_builder(builder *byte) {
-    c_dispose_builder(builder)
+    llvm.builder_dispose(builder)
 }
 
 pub fn position_builder_at_end(builder *byte, block *byte) {
-    c_position_builder_at_end(builder, block)
+    llvm.position_at_end(builder, block)
 }
 
 pub fn get_insert_block(builder *byte) *byte {
-    return c_get_insert_block(builder)
+    return llvm.insert_block(builder)
 }
 
 pub fn get_basic_block_terminator(block *byte) *byte {
-    return c_get_basic_block_terminator(block)
+    return llvm.block_terminator(block)
 }
 
 pub fn current_block_has_terminator(builder *byte) bool {
-    block := c_get_insert_block(builder)
+    block := llvm.insert_block(builder)
     if block == none {
         return false
     }
-    return c_get_basic_block_terminator(block) != none
+    return llvm.block_terminator(block) != none
 }
 
 pub fn void_type_in_context(ctx *byte) *byte {
-    return c_void_type_in_context(ctx)
+    return llvm.void_type(ctx)
 }
 
 pub fn int1_type_in_context(ctx *byte) *byte {
-    return c_int1_type_in_context(ctx)
+    return llvm.i1_type(ctx)
 }
 
 pub fn int8_type_in_context(ctx *byte) *byte {
-    return c_int8_type_in_context(ctx)
+    return llvm.i8_type(ctx)
 }
 
 pub fn int32_type_in_context(ctx *byte) *byte {
-    return c_int32_type_in_context(ctx)
+    return llvm.i32_type(ctx)
 }
 
 pub fn int64_type_in_context(ctx *byte) *byte {
-    return c_int64_type_in_context(ctx)
+    return llvm.i64_type(ctx)
 }
 
 pub fn double_type_in_context(ctx *byte) *byte {
-    return c_double_type_in_context(ctx)
+    return llvm.double_type(ctx)
 }
 
 pub fn pointer_type(element_type *byte, address_space i32) *byte {
-    return c_pointer_type(element_type, address_space)
+    return llvm.pointer_type(element_type, address_space)
 }
 
 pub fn struct_type2(ctx *byte, field0 *byte, field1 *byte, packed i32) *byte {
     fields := RefArgs2{arg0: field0, arg1: field1}
-    return c_struct_type_in_context(ctx, &fields, 2, packed)
+    return llvm.struct_type(ctx, &fields, 2, packed)
 }
 
 pub fn struct_type3(ctx *byte, field0 *byte, field1 *byte, field2 *byte, packed i32) *byte {
     fields := RefArgs3{arg0: field0, arg1: field1, arg2: field2}
-    return c_struct_type_in_context(ctx, &fields, 3, packed)
+    return llvm.struct_type(ctx, &fields, 3, packed)
 }
 
 pub fn struct_type16(ctx *byte, field_type *byte, packed i32) *byte {
     fields := RefArgs16{arg0: field_type, arg1: field_type, arg2: field_type, arg3: field_type, arg4: field_type, arg5: field_type, arg6: field_type, arg7: field_type, arg8: field_type, arg9: field_type, arg10: field_type, arg11: field_type, arg12: field_type, arg13: field_type, arg14: field_type, arg15: field_type}
-    return c_struct_type_in_context(ctx, &fields, 16, packed)
+    return llvm.struct_type(ctx, &fields, 16, packed)
 }
 
 pub fn struct_type(ctx *byte, field_types *byte, field_count i32, packed i32) *byte {
-    return c_struct_type_in_context(ctx, field_types, field_count, packed)
+    return llvm.struct_type(ctx, field_types, field_count, packed)
 }
 
 pub fn struct_create_named(ctx *byte, name string) *byte {
-    return c_struct_create_named(ctx, name)
+    return llvm.named_struct(ctx, name)
 }
 
 pub fn struct_set_body(struct_type *byte, field_types *byte, field_count i32, packed i32) {
-    c_struct_set_body(struct_type, field_types, field_count, packed)
+    llvm.set_struct_body(struct_type, field_types, field_count, packed)
 }
 
 pub fn array_type(element_type *byte, element_count i32) *byte {
-    return c_array_type(element_type, element_count)
+    return llvm.array_type(element_type, element_count)
 }
 
 pub fn function_type(return_type *byte, param_types *byte, param_count i32, is_var_arg i32) *byte {
-    return c_function_type(return_type, param_types, param_count, is_var_arg)
+    return llvm.function_type(return_type, param_types, param_count, is_var_arg)
 }
 
 pub fn function_type1(return_type *byte, param0 *byte, is_var_arg i32) *byte {
     param := param0
-    return c_function_type(return_type, &param, 1, is_var_arg)
+    return llvm.function_type(return_type, &param, 1, is_var_arg)
 }
 
 pub fn function_type2(return_type *byte, param0 *byte, param1 *byte, is_var_arg i32) *byte {
     args := RefArgs2{arg0: param0, arg1: param1}
-    return c_function_type(return_type, &args, 2, is_var_arg)
+    return llvm.function_type(return_type, &args, 2, is_var_arg)
 }
 
 pub fn function_type3(return_type *byte, param0 *byte, param1 *byte, param2 *byte, is_var_arg i32) *byte {
     args := RefArgs3{arg0: param0, arg1: param1, arg2: param2}
-    return c_function_type(return_type, &args, 3, is_var_arg)
+    return llvm.function_type(return_type, &args, 3, is_var_arg)
 }
 
 pub fn function_type4(return_type *byte, param0 *byte, param1 *byte, param2 *byte, param3 *byte, is_var_arg i32) *byte {
     args := RefArgs4{arg0: param0, arg1: param1, arg2: param2, arg3: param3}
-    return c_function_type(return_type, &args, 4, is_var_arg)
+    return llvm.function_type(return_type, &args, 4, is_var_arg)
 }
 
 pub fn function_type5(return_type *byte, param0 *byte, param1 *byte, param2 *byte, param3 *byte, param4 *byte, is_var_arg i32) *byte {
     args := RefArgs5{arg0: param0, arg1: param1, arg2: param2, arg3: param3, arg4: param4}
-    return c_function_type(return_type, &args, 5, is_var_arg)
+    return llvm.function_type(return_type, &args, 5, is_var_arg)
 }
 
 pub fn function_type6(return_type *byte, param0 *byte, param1 *byte, param2 *byte, param3 *byte, param4 *byte, param5 *byte, is_var_arg i32) *byte {
     args := RefArgs6{arg0: param0, arg1: param1, arg2: param2, arg3: param3, arg4: param4, arg5: param5}
-    return c_function_type(return_type, &args, 6, is_var_arg)
+    return llvm.function_type(return_type, &args, 6, is_var_arg)
 }
 
 pub fn function_type7(return_type *byte, param0 *byte, param1 *byte, param2 *byte, param3 *byte, param4 *byte, param5 *byte, param6 *byte, is_var_arg i32) *byte {
     args := RefArgs16{arg0: param0, arg1: param1, arg2: param2, arg3: param3, arg4: param4, arg5: param5, arg6: param6, arg7: param6, arg8: param6, arg9: param6, arg10: param6, arg11: param6, arg12: param6, arg13: param6, arg14: param6, arg15: param6}
-    return c_function_type(return_type, &args, 7, is_var_arg)
+    return llvm.function_type(return_type, &args, 7, is_var_arg)
 }
 
 pub fn function_type8(return_type *byte, param0 *byte, param1 *byte, param2 *byte, param3 *byte, param4 *byte, param5 *byte, param6 *byte, param7 *byte, is_var_arg i32) *byte {
     args := RefArgs16{arg0: param0, arg1: param1, arg2: param2, arg3: param3, arg4: param4, arg5: param5, arg6: param6, arg7: param7, arg8: param7, arg9: param7, arg10: param7, arg11: param7, arg12: param7, arg13: param7, arg14: param7, arg15: param7}
-    return c_function_type(return_type, &args, 8, is_var_arg)
+    return llvm.function_type(return_type, &args, 8, is_var_arg)
 }
 
 pub fn add_function(mod *byte, name string, function_type *byte) *byte {
-    return c_add_function(mod, name, function_type)
+    return llvm.add_function(mod, name, function_type)
 }
 
 pub fn get_named_function(mod *byte, name string) *byte {
-    return c_get_named_function(mod, name)
+    return llvm.named_function(mod, name)
 }
 
 pub fn add_global(mod *byte, type_ref *byte, name string) *byte {
-    return c_add_global(mod, type_ref, name)
+    return llvm.add_global(mod, type_ref, name)
 }
 
 pub fn set_initializer(global_ref *byte, constant_ref *byte) {
-    c_set_initializer(global_ref, constant_ref)
+    llvm.set_initializer(global_ref, constant_ref)
 }
 
 pub fn set_global_constant(global_ref *byte, is_constant i32) {
-    c_set_global_constant(global_ref, is_constant)
+    llvm.set_global_constant(global_ref, is_constant)
 }
 
 pub fn append_basic_block_in_context(ctx *byte, function *byte, name string) *byte {
-    return c_append_basic_block_in_context(ctx, function, name)
+    return llvm.append_block(ctx, function, name)
 }
 
 pub fn get_param(function *byte, index i32) *byte {
-    return c_get_param(function, index)
+    return llvm.get_param(function, index)
 }
 
 pub fn type_of(value *byte) *byte {
-    return c_type_of(value)
+    return llvm.type_of(value)
 }
 
 pub fn const_int(int_type *byte, value i64, sign_extend i32) *byte {
-    return c_const_int(int_type, value, sign_extend)
+    return llvm.const_int(int_type, value, sign_extend)
 }
 
 pub fn const_pointer_null(pointer_type *byte) *byte {
-    return c_const_pointer_null(pointer_type)
+    return llvm.const_pointer_null(pointer_type)
 }
 
 pub fn const_real(real_type *byte, value double) *byte {
-    return c_const_real(real_type, value)
+    return llvm.const_real(real_type, value)
 }
 
 pub fn const_null(type_ref *byte) *byte {
-    return c_const_null(type_ref)
+    return llvm.const_null(type_ref)
 }
 
 pub fn int_eq() i32 { return 32 }
@@ -357,163 +278,163 @@ pub fn int_sle() i32 { return 41 }
 pub fn verify_return_status_action() i32 { return 2 }
 
 pub fn build_alloca(builder *byte, type_ref *byte, name string) *byte {
-    return c_build_alloca(builder, type_ref, name)
+    return llvm.build_alloca(builder, type_ref, name)
 }
 
 pub fn build_load2(builder *byte, type_ref *byte, pointer *byte, name string) *byte {
-    return c_build_load2(builder, type_ref, pointer, name)
+    return llvm.build_load(builder, type_ref, pointer, name)
 }
 
 pub fn build_store(builder *byte, value *byte, pointer *byte) *byte {
-    return c_build_store(builder, value, pointer)
+    return llvm.build_store(builder, value, pointer)
 }
 
 pub fn build_ret(builder *byte, value *byte) *byte {
-    return c_build_ret(builder, value)
+    return llvm.build_ret(builder, value)
 }
 
 pub fn build_ret_void(builder *byte) *byte {
-    return c_build_ret_void(builder)
+    return llvm.build_ret_void(builder)
 }
 
 pub fn build_add(builder *byte, lhs *byte, rhs *byte, name string) *byte {
-    return c_build_add(builder, lhs, rhs, name)
+    return llvm.build_add(builder, lhs, rhs, name)
 }
 
 pub fn build_sub(builder *byte, lhs *byte, rhs *byte, name string) *byte {
-    return c_build_sub(builder, lhs, rhs, name)
+    return llvm.build_sub(builder, lhs, rhs, name)
 }
 
 pub fn build_mul(builder *byte, lhs *byte, rhs *byte, name string) *byte {
-    return c_build_mul(builder, lhs, rhs, name)
+    return llvm.build_mul(builder, lhs, rhs, name)
 }
 
 pub fn build_sdiv(builder *byte, lhs *byte, rhs *byte, name string) *byte {
-    return c_build_sdiv(builder, lhs, rhs, name)
+    return llvm.build_sdiv(builder, lhs, rhs, name)
 }
 
 pub fn build_srem(builder *byte, lhs *byte, rhs *byte, name string) *byte {
-    return c_build_srem(builder, lhs, rhs, name)
+    return llvm.build_srem(builder, lhs, rhs, name)
 }
 
-pub fn build_fadd(builder *byte, lhs *byte, rhs *byte, name string) *byte { return c_build_fadd(builder, lhs, rhs, name) }
-pub fn build_fsub(builder *byte, lhs *byte, rhs *byte, name string) *byte { return c_build_fsub(builder, lhs, rhs, name) }
-pub fn build_fmul(builder *byte, lhs *byte, rhs *byte, name string) *byte { return c_build_fmul(builder, lhs, rhs, name) }
-pub fn build_fdiv(builder *byte, lhs *byte, rhs *byte, name string) *byte { return c_build_fdiv(builder, lhs, rhs, name) }
+pub fn build_fadd(builder *byte, lhs *byte, rhs *byte, name string) *byte { return llvm.build_fadd(builder, lhs, rhs, name) }
+pub fn build_fsub(builder *byte, lhs *byte, rhs *byte, name string) *byte { return llvm.build_fsub(builder, lhs, rhs, name) }
+pub fn build_fmul(builder *byte, lhs *byte, rhs *byte, name string) *byte { return llvm.build_fmul(builder, lhs, rhs, name) }
+pub fn build_fdiv(builder *byte, lhs *byte, rhs *byte, name string) *byte { return llvm.build_fdiv(builder, lhs, rhs, name) }
 
 pub fn build_sext(builder *byte, value *byte, dest_type *byte, name string) *byte {
-    return c_build_sext(builder, value, dest_type, name)
+    return llvm.build_sext(builder, value, dest_type, name)
 }
 
-pub fn build_zext(builder *byte, value *byte, dest_type *byte, name string) *byte { return c_build_zext(builder, value, dest_type, name) }
-pub fn build_trunc(builder *byte, value *byte, dest_type *byte, name string) *byte { return c_build_trunc(builder, value, dest_type, name) }
-pub fn build_sitofp(builder *byte, value *byte, dest_type *byte, name string) *byte { return c_build_sitofp(builder, value, dest_type, name) }
-pub fn build_fptosi(builder *byte, value *byte, dest_type *byte, name string) *byte { return c_build_fptosi(builder, value, dest_type, name) }
-pub fn build_bitcast(builder *byte, value *byte, dest_type *byte, name string) *byte { return c_build_bitcast(builder, value, dest_type, name) }
-pub fn build_pointer_cast(builder *byte, value *byte, dest_type *byte, name string) *byte { return c_build_pointer_cast(builder, value, dest_type, name) }
-pub fn build_ptr_to_int(builder *byte, value *byte, dest_type *byte, name string) *byte { return c_build_ptr_to_int(builder, value, dest_type, name) }
-pub fn build_int_to_ptr(builder *byte, value *byte, dest_type *byte, name string) *byte { return c_build_int_to_ptr(builder, value, dest_type, name) }
+pub fn build_zext(builder *byte, value *byte, dest_type *byte, name string) *byte { return llvm.build_zext(builder, value, dest_type, name) }
+pub fn build_trunc(builder *byte, value *byte, dest_type *byte, name string) *byte { return llvm.build_trunc(builder, value, dest_type, name) }
+pub fn build_sitofp(builder *byte, value *byte, dest_type *byte, name string) *byte { return llvm.build_sitofp(builder, value, dest_type, name) }
+pub fn build_fptosi(builder *byte, value *byte, dest_type *byte, name string) *byte { return llvm.build_fptosi(builder, value, dest_type, name) }
+pub fn build_bitcast(builder *byte, value *byte, dest_type *byte, name string) *byte { return llvm.build_bitcast(builder, value, dest_type, name) }
+pub fn build_pointer_cast(builder *byte, value *byte, dest_type *byte, name string) *byte { return llvm.build_pointer_cast(builder, value, dest_type, name) }
+pub fn build_ptr_to_int(builder *byte, value *byte, dest_type *byte, name string) *byte { return llvm.build_ptr_to_int(builder, value, dest_type, name) }
+pub fn build_int_to_ptr(builder *byte, value *byte, dest_type *byte, name string) *byte { return llvm.build_int_to_ptr(builder, value, dest_type, name) }
 
 pub fn build_icmp(builder *byte, predicate i32, lhs *byte, rhs *byte, name string) *byte {
-    return c_build_icmp(builder, predicate, lhs, rhs, name)
+    return llvm.build_icmp(builder, predicate, lhs, rhs, name)
 }
 
 pub fn build_fcmp(builder *byte, predicate i32, lhs *byte, rhs *byte, name string) *byte {
-    return c_build_fcmp(builder, predicate, lhs, rhs, name)
+    return llvm.build_fcmp(builder, predicate, lhs, rhs, name)
 }
 
 pub fn build_br(builder *byte, dest *byte) *byte {
-    return c_build_br(builder, dest)
+    return llvm.build_br(builder, dest)
 }
 
 pub fn build_cond_br(builder *byte, cond *byte, then_block *byte, else_block *byte) *byte {
-    return c_build_cond_br(builder, cond, then_block, else_block)
+    return llvm.build_cond_br(builder, cond, then_block, else_block)
 }
 
 pub fn build_switch(builder *byte, value *byte, else_block *byte, case_count i32) *byte {
-    return c_build_switch(builder, value, else_block, case_count)
+    return llvm.build_switch(builder, value, else_block, case_count)
 }
 
 pub fn add_case(switch_ref *byte, on_value *byte, dest *byte) {
-    c_add_case(switch_ref, on_value, dest)
+    llvm.add_case(switch_ref, on_value, dest)
 }
 
 pub fn build_unreachable(builder *byte) *byte {
-    return c_build_unreachable(builder)
+    return llvm.build_unreachable(builder)
 }
 
 pub fn build_call2(builder *byte, function_type *byte, function *byte, args *byte, arg_count i32, name string) *byte {
-    return c_build_call2(builder, function_type, function, args, arg_count, name)
+    return llvm.build_call(builder, function_type, function, args, arg_count, name)
 }
 
 pub fn build_call1(builder *byte, function_type *byte, function *byte, arg0 *byte, name string) *byte {
     arg := arg0
-    return c_build_call2(builder, function_type, function, &arg, 1, name)
+    return llvm.build_call(builder, function_type, function, &arg, 1, name)
 }
 
 pub fn build_call_args2(builder *byte, function_type *byte, function *byte, arg0 *byte, arg1 *byte, name string) *byte {
     args := RefArgs2{arg0: arg0, arg1: arg1}
-    return c_build_call2(builder, function_type, function, &args, 2, name)
+    return llvm.build_call(builder, function_type, function, &args, 2, name)
 }
 
 pub fn build_call_args3(builder *byte, function_type *byte, function *byte, arg0 *byte, arg1 *byte, arg2 *byte, name string) *byte {
     args := RefArgs3{arg0: arg0, arg1: arg1, arg2: arg2}
-    return c_build_call2(builder, function_type, function, &args, 3, name)
+    return llvm.build_call(builder, function_type, function, &args, 3, name)
 }
 
 pub fn build_call_args4(builder *byte, function_type *byte, function *byte, arg0 *byte, arg1 *byte, arg2 *byte, arg3 *byte, name string) *byte {
     args := RefArgs4{arg0: arg0, arg1: arg1, arg2: arg2, arg3: arg3}
-    return c_build_call2(builder, function_type, function, &args, 4, name)
+    return llvm.build_call(builder, function_type, function, &args, 4, name)
 }
 
 pub fn build_call_args5(builder *byte, function_type *byte, function *byte, arg0 *byte, arg1 *byte, arg2 *byte, arg3 *byte, arg4 *byte, name string) *byte {
     args := RefArgs5{arg0: arg0, arg1: arg1, arg2: arg2, arg3: arg3, arg4: arg4}
-    return c_build_call2(builder, function_type, function, &args, 5, name)
+    return llvm.build_call(builder, function_type, function, &args, 5, name)
 }
 
 pub fn build_call_args6(builder *byte, function_type *byte, function *byte, arg0 *byte, arg1 *byte, arg2 *byte, arg3 *byte, arg4 *byte, arg5 *byte, name string) *byte {
     args := RefArgs6{arg0: arg0, arg1: arg1, arg2: arg2, arg3: arg3, arg4: arg4, arg5: arg5}
-    return c_build_call2(builder, function_type, function, &args, 6, name)
+    return llvm.build_call(builder, function_type, function, &args, 6, name)
 }
 
 pub fn build_call_args7(builder *byte, function_type *byte, function *byte, arg0 *byte, arg1 *byte, arg2 *byte, arg3 *byte, arg4 *byte, arg5 *byte, arg6 *byte, name string) *byte {
     args := RefArgs16{arg0: arg0, arg1: arg1, arg2: arg2, arg3: arg3, arg4: arg4, arg5: arg5, arg6: arg6, arg7: arg6, arg8: arg6, arg9: arg6, arg10: arg6, arg11: arg6, arg12: arg6, arg13: arg6, arg14: arg6, arg15: arg6}
-    return c_build_call2(builder, function_type, function, &args, 7, name)
+    return llvm.build_call(builder, function_type, function, &args, 7, name)
 }
 
 pub fn build_call_args8(builder *byte, function_type *byte, function *byte, arg0 *byte, arg1 *byte, arg2 *byte, arg3 *byte, arg4 *byte, arg5 *byte, arg6 *byte, arg7 *byte, name string) *byte {
     args := RefArgs16{arg0: arg0, arg1: arg1, arg2: arg2, arg3: arg3, arg4: arg4, arg5: arg5, arg6: arg6, arg7: arg7, arg8: arg7, arg9: arg7, arg10: arg7, arg11: arg7, arg12: arg7, arg13: arg7, arg14: arg7, arg15: arg7}
-    return c_build_call2(builder, function_type, function, &args, 8, name)
+    return llvm.build_call(builder, function_type, function, &args, 8, name)
 }
 
 pub fn build_struct_gep2(builder *byte, type_ref *byte, pointer *byte, index i32, name string) *byte {
-    return c_build_struct_gep2(builder, type_ref, pointer, index, name)
+    return llvm.build_struct_gep(builder, type_ref, pointer, index, name)
 }
 
 pub fn build_gep2(builder *byte, type_ref *byte, pointer *byte, indices *byte, index_count i32, name string) *byte {
-    return c_build_gep2(builder, type_ref, pointer, indices, index_count, name)
+    return llvm.build_gep(builder, type_ref, pointer, indices, index_count, name)
 }
 
 pub fn build_global_string_ptr(builder *byte, text string, name string) *byte {
-    return c_build_global_string_ptr(builder, text, name)
+    return llvm.build_global_string(builder, text, name)
 }
 
 pub fn build_phi(builder *byte, type_ref *byte, name string) *byte {
-    return c_build_phi(builder, type_ref, name)
+    return llvm.build_phi(builder, type_ref, name)
 }
 
 pub fn add_incoming(phi_ref *byte, incoming_values *byte, incoming_blocks *byte, count i32) {
-    c_add_incoming(phi_ref, incoming_values, incoming_blocks, count)
+    llvm.add_incoming(phi_ref, incoming_values, incoming_blocks, count)
 }
 
 pub fn build_extract_value(builder *byte, aggregate *byte, index i32, name string) *byte {
-    return c_build_extract_value(builder, aggregate, index, name)
+    return llvm.build_extract_value(builder, aggregate, index, name)
 }
 
 pub fn build_insert_value(builder *byte, aggregate *byte, element *byte, index i32, name string) *byte {
-    return c_build_insert_value(builder, aggregate, element, index, name)
+    return llvm.build_insert_value(builder, aggregate, element, index, name)
 }
 
 pub fn verify_module(mod *byte, action i32, out_message *string) i32 {
-    return c_verify_module(mod, action, out_message)
+    return llvm.verify_module_raw(mod, action, out_message)
 }

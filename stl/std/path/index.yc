@@ -1,0 +1,121 @@
+module std.path
+
+import "std/text" as text
+
+pub fn is_absolute(path string) bool {
+    return path != none && text.len(path) > 0 && path[0] == '/'
+}
+
+pub fn join(left string, right string) string {
+    if left == none || text.len(left) == 0 { return text.slice(right, 0, text.len(right)) }
+    if right == none || text.len(right) == 0 { return text.slice(left, 0, text.len(left)) }
+    if is_absolute(right) { return normalize(right) }
+    if left[text.len(left) - 1] == '/' { return normalize(text.concat(left, right)) }
+    return normalize(text.concat3(left, "/", right))
+}
+
+pub fn normalize(path string) string {
+    if path == none { return none }
+    absolute := is_absolute(path)
+    starts := Vec<i32>{}
+    ends := Vec<i32>{}
+    parents := Vec<i32>{}
+    count := 0
+    i := 0
+    n := text.len(path)
+    for (; i < n; ) {
+        for (; i < n && path[i] == '/'; i++) {}
+        if i >= n { break }
+        start := i
+        for (; i < n && path[i] != '/'; i++) {}
+        end_pos := i
+        length := end_pos - start
+        current_parent := length == 2 && path[start] == '.' && path[start + 1] == '.'
+        current_dot := length == 1 && path[start] == '.'
+        if current_dot {
+            continue
+        }
+        if current_parent {
+            if count > 0 && parents[count - 1] == 0 {
+                count -= 1
+            } else if !absolute {
+                if count < starts.len() {
+                    starts[count] = start
+                    ends[count] = end_pos
+                    parents[count] = 1
+                } else {
+                    starts.push(start)
+                    ends.push(end_pos)
+                    marker: i32 := 1
+                    parents.push(marker)
+                }
+                count += 1
+            }
+        } else {
+            if count < starts.len() {
+                starts[count] = start
+                ends[count] = end_pos
+                parents[count] = 0
+            } else {
+                starts.push(start)
+                ends.push(end_pos)
+                marker: i32 := 0
+                parents.push(marker)
+            }
+            count += 1
+        }
+    }
+    b := text.builder(text.len(path) + 1)
+    if absolute { b = text.append(b, "/") }
+    i = 0
+    for (; i < count; i++) {
+        if i > 0 { b = text.append(b, "/") }
+        b = text.append(b, text.slice(path, starts[i], ends[i] - starts[i]))
+    }
+    out := text.to_string(b)
+    if text.len(out) == 0 {
+        if absolute { return "/" }
+        return "."
+    }
+    return out
+}
+
+pub fn base(path string) string {
+    if path == none { return none }
+    n := text.len(path)
+    end_pos := n
+    for (; end_pos > 1 && path[end_pos - 1] == '/'; end_pos--) {}
+    start := 0
+    i := 0
+    for (; i < end_pos; i++) { if path[i] == '/' { start = i + 1 } }
+    return text.slice(path, start, end_pos - start)
+}
+
+pub fn dir(path string) string {
+    if path == none { return none }
+    n := text.len(path)
+    end_pos := n
+    for (; end_pos > 1 && path[end_pos - 1] == '/'; end_pos--) {}
+    slash := -1
+    i := 0
+    for (; i < end_pos; i++) { if path[i] == '/' { slash = i } }
+    if slash < 0 { return "." }
+    if slash == 0 { return "/" }
+    return text.slice(path, 0, slash)
+}
+
+pub fn ext(path string) string {
+    name := base(path)
+    if name == none { return none }
+    dot := -1
+    i := 0
+    for (; i < text.len(name); i++) { if name[i] == '.' { dot = i } }
+    if dot <= 0 { return "" }
+    return text.slice(name, dot, text.len(name) - dot)
+}
+
+pub fn stem(path string) string {
+    name := base(path)
+    extension := ext(name)
+    return text.slice(name, 0, text.len(name) - text.len(extension))
+}

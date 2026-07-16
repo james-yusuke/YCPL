@@ -63,7 +63,7 @@ The runtime is resolved in this order:
 
 ## Verification
 
-- Reusable conformance harness: 77/77 cases
+- Reusable, expanding conformance harness
 - All examples, stdlib, `c/*` FFI, projects/modules, and runtime ownership tests
 - Negative exit classes, source locations, and diagnostic substrings
 - Vec growth, shared handles, managed elements, nested Vec, index overwrite, and clear

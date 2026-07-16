@@ -26,6 +26,7 @@ fn strlen_local(s string) i32 {
 }
 
 fn ensure_cap(b Bytes, needed i32) Bytes {
+    if needed < 0 || needed > 2147483646 { return invalid() }
     if needed <= b.cap {
         return b
     }
@@ -35,7 +36,11 @@ fn ensure_cap(b Bytes, needed i32) Bytes {
         next = 1
     }
     for (; next < needed; ) {
-        next = next * 2
+        if next > 1073741823 {
+            next = needed
+        } else {
+            next = next * 2
+        }
     }
 
     if b.data == none {
@@ -69,7 +74,7 @@ fn ensure_cap(b Bytes, needed i32) Bytes {
 }
 
 pub fn new(cap i32) Bytes {
-    if cap < 0 {
+    if cap < 0 || cap > 2147483646 {
         return invalid()
     }
 
@@ -102,6 +107,15 @@ pub fn wrap(data string, len i32) Bytes {
 
     return Bytes{root: none, data: data, len: len, cap: len, owns: false}
 }
+
+// Takes ownership of a managed runtime buffer.
+pub fn take_managed(data string, len i32, cap i32) Bytes {
+    if data == none || len < 0 || cap < len { return invalid() }
+    return Bytes{root: cast(*byte, data), data: data, len: len, cap: cap, owns: true}
+}
+
+pub fn len(b Bytes) i32 { return b.len }
+pub fn capacity(b Bytes) i32 { return b.cap }
 
 pub fn from_string(text string) Bytes {
     n := strlen_local(text)
@@ -160,6 +174,7 @@ pub fn set(b Bytes, index i32, value i32) {
 }
 
 pub fn append(b Bytes, value i32) Bytes {
+    if b.len > 2147483645 { return invalid() }
     out := ensure_cap(b, b.len + 1)
     out.data[out.len] = value & 255
     out.len += 1
@@ -179,6 +194,17 @@ pub fn reserve(b Bytes, cap i32) Bytes {
     return ensure_cap(b, cap)
 }
 
+pub fn resize(b Bytes, length i32, fill_value i32) Bytes {
+    if length < 0 { return invalid() }
+    out := ensure_cap(b, length)
+    if out.data == none { return invalid() }
+    i := out.len
+    for (; i < length; i++) { out.data[i] = fill_value & 255 }
+    out.len = length
+    out.data[length] = 0
+    return out
+}
+
 pub fn clear(b Bytes) Bytes {
     if b.data != none {
         b.data[0] = 0
@@ -189,6 +215,7 @@ pub fn clear(b Bytes) Bytes {
 
 pub fn append_string(b Bytes, text string) Bytes {
     n := strlen_local(text)
+    if b.len > 2147483646 - n { return invalid() }
     out := ensure_cap(b, b.len + n)
 
     i: i32 := 0
@@ -201,6 +228,7 @@ pub fn append_string(b Bytes, text string) Bytes {
 }
 
 pub fn concat(a Bytes, b Bytes) Bytes {
+    if a.len > 2147483646 - b.len { return invalid() }
     out := new(a.len + b.len)
 
     i: i32 := 0
@@ -213,6 +241,19 @@ pub fn concat(a Bytes, b Bytes) Bytes {
         out = append(out, get(b, j))
     }
 
+    return out
+}
+
+pub fn append_bytes(a Bytes, b Bytes) Bytes {
+    if a.len > 2147483646 - b.len { return invalid() }
+    out := ensure_cap(a, a.len + b.len)
+    if out.data == none { return invalid() }
+    i := 0
+    for (; i < b.len; i++) {
+        out.data[out.len + i] = b.data[i]
+    }
+    out.len += b.len
+    out.data[out.len] = 0
     return out
 }
 
@@ -265,6 +306,58 @@ pub fn starts_with(b Bytes, prefix Bytes) bool {
     }
 
     return true
+}
+
+pub fn ends_with(b Bytes, suffix Bytes) bool {
+    if suffix.len > b.len { return false }
+    i := 0
+    for (; i < suffix.len; i++) {
+        if get(b, b.len - suffix.len + i) != get(suffix, i) { return false }
+    }
+    return true
+}
+
+pub fn index_of(b Bytes, needle Bytes) i32 {
+    if needle.len == 0 { return 0 }
+    if needle.len > b.len { return -1 }
+    i := 0
+    for (; i <= b.len - needle.len; i++) {
+        ok := true
+        j := 0
+        for (; j < needle.len; j++) {
+            if get(b, i + j) != get(needle, j) { ok = false }
+        }
+        if ok { return i }
+    }
+    return -1
+}
+
+pub fn contains(b Bytes, needle Bytes) bool { return index_of(b, needle) >= 0 }
+
+pub fn compare(a Bytes, b Bytes) i32 {
+    limit := a.len
+    if b.len < limit { limit = b.len }
+    i := 0
+    for (; i < limit; i++) {
+        av := get(a, i)
+        bv := get(b, i)
+        if av < bv { return -1 }
+        if av > bv { return 1 }
+    }
+    if a.len < b.len { return -1 }
+    if a.len > b.len { return 1 }
+    return 0
+}
+
+pub fn reverse(b Bytes) {
+    i := 0
+    j := b.len - 1
+    for (; i < j; i++) {
+        value := b.data[i]
+        b.data[i] = b.data[j]
+        b.data[j] = value
+        j -= 1
+    }
 }
 
 pub fn index_of_byte(b Bytes, value i32) i32 {

@@ -7,9 +7,11 @@
 
 #include <dirent.h>
 #include <errno.h>
+#include <limits.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/wait.h>
+#include <time.h>
 #include <unistd.h>
 
 #if defined(__APPLE__)
@@ -738,6 +740,158 @@ char *yc_fs_find_yc_files(const char *root) {
     return result;
 }
 
+char *yc_fs_read_all(const char *path, size_t *size_out) {
+    if (size_out) {
+        *size_out = 0;
+    }
+    if (!path) {
+        return NULL;
+    }
+    FILE *file = fopen(path, "rb");
+    if (!file) {
+        return NULL;
+    }
+    size_t cap = 4096;
+    size_t len = 0;
+    char *buffer = (char *)malloc(cap + 1);
+    if (!buffer) {
+        fclose(file);
+        return NULL;
+    }
+    for (;;) {
+        if (len == cap) {
+            if (cap > SIZE_MAX / 2) {
+                free(buffer);
+                fclose(file);
+                return NULL;
+            }
+            cap *= 2;
+            char *next = (char *)realloc(buffer, cap + 1);
+            if (!next) {
+                free(buffer);
+                fclose(file);
+                return NULL;
+            }
+            buffer = next;
+        }
+        size_t got = fread(buffer + len, 1, cap - len, file);
+        len += got;
+        if (got == 0) {
+            if (ferror(file)) {
+                free(buffer);
+                fclose(file);
+                return NULL;
+            }
+            break;
+        }
+    }
+    fclose(file);
+    char *out = (char *)yc_alloc(len + 1);
+    if (!out) {
+        free(buffer);
+        return NULL;
+    }
+    memcpy(out, buffer, len);
+    out[len] = '\0';
+    free(buffer);
+    if (size_out) {
+        *size_out = len;
+    }
+    return out;
+}
+
+int yc_fs_write_all(const char *path, const void *data, size_t size, int append) {
+    if (!path || (!data && size != 0)) {
+        return 0;
+    }
+    FILE *file = fopen(path, append ? "ab" : "wb");
+    if (!file) {
+        return 0;
+    }
+    const unsigned char *bytes = (const unsigned char *)data;
+    size_t written = 0;
+    while (written < size) {
+        size_t got = fwrite(bytes + written, 1, size - written, file);
+        if (got == 0) {
+            fclose(file);
+            return 0;
+        }
+        written += got;
+    }
+    return fclose(file) == 0;
+}
+
+int yc_fs_remove(const char *path) {
+    return path && remove(path) == 0;
+}
+
+int yc_fs_rename(const char *from, const char *to) {
+    return from && to && rename(from, to) == 0;
+}
+
+int yc_fs_create_dir(const char *path) {
+    if (!path) {
+        return 0;
+    }
+    if (mkdir(path, 0755) == 0) {
+        return 1;
+    }
+    if (errno == EEXIST) {
+        struct stat info;
+        return stat(path, &info) == 0 && S_ISDIR(info.st_mode);
+    }
+    return 0;
+}
+
+int yc_fs_create_dirs(const char *path) {
+    if (!path || !*path) {
+        return 0;
+    }
+    size_t len = strlen(path);
+    char *copy = (char *)malloc(len + 1);
+    if (!copy) {
+        return 0;
+    }
+    memcpy(copy, path, len + 1);
+    for (size_t i = 1; i < len; ++i) {
+        if (copy[i] != '/') {
+            continue;
+        }
+        copy[i] = '\0';
+        if (*copy && !yc_fs_create_dir(copy)) {
+            free(copy);
+            return 0;
+        }
+        copy[i] = '/';
+    }
+    int ok = yc_fs_create_dir(copy);
+    free(copy);
+    return ok;
+}
+
+int yc_fs_stat(const char *path, int *kind_out, size_t *size_out) {
+    if (kind_out) {
+        *kind_out = 0;
+    }
+    if (size_out) {
+        *size_out = 0;
+    }
+    if (!path) {
+        return 0;
+    }
+    struct stat info;
+    if (stat(path, &info) != 0) {
+        return 0;
+    }
+    if (kind_out) {
+        *kind_out = S_ISREG(info.st_mode) ? 1 : (S_ISDIR(info.st_mode) ? 2 : 3);
+    }
+    if (size_out && info.st_size >= 0) {
+        *size_out = (size_t)info.st_size;
+    }
+    return 1;
+}
+
 char *yc_executable_dir(void) {
     char buffer[4096];
     size_t length = 0;
@@ -773,6 +927,69 @@ char *yc_executable_dir(void) {
     memcpy(out, buffer, length);
     out[length] = '\0';
     return out;
+}
+
+char *yc_current_dir(void) {
+    size_t cap = 256;
+    for (;;) {
+        char *buffer = (char *)malloc(cap);
+        if (!buffer) {
+            return NULL;
+        }
+        if (getcwd(buffer, cap)) {
+            char *out = yc_keep_string(buffer);
+            free(buffer);
+            return out;
+        }
+        free(buffer);
+        if (errno != ERANGE || cap > SIZE_MAX / 2) {
+            return NULL;
+        }
+        cap *= 2;
+    }
+}
+
+long long yc_unix_millis(void) {
+    struct timespec value;
+    if (clock_gettime(CLOCK_REALTIME, &value) != 0) {
+        return -1;
+    }
+    return (long long)value.tv_sec * 1000LL + (long long)value.tv_nsec / 1000000LL;
+}
+
+long long yc_monotonic_nanos(void) {
+    struct timespec value;
+    if (clock_gettime(CLOCK_MONOTONIC, &value) != 0) {
+        return -1;
+    }
+    return (long long)value.tv_sec * 1000000000LL + (long long)value.tv_nsec;
+}
+
+int yc_sleep_millis(long long millis) {
+    if (millis < 0) {
+        return 0;
+    }
+    struct timespec request;
+    request.tv_sec = (time_t)(millis / 1000);
+    request.tv_nsec = (long)((millis % 1000) * 1000000);
+    while (nanosleep(&request, &request) != 0) {
+        if (errno != EINTR) {
+            return 0;
+        }
+    }
+    return 1;
+}
+
+char *yc_format_double(double value) {
+    char buffer[128];
+    int written = snprintf(buffer, sizeof(buffer), "%.17g", value);
+    if (written < 0) {
+        return NULL;
+    }
+    size_t length = (size_t)written;
+    char *result = (char *)yc_alloc(length + 1);
+    memcpy(result, buffer, length + 1);
+    return result;
 }
 
 static char **yc_make_argv(const char *program, const char *const *args, size_t count) {

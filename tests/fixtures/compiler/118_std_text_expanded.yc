@@ -1,0 +1,10 @@
+import "std/fmt" as fmt
+import "std/text" as text
+
+fn main() {
+    values := text.split("a,b,c", ",")
+    fmt.println(values.len())
+    fmt.println(text.join_all(values, "|"))
+    fmt.println(text.trim(" YCPL "))
+    fmt.println(text.replace("a-b", "-", "+"))
+}

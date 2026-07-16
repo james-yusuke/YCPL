@@ -1,0 +1,133 @@
+module std.utf8
+
+import "std/mem" as mem
+import "std/text" as text
+
+pub struct RuneResult {
+    ok bool
+    codepoint i32
+    width i32
+    message string
+}
+
+fn fail(message string) RuneResult {
+    return RuneResult{ok: false, codepoint: 0, width: 0, message: message}
+}
+
+fn byte_at(s string, index i32) i32 { return s[index] & 255 }
+fn continuation(value i32) bool { return value >= 128 && value <= 191 }
+
+pub fn decode_at(s string, index i32) RuneResult {
+    if s == none { return fail("UTF-8 source is none") }
+    n := text.len(s)
+    if index < 0 || index >= n { return fail("UTF-8 index out of range") }
+    first := byte_at(s, index)
+    if first < 128 { return RuneResult{ok: true, codepoint: first, width: 1, message: ""} }
+
+    if first >= 194 && first <= 223 {
+        if index + 1 >= n { return fail("truncated UTF-8 sequence") }
+        b1 := byte_at(s, index + 1)
+        if !continuation(b1) { return fail("invalid UTF-8 continuation byte") }
+        return RuneResult{ok: true, codepoint: (first - 192) * 64 + (b1 - 128), width: 2, message: ""}
+    }
+
+    if first >= 224 && first <= 239 {
+        if index + 2 >= n { return fail("truncated UTF-8 sequence") }
+        b1 := byte_at(s, index + 1)
+        b2 := byte_at(s, index + 2)
+        if !continuation(b1) || !continuation(b2) { return fail("invalid UTF-8 continuation byte") }
+        if first == 224 && b1 < 160 { return fail("overlong UTF-8 sequence") }
+        if first == 237 && b1 >= 160 { return fail("UTF-8 surrogate is invalid") }
+        codepoint := (first - 224) * 4096 + (b1 - 128) * 64 + (b2 - 128)
+        return RuneResult{ok: true, codepoint: codepoint, width: 3, message: ""}
+    }
+
+    if first >= 240 && first <= 244 {
+        if index + 3 >= n { return fail("truncated UTF-8 sequence") }
+        b1 := byte_at(s, index + 1)
+        b2 := byte_at(s, index + 2)
+        b3 := byte_at(s, index + 3)
+        if !continuation(b1) || !continuation(b2) || !continuation(b3) { return fail("invalid UTF-8 continuation byte") }
+        if first == 240 && b1 < 144 { return fail("overlong UTF-8 sequence") }
+        if first == 244 && b1 > 143 { return fail("UTF-8 codepoint is out of range") }
+        codepoint := (first - 240) * 262144 + (b1 - 128) * 4096 + (b2 - 128) * 64 + (b3 - 128)
+        return RuneResult{ok: true, codepoint: codepoint, width: 4, message: ""}
+    }
+    return fail("invalid UTF-8 leading byte")
+}
+
+pub fn valid(s string) bool {
+    if s == none { return false }
+    i := 0
+    n := text.len(s)
+    for (; i < n; ) {
+        rune := decode_at(s, i)
+        if !rune.ok { return false }
+        i += rune.width
+    }
+    return true
+}
+
+pub fn codepoint_count(s string) i32 {
+    if s == none { return -1 }
+    count := 0
+    i := 0
+    n := text.len(s)
+    for (; i < n; ) {
+        rune := decode_at(s, i)
+        if !rune.ok { return -1 }
+        count += 1
+        i += rune.width
+    }
+    return count
+}
+
+pub fn encode(codepoint i32) string {
+    if codepoint < 0 || codepoint > 1114111 || (codepoint >= 55296 && codepoint <= 57343) { return none }
+    width := 1
+    if codepoint >= 128 { width = 2 }
+    if codepoint >= 2048 { width = 3 }
+    if codepoint >= 65536 { width = 4 }
+    out: string := mem.calloc(width + 1, 1)
+    if width == 1 {
+        out[0] = codepoint
+    } else if width == 2 {
+        out[0] = 192 + codepoint / 64
+        out[1] = 128 + codepoint % 64
+    } else if width == 3 {
+        out[0] = 224 + codepoint / 4096
+        out[1] = 128 + (codepoint / 64) % 64
+        out[2] = 128 + codepoint % 64
+    } else {
+        out[0] = 240 + codepoint / 262144
+        out[1] = 128 + (codepoint / 4096) % 64
+        out[2] = 128 + (codepoint / 64) % 64
+        out[3] = 128 + codepoint % 64
+    }
+    return out
+}
+
+pub fn utf16_width(codepoint i32) i32 {
+    if codepoint < 0 || codepoint > 1114111 { return 0 }
+    if codepoint >= 65536 { return 2 }
+    return 1
+}
+
+pub fn utf16_column(s string, byte_offset i32) i32 {
+    if s == none || byte_offset <= 0 { return 0 }
+    n := text.len(s)
+    if byte_offset > n { byte_offset = n }
+    column := 0
+    i := 0
+    for (; i < byte_offset; ) {
+        rune := decode_at(s, i)
+        if !rune.ok || i + rune.width > byte_offset { return column }
+        if rune.codepoint == 10 {
+            column = 0
+        } else {
+            column += utf16_width(rune.codepoint)
+        }
+        i += rune.width
+    }
+    return column
+}

@@ -1,0 +1,151 @@
+module std.ycpl.syntax
+
+import "std/json/scanner" as scanner
+import "std/text" as text
+
+pub fn unclosed_block_comment_offset(source string) i32 {
+    depth := 0
+    start := -1
+    i := 0
+    n := text.len(source)
+    for (; i < n - 1; i++) {
+        if source[i] == '/' && source[i + 1] == '*' {
+            if depth == 0 { start = i }
+            depth += 1
+            i += 1
+        } else if source[i] == '*' && source[i + 1] == '/' && depth > 0 {
+            depth -= 1
+            i += 1
+            if depth == 0 { start = -1 }
+        }
+    }
+    if depth > 0 { return start }
+    return -1
+}
+
+pub fn unclosed_string_offset(source string) i32 {
+    i := 0
+    n := text.len(source)
+    for (; i < n; i++) {
+        if source[i] == '"' {
+            end_pos := scanner.string_end(source, i)
+            if end_pos < 0 { return i }
+            i = end_pos - 1
+        }
+    }
+    return -1
+}
+
+pub fn unclosed_brace_offset(source string) i32 {
+    depth := 0
+    first_open := -1
+    i := 0
+    n := text.len(source)
+    for (; i < n; i++) {
+        if source[i] == '"' {
+            end_pos := scanner.string_end(source, i)
+            if end_pos < 0 { return i }
+            i = end_pos - 1
+        } else if source[i] == '{' {
+            if depth == 0 { first_open = i }
+            depth += 1
+        } else if source[i] == '}' {
+            if depth == 0 { return i }
+            depth -= 1
+        }
+    }
+    if depth != 0 { return first_open }
+    return -1
+}
+
+fn ident_start(ch i32) bool {
+    return (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || ch == '_'
+}
+
+fn has_word_before(source string, pos i32, word string) bool {
+    n := text.len(word)
+    if pos < n { return false }
+    i := 0
+    start := pos - n
+    for (; i < n; i++) {
+        if source[start + i] != word[i] { return false }
+    }
+    return true
+}
+
+fn skip_inline_ws(source string, start i32) i32 {
+    i := start
+    n := text.len(source)
+    for (; i < n && (source[i] == ' ' || source[i] == 9); i++) {}
+    return i
+}
+
+pub fn malformed_import_offset(source string) i32 {
+    pos := text.find(source, "import ")
+    if pos < 0 { return -1 }
+    i := scanner.skip_ws(source, pos + 7)
+    n := text.len(source)
+    if i >= n || source[i] != '"' { return pos }
+    end_pos := scanner.string_end(source, i)
+    if end_pos < 0 { return i }
+    after := scanner.skip_ws(source, end_pos)
+    if after < n && source[after] == 'a' {
+        if after + 1 >= n || source[after + 1] != 's' { return after }
+        alias_start := skip_inline_ws(source, after + 2)
+        if alias_start >= n || !ident_start(source[alias_start]) { return after }
+    }
+    return -1
+}
+
+pub fn malformed_function_offset(source string) i32 {
+    pos := text.find(source, "fn ")
+    if pos < 0 { return -1 }
+    if has_word_before(source, pos, "extern ") || has_word_before(source, pos, "intrinsic ") { return -1 }
+    name_start := scanner.skip_ws(source, pos + 3)
+    n := text.len(source)
+    if name_start >= n || !ident_start(source[name_start]) { return pos }
+    open_paren := text.find_from(source, "(", name_start)
+    if open_paren < 0 { return pos }
+    close_paren := text.find_from(source, ")", open_paren)
+    if close_paren < 0 { return open_paren }
+    block := text.find_from(source, "{", close_paren)
+    if block < 0 { return close_paren }
+    return -1
+}
+
+pub fn has_unclosed_brace(source string) bool { return unclosed_brace_offset(source) >= 0 }
+pub fn has_unclosed_string(source string) bool { return unclosed_string_offset(source) >= 0 }
+
+pub fn error_kind(source string) i32 {
+    if unclosed_block_comment_offset(source) >= 0 { return 1 }
+    if unclosed_string_offset(source) >= 0 { return 2 }
+    if unclosed_brace_offset(source) >= 0 { return 3 }
+    if text.starts_with(source, "println(") || text.starts_with(source, "print(") || text.contains(source, "\nprintln(") || text.contains(source, "\nprint(") { return 4 }
+    if malformed_import_offset(source) >= 0 { return 5 }
+    if malformed_function_offset(source) >= 0 { return 6 }
+    return 0
+}
+
+pub fn error_offset(source string, kind i32) i32 {
+    if kind == 1 { return unclosed_block_comment_offset(source) }
+    if kind == 2 { return unclosed_string_offset(source) }
+    if kind == 3 { return unclosed_brace_offset(source) }
+    if text.starts_with(source, "println(") || text.starts_with(source, "print(") { return 0 }
+    direct := text.find(source, "\nprintln(")
+    if direct >= 0 { return direct + 1 }
+    direct = text.find(source, "\nprint(")
+    if direct >= 0 { return direct + 1 }
+    if kind == 5 { return malformed_import_offset(source) }
+    if kind == 6 { return malformed_function_offset(source) }
+    return 0
+}
+
+pub fn error_message(kind i32) string {
+    if kind == 1 { return "unclosed block comment" }
+    if kind == 2 { return "unclosed string literal" }
+    if kind == 3 { return "unbalanced brace" }
+    if kind == 4 { return "imported std symbols must be called through their alias" }
+    if kind == 5 { return "malformed import declaration" }
+    if kind == 6 { return "malformed function declaration" }
+    return ""
+}

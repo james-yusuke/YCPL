@@ -1,7 +1,9 @@
 module std.text
 
+import "c/string" as cstr
 import "std/mem" as mem
 import "std/str" as str
+import "std/text/ascii" as ascii
 
 pub struct StringBuilder {
     root *byte
@@ -11,20 +13,20 @@ pub struct StringBuilder {
     owns bool
 }
 
-extern fn c_strstr(haystack string, needle string) string as "strstr"
-extern fn c_memcpy(dst string, src string, size i64) string as "memcpy"
-
 pub fn len(s string) i32 {
     return str.len(s)
 }
 
 pub fn contains(s string, needle string) bool {
-    return c_strstr(s, needle) != none
+    if s == none || needle == none { return false }
+    return cstr.strstr(s, needle) != none
 }
 
 pub fn starts_with(s string, prefix string) bool {
+    if s == none || prefix == none { return false }
     i: i32 := 0
     n := str.len(prefix)
+    if n > str.len(s) { return false }
 
     for (; i < n; i++) {
         if s[i] != prefix[i] {
@@ -36,6 +38,7 @@ pub fn starts_with(s string, prefix string) bool {
 }
 
 pub fn find(s string, needle string) i32 {
+    if s == none || needle == none { return -1 }
     n := str.len(s)
     m := str.len(needle)
     if m == 0 {
@@ -60,8 +63,11 @@ pub fn find(s string, needle string) i32 {
 }
 
 pub fn find_from(s string, needle string, start i32) i32 {
+    if s == none || needle == none { return -1 }
     n := str.len(s)
     m := str.len(needle)
+    if start < 0 { start = 0 }
+    if start > n { return -1 }
     if m == 0 {
         return start
     }
@@ -92,7 +98,7 @@ pub fn slice(s string, start i32, count i32) string {
     if start > n {
         return none
     }
-    if start + count > n {
+    if count > n - start {
         count = n - start
     }
 
@@ -106,6 +112,7 @@ pub fn slice(s string, start i32, count i32) string {
 }
 
 pub fn count_char(s string, ch i32) i32 {
+    if s == none { return 0 }
     total: i32 := 0
     i: i32 := 0
     n := str.len(s)
@@ -120,6 +127,9 @@ pub fn count_char(s string, ch i32) i32 {
 }
 
 pub fn line_of_offset(s string, offset i32) i32 {
+    if s == none || offset <= 0 { return 0 }
+    n := str.len(s)
+    if offset > n { offset = n }
     line: i32 := 0
     i: i32 := 0
     for (; i < offset; i++) {
@@ -132,6 +142,9 @@ pub fn line_of_offset(s string, offset i32) i32 {
 }
 
 pub fn column_of_offset(s string, offset i32) i32 {
+    if s == none || offset <= 0 { return 0 }
+    n := str.len(s)
+    if offset > n { offset = n }
     col: i32 := 0
     i: i32 := 0
     for (; i < offset; i++) {
@@ -146,7 +159,26 @@ pub fn column_of_offset(s string, offset i32) i32 {
 }
 
 pub fn utf16_col(s string, offset i32) i32 {
-    return column_of_offset(s, offset)
+    if s == none || offset <= 0 { return 0 }
+    n := str.len(s)
+    if offset > n { offset = n }
+    column := 0
+    i := 0
+    for (; i < offset; ) {
+        first := s[i] & 255
+        width := 1
+        units := 1
+        if first >= 194 && first <= 223 { width = 2 }
+        if first >= 224 && first <= 239 { width = 3 }
+        if first >= 240 && first <= 244 {
+            width = 4
+            units = 2
+        }
+        if i + width > offset { return column }
+        if first == 10 { column = 0 } else { column += units }
+        i += width
+    }
+    return column
 }
 
 fn invalid_builder() StringBuilder {
@@ -154,6 +186,7 @@ fn invalid_builder() StringBuilder {
 }
 
 fn ensure_builder_cap(b StringBuilder, needed i32) StringBuilder {
+    if needed < 0 || needed > 2147483646 { return invalid_builder() }
     if needed <= b.cap {
         return b
     }
@@ -163,7 +196,11 @@ fn ensure_builder_cap(b StringBuilder, needed i32) StringBuilder {
         next = 1
     }
     for (; next < needed; ) {
-        next = next * 2
+        if next > 1073741823 {
+            next = needed
+        } else {
+            next = next * 2
+        }
     }
 
     if b.data == none {
@@ -198,7 +235,7 @@ fn ensure_builder_cap(b StringBuilder, needed i32) StringBuilder {
 }
 
 pub fn new_builder(cap i32) StringBuilder {
-    if cap < 0 {
+    if cap < 0 || cap > 2147483646 {
         return invalid_builder()
     }
 
@@ -221,15 +258,18 @@ pub fn builder_cap(b StringBuilder) i32 {
 }
 
 pub fn append(b StringBuilder, src string) StringBuilder {
+    if src == none { return b }
     n := str.len(src)
+    if b.len > 2147483646 - n { return invalid_builder() }
     out := ensure_builder_cap(b, b.len + n)
-    c_memcpy(out.data + out.len, src, n)
+    cstr.memcpy(cast(*byte, out.data + out.len), cast(*byte, src), n)
     out.len += n
     out.data[out.len] = 0
     return out
 }
 
 pub fn append_char(b StringBuilder, ch i32) StringBuilder {
+    if b.len > 2147483645 { return invalid_builder() }
     out := ensure_builder_cap(b, b.len + 1)
     out.data[out.len] = ch
     out.len += 1
@@ -242,8 +282,10 @@ pub fn to_string(b StringBuilder) string {
 }
 
 pub fn concat(left string, right string) string {
+    if left == none || right == none { return none }
     left_len := len(left)
     right_len := len(right)
+    if left_len > 2147483646 - right_len { return none }
     b := new_builder(left_len + right_len)
     b = append(b, left)
     b = append(b, right)
@@ -251,9 +293,11 @@ pub fn concat(left string, right string) string {
 }
 
 pub fn concat3(a string, b string, c string) string {
+    if a == none || b == none || c == none { return none }
     a_len := len(a)
     b_len := len(b)
     c_len := len(c)
+    if a_len > 2147483646 - b_len || a_len + b_len > 2147483646 - c_len { return none }
     builder := new_builder(a_len + b_len + c_len)
     builder = append(builder, a)
     builder = append(builder, b)
@@ -262,9 +306,11 @@ pub fn concat3(a string, b string, c string) string {
 }
 
 pub fn join(left string, sep string, right string) string {
+    if left == none || sep == none || right == none { return none }
     left_len := len(left)
     sep_len := len(sep)
     right_len := len(right)
+    if left_len > 2147483646 - sep_len || left_len + sep_len > 2147483646 - right_len { return none }
     b := new_builder(left_len + sep_len + right_len)
     b = append(b, left)
     b = append(b, sep)
@@ -273,11 +319,13 @@ pub fn join(left string, sep string, right string) string {
 }
 
 pub fn repeat(s string, count i32) string {
+    if s == none { return none }
     if count <= 0 {
         return ""
     }
 
     unit := len(s)
+    if unit > 0 && count > 2147483646 / unit { return none }
     b := new_builder(unit * count)
     i: i32 := 0
     for (; i < count; i++) {
@@ -285,6 +333,16 @@ pub fn repeat(s string, count i32) string {
     }
     return to_string(b)
 }
+
+pub fn ends_with(value string, suffix string) bool { return ascii.ends_with(value, suffix) }
+pub fn trim_start(value string) string { return ascii.trim_start(value) }
+pub fn trim_end(value string) string { return ascii.trim_end(value) }
+pub fn trim(value string) string { return ascii.trim(value) }
+pub fn replace(value string, needle string, replacement string) string { return ascii.replace(value, needle, replacement) }
+pub fn split(value string, separator string) Vec<string> { return ascii.split(value, separator) }
+pub fn join_all(values Vec<string>, separator string) string { return ascii.join_all(values, separator) }
+pub fn to_lower_ascii(value string) string { return ascii.to_lower(value) }
+pub fn to_upper_ascii(value string) string { return ascii.to_upper(value) }
 
 pub fn free_builder(b StringBuilder) {
     if b.owns {
@@ -297,13 +355,15 @@ pub fn free_builder(b StringBuilder) {
 }
 
 pub fn builder_new(cap i32) string {
+    if cap < 0 || cap > 2147483646 { return none }
     data: string := mem.calloc(cap + 1, 1)
     return data
 }
 
 pub fn builder_append(dst string, at i32, src string) i32 {
+    if dst == none || src == none || at < 0 { return -1 }
     n := str.len(src)
-    c_memcpy(dst + at, src, n)
+    cstr.memcpy(cast(*byte, dst + at), cast(*byte, src), n)
     return at + n
 }
 

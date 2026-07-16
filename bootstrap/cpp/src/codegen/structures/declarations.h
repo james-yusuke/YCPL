@@ -768,20 +768,22 @@ llvm::Value *CodeGen::codegen_member(const ast::MemberExpr *me)
     }
     else
     {
-
-        Value *objVal = codegen_expr(cur);
-        if (!objVal)
-            return nullptr;
         TypeShape objectShape = parse_type_shape(infer_expr_type_name(cur));
         auto knownDecl = struct_decls.find(objectShape.base);
         if (knownDecl != struct_decls.end())
             curDecl = knownDecl->second;
-        auto [st, ptr] = resolve_struct_and_ptr(objVal, objectShape.base);
-        if (st && st->hasName())
+
+        if (!curDecl && !chain.empty())
         {
-            auto it = struct_decls.find(st->getName().str());
-            if (it != struct_decls.end())
-                curDecl = it->second;
+            const std::string &firstField = chain.back()->member;
+            for (const auto &entry : struct_decls)
+            {
+                if (get_field_index(entry.second, firstField) >= 0)
+                {
+                    curDecl = entry.second;
+                    break;
+                }
+            }
         }
     }
 

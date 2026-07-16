@@ -1,21 +1,22 @@
 module std.str
 
-extern fn c_strlen(s string) i64 as "strlen"
-extern fn c_strcmp(a string, b string) i32 as "strcmp"
-extern fn c_strcpy(dst string, src string) string as "strcpy"
+import "c/string" as cstr
 
 pub fn len(s string) i64 {
-    return c_strlen(s)
+    if s == none { return 0 }
+    return cstr.strlen(s)
 }
 
 pub fn cmp(a string, b string) i32 {
-    return c_strcmp(a, b)
+    if a == none { if b == none { return 0 } return -1 }
+    if b == none { return 1 }
+    return cstr.strcmp(a, b)
 }
 
 pub fn copy(dst string, src string) string {
-    return c_strcpy(dst, src)
+    return cstr.strcpy(dst, src)
 }
 
 pub fn eq(a string, b string) bool {
-    return c_strcmp(a, b) == 0
+    return cmp(a, b) == 0
 }
