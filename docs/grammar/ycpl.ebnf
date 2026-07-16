@@ -1,7 +1,11 @@
-(* YCPL EBNF. This document tracks the editor-facing language grammar. *)
+(* YCPL EBNF. This tracks the parser-facing public syntax. *)
 
-source_file        = { newline } [ module_decl { newline } ] { import_decl { newline } } { top_level_decl { newline } } ;
+source_file        = separators
+                     [ module_decl separators ]
+                     { import_decl separators }
+                     { top_level_decl separators } ;
 
+separators         = { newline } ;
 module_decl        = ( "module" | "package" ) qualified_name ;
 import_decl        = "import" string_literal [ "as" identifier ] ;
 
@@ -14,31 +18,51 @@ top_level_decl     = function_decl
                    | const_decl ;
 
 visibility         = "pub" ;
-function_decl      = [ visibility ] "fn" identifier "(" [ parameter_list ] ")" [ type ] block ;
+function_decl      = [ visibility ] "fn" identifier
+                     "(" [ parameter_list ] ")" [ type ] block ;
 extern_function_decl
-                   = [ visibility ] "extern" "fn" identifier "(" [ parameter_list ] ")" [ type ] [ "as" string_literal ] ;
+                   = [ visibility ] "extern" "fn" identifier
+                     "(" [ parameter_list ] ")" [ type ]
+                     [ "as" string_literal ] ;
 intrinsic_function_decl
-                   = [ visibility ] "intrinsic" "fn" identifier "(" [ parameter_list ] ")" [ type ] ;
+                   = [ visibility ] "intrinsic" "fn" identifier
+                     "(" [ parameter_list ] ")" [ type ] ;
 
-parameter_list     = parameter { "," parameter } ;
+parameter_list     = parameter { "," parameter } [ "," ] ;
 parameter          = identifier type ;
 
-struct_decl        = [ visibility ] "struct" identifier "{" { field_decl newline } "}" ;
+struct_decl        = [ visibility ] "struct" identifier "{"
+                     separators
+                     { field_decl separators }
+                     "}" ;
 field_decl         = [ visibility ] identifier type ;
 
-enum_decl          = [ visibility ] "enum" identifier "{" { enum_variant [ "," ] newline } "}" ;
+enum_decl          = [ visibility ] "enum" identifier "{"
+                     separators
+                     { enum_variant [ "," ] separators }
+                     "}" ;
 enum_variant       = identifier [ "=" integer_literal ] ;
 
 type_alias_decl    = [ visibility ] "type" identifier [ "=" ] type ;
-type               = pointer_type | slice_type | map_type | named_type ;
-pointer_type       = ( "*" | "&" ) type ;
-slice_type         = "[]" type ;
-map_type           = "Map" "<" type "," type ">" ;
-named_type         = identifier | "byte" ;
-
 const_decl         = "const" identifier [ ":" type ] ":=" expression ;
 
-block              = "{" { statement newline } "}" ;
+type               = [ "owned" ] type_primary ;
+type_primary       = primitive_type
+                   | pointer_type
+                   | slice_type
+                   | vec_type
+                   | map_type
+                   | qualified_name ;
+pointer_type       = ( "*" | "&" ) type ;
+slice_type         = "[]" type ;
+vec_type           = "Vec" "<" type ">" ;
+map_type           = "Map" "<" type "," type ">" ;
+
+primitive_type     = "i32" | "i64" | "bool" | "char" | "byte" | "string"
+                   | "float" | "double" | "void" | "size_t"
+                   | "Type" | "T" | "any" ;
+
+block              = "{" separators { statement separators } "}" ;
 statement          = var_decl
                    | const_decl
                    | assignment
@@ -60,10 +84,16 @@ assignment_operator
 defer_statement    = "defer" ( expression | block ) ;
 scope_statement    = "scope" [ identifier ] block ;
 if_statement       = "if" expression block [ "else" ( block | if_statement ) ] ;
-for_statement      = "for" ( for_c_style | for_in | expression? ) block ;
-for_c_style        = statement? ";" expression? ";" statement? ;
+for_statement      = "for" ( for_c_style | for_in | [ expression ] ) block ;
+for_c_style        = [ simple_statement ] ";" [ expression ] ";" [ simple_statement ] ;
 for_in             = identifier "in" expression ;
-switch_statement   = "switch" expression "{" { switch_case newline } [ switch_default newline ] "}" ;
+simple_statement   = var_decl | assignment | expression ;
+
+switch_statement   = "switch" expression "{"
+                     separators
+                     { switch_case separators }
+                     [ switch_default separators ]
+                     "}" ;
 switch_case        = "case" expression block ;
 switch_default     = "default" block ;
 return_statement   = "return" [ expression ] ;
@@ -74,31 +104,36 @@ expression         = logical_or ;
 logical_or         = logical_and { "||" logical_and } ;
 logical_and        = equality { "&&" equality } ;
 equality           = comparison { ( "==" | "!=" ) comparison } ;
-comparison         = additive { ( "<" | "<=" | ">" | ">=" ) additive } ;
+comparison         = shift { ( "<" | "<=" | ">" | ">=" ) shift } ;
+shift              = additive { ( "<<" | ">>" ) additive } ;
 additive           = multiplicative { ( "+" | "-" ) multiplicative } ;
 multiplicative     = unary { ( "*" | "/" | "%" ) unary } ;
-unary              = [ "!" | "-" | "+" | "*" | "&" ] postfix ;
-postfix            = primary { call_suffix | index_suffix | member_suffix } ;
+unary              = [ "!" | "-" | "+" | "++" | "--" | "*" | "&" ] postfix ;
+postfix            = primary
+                     { call_suffix | index_suffix | member_suffix | postfix_update } ;
 call_suffix        = "(" [ argument_list ] ")" ;
 index_suffix       = "[" expression "]" ;
 member_suffix      = "." identifier ;
-argument_list      = expression { "," expression } ;
+postfix_update     = "++" | "--" ;
+argument_list      = expression { "," expression } [ "," ] ;
 
 primary            = identifier
                    | literal
                    | array_literal
                    | struct_literal
+                   | vec_literal
+                   | cast_expression
                    | "(" expression ")" ;
 
 array_literal      = "[" [ argument_list ] "]" ;
-struct_literal     = identifier "{" [ field_initializer { "," field_initializer } [ "," ] ] "}" ;
+struct_literal     = qualified_name "{"
+                     [ field_initializer { "," field_initializer } [ "," ] ]
+                     "}" ;
+vec_literal        = "Vec" "<" type ">" "{"
+                     [ "capacity" ":" expression [ "," ] ]
+                     "}" ;
 field_initializer  = identifier ":" expression ;
-
-type               = [ "owned" ] ( primitive_type
-                   | qualified_name
-                   | "*" type
-                   | "[]" type ) ;
-primitive_type     = "i32" | "i64" | "bool" | "char" | "byte" | "string" | "float" | "double" | "void" | "size_t" | "Type" | "T" | "any" ;
+cast_expression    = "cast" "(" type "," expression ")" ;
 
 literal            = integer_literal
                    | float_literal

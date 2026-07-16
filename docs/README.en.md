@@ -11,6 +11,8 @@ docs/
 ├─ README.en.md      English index
 ├─ README.ja.md      Japanese index
 ├─ language.*.md     syntax, types, statements, expressions
+├─ memory.*.md       Vec, slices, and managed ownership
+├─ self-hosting.*.md compiler stages and fixed-point verification
 ├─ projects.*.md     YCPL.json, imports, visibility
 ├─ stdlib.*.md       std/* source modules
 └─ status.*.md       stable, experimental, reserved features
@@ -19,6 +21,8 @@ docs/
 | Start Here | Covers |
 |---|---|
 | [Language Syntax](language.en.md) | Syntax, types, statements, expressions |
+| [Vec and Memory Ownership](memory.en.md) | `Vec<T>`, `[]T`, and managed ownership |
+| [Self-hosting Verification](self-hosting.en.md) | Bootstrap-to-stage3 generation and checks |
 | [Projects and Modules](projects.en.md) | `YCPL.json`, imports, module visibility |
 | [Standard Library](stdlib.en.md) | `std/*` source modules and intrinsic bridges |
 | [Implementation Status](status.en.md) | Stable, experimental, and reserved features |

@@ -11,6 +11,8 @@ docs/
 ├─ README.en.md      英語 index
 ├─ README.ja.md      日本語 index
 ├─ language.*.md     構文、型、文、式
+├─ memory.*.md       Vec、slice、managed ownership
+├─ self-hosting.*.md compiler stageと固定点検証
 ├─ projects.*.md     YCPL.json、import、公開範囲
 ├─ stdlib.*.md       std/* ソースモジュール
 └─ status.*.md       安定、実験中、予約済み機能
@@ -19,6 +21,8 @@ docs/
 | 入口 | 内容 |
 |---|---|
 | [言語構文](language.ja.md) | 構文、型、文、式 |
+| [Vecとメモリ所有](memory.ja.md) | `Vec<T>`、`[]T`、managed ownership |
+| [セルフホストの検証](self-hosting.ja.md) | bootstrapからstage3までの生成と確認 |
 | [プロジェクトとモジュール](projects.ja.md) | `YCPL.json`、import、公開範囲 |
 | [標準ライブラリ](stdlib.ja.md) | `std/*` ソースモジュールと intrinsic bridge |
 | [実装状況](status.ja.md) | 安定、実験中、予約済み機能 |

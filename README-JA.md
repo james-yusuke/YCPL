@@ -120,24 +120,30 @@ instructionは比較対象から除外しません。
 ## 言語機能
 
 conformance対象にはprimitive type、pointer、slice、array、struct、enum、alias、
-`Map`、`none`、`owned`、function、extern/intrinsic/variadic call、module/import
+`Vec<T>`、`Map`、`none`、`owned`、function、extern/intrinsic/variadic call、module/import
 alias/public visibility、`if`、`switch`、`for`、`for-in`、`break`、`continue`、
 `defer`、`scope`、UFCS callが含まれます。
 
+`Vec<T>`はコンパイラ組み込みのmanaged動的配列です。`Vec<T>{}`または
+`Vec<T>{capacity: n}`で構築し、`push`、`len`、`capacity`、`reserve`、`clear`、
+index read/write、`as_slice`を使用できます。Vecのコピーは同じhandleを共有し、
+`[]T`は拡張できないviewとして区別されます。raw pointer取得や利用者による
+`free`は公開APIにありません。
+
 `none`はoptional typeではなくnull literalです。managed allocationは決定的な
 function/scope frameで管理されます。returnされたrootはcallerへ移動し、array、
-map、text、bytes、jsonのownership graphはchildとともに解放されます。
+Vec、map、text、bytes、jsonのownership graphはchildとともに解放されます。
 
 ## C APIとLLVM API
 
-外部C APIのYCPL宣言はすべて`stl/c/*`にあります。コンパイラはLLVM 22との境界に
+外部C APIの正規の配置先は`stl/c/*`です。コンパイラはLLVM 22との境界に
 `c/llvm`、C/runtimeとの境界に`c/stdlib`と`c/yc_runtime`を使用します。
-`stl/std/*`にはraw C symbolではなく、言語レベルのAPIを配置します。
+既存の互換wrapperを除き、`stl/std/*`には言語レベルのAPIを配置します。
 
 ## テスト
 
 ```sh
-# 任意のcompiler executableへ同じ70-case oracleを適用
+# 任意のcompiler executableへ同じ77-case oracleを適用
 tests/run_conformance.sh ./bazel-bin/ycc
 
 # fixed point、examples、runtime、LSP、全Bazel target
@@ -153,6 +159,8 @@ fixed-point testはstage2/stage3実行環境からseed/fallback変数とbootstra
 ## ドキュメント
 
 - [言語リファレンス](docs/language.ja.md)
+- [Vecとメモリ所有](docs/memory.ja.md)
+- [セルフホストの検証](docs/self-hosting.ja.md)
 - [文法](docs/grammar/ycpl.ebnf)
 - [標準ライブラリ](docs/stdlib.ja.md)
 - [現在の実装状況](docs/status.ja.md)

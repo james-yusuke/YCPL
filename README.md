@@ -121,24 +121,32 @@ symbols, and instructions are not ignored.
 ## Language Snapshot
 
 The conformance surface includes primitive types, pointers, slices, arrays,
-structs, enums, aliases, `Map`, `none`, `owned`, functions, extern/intrinsic and
-variadic calls, modules/import aliases/public visibility, `if`, `switch`,
-`for`, `for-in`, `break`, `continue`, `defer`, `scope`, and UFCS calls.
+structs, enums, aliases, `Vec<T>`, `Map`, `none`, `owned`, functions,
+extern/intrinsic and variadic calls, modules/import aliases/public visibility,
+`if`, `switch`, `for`, `for-in`, `break`, `continue`, `defer`, `scope`, and
+UFCS calls.
+
+`Vec<T>` is a compiler-built-in managed dynamic array. Construct it with
+`Vec<T>{}` or `Vec<T>{capacity: n}` and use `push`, `len`, `capacity`,
+`reserve`, `clear`, indexed reads/writes, and `as_slice`. Copies share the same
+handle, while `[]T` is a non-growing view. The public API exposes neither a raw
+data pointer nor manual `free`.
 
 `none` is a null literal rather than an optional type. Managed allocations use
 deterministic function/scope frames; returned roots move to the caller and
-array/map/text/bytes/json ownership graphs release their children together.
+array/Vec/map/text/bytes/json ownership graphs release their children together.
 
 ## C and LLVM APIs
 
-All YCPL declarations for external C APIs live under `stl/c/*`. The compiler
-uses `c/llvm` for LLVM 22 and `c/stdlib`/`c/yc_runtime` for its narrow C/runtime
-boundary. `stl/std/*` contains language-level APIs rather than raw C symbols.
+The canonical location for external C API declarations is `stl/c/*`. The
+compiler uses `c/llvm` for LLVM 22 and `c/stdlib`/`c/yc_runtime` for its narrow
+C/runtime boundary. Except for existing compatibility wrappers, `stl/std/*`
+contains language-level APIs.
 
 ## Tests
 
 ```sh
-# Apply the same 70-case oracle to any compiler executable.
+# Apply the same 77-case oracle to any compiler executable.
 tests/run_conformance.sh ./bazel-bin/ycc
 
 # Fixed point, examples, runtime, LSP, and all Bazel targets.
@@ -154,6 +162,8 @@ from the stage2/stage3 execution environment.
 ## Documentation
 
 - [Language reference](docs/language.en.md)
+- [Vec and memory ownership](docs/memory.en.md)
+- [Self-hosting verification](docs/self-hosting.en.md)
 - [Grammar](docs/grammar/ycpl.ebnf)
 - [Standard library](docs/stdlib.en.md)
 - [Current Japanese status](docs/status.ja.md)

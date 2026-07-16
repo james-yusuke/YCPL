@@ -96,8 +96,11 @@ import path
 ├─ project source directories
 │  └─ path.yc or path/index.yc
 └─ bundled standard library
-   └─ stl/std/path.yc or stl/std/path/index.yc
+   ├─ stl/std/path.yc or stl/std/path/index.yc
+   └─ stl/c/path.yc or stl/c/path/index.yc
 ```
+
+`std/*`は言語レベルの標準API、`c/*`はC、POSIX、LLVMのraw ABI境界です。
 
 ## 公開範囲
 
