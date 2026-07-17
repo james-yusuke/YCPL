@@ -1,0 +1,4 @@
+interface:
+  display_name: "YCPL Verification"
+  short_description: "Verify YCPL self-hosting, CI, and conformance"
+  default_prompt: "Use $ycpl-verification to build and verify YCPL through its self-host and CI gates."
