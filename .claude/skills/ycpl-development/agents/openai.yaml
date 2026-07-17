@@ -1,0 +1,4 @@
+interface:
+  display_name: "YCPL Development"
+  short_description: "Implement YCPL compiler, stdlib, and tooling changes"
+  default_prompt: "Use $ycpl-development to implement a YCPL repository change with the correct architecture and guardrails."
