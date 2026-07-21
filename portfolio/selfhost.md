@@ -1,0 +1,3 @@
+# Self-hostで大変だったこと
+
+C++ bootstrapからstage1を作り、その先をYCPLだけでstage2・stage3まで生成する過程が最も大変でした。bootstrapへのfallbackをなくし、stage2とstage3のLLVM IRが一致するまで生成順の決定性を整えました。
