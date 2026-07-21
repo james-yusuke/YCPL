@@ -1,6 +1,14 @@
-# YCPL
+<p align="center">
+  <img src="images/ycpl.png" alt="YCPL logo" width="180">
+</p>
 
-[日本語](README-JA.md) | [English docs](docs/README.en.md) | [日本語 docs](docs/README.ja.md)
+<h1 align="center">YCPL</h1>
+
+<p align="center">
+  <a href="README-JA.md">日本語</a> |
+  <a href="docs/README.en.md">English docs</a> |
+  <a href="docs/README.ja.md">日本語 docs</a>
+</p>
 
 YCPL is an experimental systems-programming language with a self-hosted
 compiler, LLVM 22 backend, statically linked managed runtime, bundled standard

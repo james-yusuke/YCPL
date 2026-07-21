@@ -1,6 +1,14 @@
-# YCPL
+<p align="center">
+  <img src="images/ycpl.png" alt="YCPL logo" width="180">
+</p>
 
-[English](README.md) | [English docs](docs/README.en.md) | [日本語 docs](docs/README.ja.md)
+<h1 align="center">YCPL</h1>
+
+<p align="center">
+  <a href="README.md">English</a> |
+  <a href="docs/README.en.md">English docs</a> |
+  <a href="docs/README.ja.md">日本語 docs</a>
+</p>
 
 YCPLは、セルフホストコンパイラ、LLVM 22 backend、static linkされる
 managed runtime、標準ライブラリ、examples、YCPL製LSPを含む実験的な
