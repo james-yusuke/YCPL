@@ -1179,7 +1179,8 @@ fn lower_vec_call(backend *Backend, program ProgramAst, node *ExprNode, callee *
     if code == ast.vec_method_push() && node.arg_count == 1 {
         lower_expr(backend, program, program.arena.children[node.first_arg])
         item := backend.value
-        element_type := llvm.type_of(item)
+        owner: *ExprNode := &program.arena.exprs[callee.left]
+        element_type := slice_element_type(backend, owner.type_file, owner.type_id)
         old_data_address := header_field_address(backend, header, 0, "vec.data.addr")
         old_data := llvm.build_load(backend.builder, backend.ptr_type, old_data_address, "vec.data")
         length := llvm.build_load(backend.builder, llvm.i64_type(backend.ctx), len_address, "vec.len")

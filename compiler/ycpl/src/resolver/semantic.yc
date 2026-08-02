@@ -370,20 +370,38 @@ fn numeric_kind(kind i32) bool {
     return kind == ast.type_i32() || kind == ast.type_i64() || kind == ast.type_byte() || kind == ast.type_char() || kind == ast.type_size()
 }
 
+fn type_identical(state ResolveState, left TypeRef, right TypeRef) bool {
+    left_kind := ref_kind(state, left)
+    right_kind := ref_kind(state, right)
+    if left_kind != right_kind { return false }
+    if left.type_id <= -100 || right.type_id <= -100 { return left_kind == right_kind }
+    if left.file_id < 0 || right.file_id < 0 { return false }
+    left_program: ProgramAst := project.program_at(state.semantic.syntax, left.file_id)
+    right_program: ProgramAst := project.program_at(state.semantic.syntax, right.file_id)
+    if left.type_id < 0 || left.type_id >= left_program.arena.type_len || right.type_id < 0 || right.type_id >= right_program.arena.type_len { return false }
+    if left_kind == ast.type_vec() || left_kind == ast.type_slice() || left_kind == ast.type_pointer() {
+        left_base := TypeRef{file_id: left.file_id, type_id: left_program.arena.type_bases[left.type_id]}
+        right_base := TypeRef{file_id: right.file_id, type_id: right_program.arena.type_bases[right.type_id]}
+        return type_identical(state, left_base, right_base)
+    }
+    if left_kind == ast.type_named() {
+        return left_program.arena.type_resolved_files[left.type_id] == right_program.arena.type_resolved_files[right.type_id] && left_program.arena.type_resolved_ids[left.type_id] == right_program.arena.type_resolved_ids[right.type_id]
+    }
+    return left_kind == right_kind
+}
+
 fn type_compatible(state ResolveState, expected TypeRef, actual TypeRef) bool {
     expected_kind := ref_kind(state, expected)
     actual_kind := ref_kind(state, actual)
     if expected_kind == actual_kind {
         if expected_kind == ast.type_vec() || expected_kind == ast.type_slice() || expected_kind == ast.type_pointer() {
-            if expected.file_id < 0 || actual.file_id < 0 { return true }
+            if expected.file_id < 0 || actual.file_id < 0 { return false }
             expected_program: ProgramAst := project.program_at(state.semantic.syntax, expected.file_id)
             actual_program: ProgramAst := project.program_at(state.semantic.syntax, actual.file_id)
-            if expected.type_id < 0 || expected.type_id >= expected_program.arena.type_len || actual.type_id < 0 || actual.type_id >= actual_program.arena.type_len { return true }
+            if expected.type_id < 0 || expected.type_id >= expected_program.arena.type_len || actual.type_id < 0 || actual.type_id >= actual_program.arena.type_len { return false }
             expected_base := TypeRef{file_id: expected.file_id, type_id: expected_program.arena.type_bases[expected.type_id]}
             actual_base := TypeRef{file_id: actual.file_id, type_id: actual_program.arena.type_bases[actual.type_id]}
-            expected_base_kind := ref_kind(state, expected_base)
-            actual_base_kind := ref_kind(state, actual_base)
-            return expected_base_kind == actual_base_kind || (numeric_kind(expected_base_kind) && numeric_kind(actual_base_kind))
+            return type_identical(state, expected_base, actual_base)
         }
         return true
     }
@@ -786,9 +804,7 @@ fn resolve_expr(state ResolveState, expr_id i32) ResolveState {
             if vec_method && i == 0 {
                 if callee.int_value == ast.vec_method_push() {
                     element_type := TypeRef{file_id: owner_file, type_id: element_id}
-                    arg_node: *ExprNode := &state.program.arena.exprs[arg_id]
-                    literal_arg := arg_node.kind == ast.expr_int() || arg_node.kind == ast.expr_float() || arg_node.kind == ast.expr_char() || arg_node.kind == ast.expr_string() || arg_node.kind == ast.expr_bool() || arg_node.kind == ast.expr_none() || arg_node.kind == ast.expr_vec()
-                    if literal_arg && !type_compatible(state, element_type, state.result_type) {
+                    if !type_compatible(state, element_type, state.result_type) {
                         return state_fail(state, node.span, "Vec.push value type does not match element type")
                     }
                 } else if callee.int_value == ast.vec_method_reserve() && !numeric_kind(ref_kind(state, state.result_type)) {
@@ -925,8 +941,7 @@ fn resolve_stmt(state ResolveState, stmt_id i32) ResolveState {
         state = resolve_expr(state, node.b)
         target_kind := ref_kind(state, target_type)
         value_kind := ref_kind(state, state.result_type)
-        value_expr: *ExprNode := &state.program.arena.exprs[node.b]
-        if state.ok && value_expr.kind == ast.expr_vec() && (target_kind == ast.type_vec() || value_kind == ast.type_vec()) && !type_compatible(state, target_type, state.result_type) {
+        if state.ok && (target_kind == ast.type_vec() || value_kind == ast.type_vec()) && !type_compatible(state, target_type, state.result_type) {
             return state_fail(state, node.span, "assignment type mismatch")
         }
     } else if node.kind == ast.stmt_expr() { state = resolve_expr(state, node.a)
@@ -938,13 +953,11 @@ fn resolve_stmt(state ResolveState, stmt_id i32) ResolveState {
         return_kind := ref_kind(state, state.function_return)
         value_kind := ref_kind(state, state.result_type)
         value_is_struct := false
-        value_is_vec := false
         if node.a != ast.invalid_id() {
             value_expr: *ExprNode := &state.program.arena.exprs[node.a]
             value_is_struct = value_expr.kind == ast.expr_struct()
-            value_is_vec = value_expr.kind == ast.expr_vec()
         }
-        if state.ok && node.a != ast.invalid_id() && !value_is_struct && value_is_vec && (return_kind == ast.type_vec() || value_kind == ast.type_vec()) && !type_compatible(state, state.function_return, state.result_type) {
+        if state.ok && node.a != ast.invalid_id() && !value_is_struct && (return_kind == ast.type_vec() || value_kind == ast.type_vec()) && !type_compatible(state, state.function_return, state.result_type) {
             return state_fail(state, node.span, "return type mismatch")
         }
     } else if node.kind == ast.stmt_if() {

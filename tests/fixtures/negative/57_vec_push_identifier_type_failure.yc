@@ -1,0 +1,5 @@
+fn main() {
+    values := Vec<i32>{}
+    invalid := "invalid"
+    values.push(invalid)
+}

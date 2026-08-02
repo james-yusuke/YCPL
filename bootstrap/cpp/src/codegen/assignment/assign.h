@@ -18,6 +18,15 @@ Value *CodeGen::codegen_assign(const ast::AssignStmt *as)
     if (!e)
         return nullptr;
 
+    const TypeShape targetShape = parse_type_shape(infer_expr_type_name(as->target.get()));
+    const TypeShape valueShape = parse_type_shape(infer_expr_type_name(as->value.get()));
+    if ((targetShape.is_vec_type() || valueShape.is_vec_type()) &&
+        targetShape.full_name() != valueShape.full_name())
+    {
+        error("assignment type mismatch");
+        return nullptr;
+    }
+
     std::function<std::string(const ast::Expr *)> base_const_ident;
     base_const_ident = [&](const ast::Expr *expr) -> std::string
     {

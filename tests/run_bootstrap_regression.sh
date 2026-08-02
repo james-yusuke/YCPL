@@ -646,6 +646,8 @@ compile_expect_failure "$ROOT_DIR/tests/fixtures/negative/53_vec_capacity_type_f
 compile_expect_failure "$ROOT_DIR/tests/fixtures/negative/54_vec_push_type_failure.yc" "Vec.push value type does not match element type"
 compile_expect_failure "$ROOT_DIR/tests/fixtures/negative/55_vec_raw_pointer_failure.yc" "Vec value cannot initialize a different declared type"
 compile_run_expect_failure "$ROOT_DIR/tests/fixtures/negative/56_vec_index_oob_abort.yc"
+compile_expect_failure "$ROOT_DIR/tests/fixtures/negative/57_vec_push_identifier_type_failure.yc" "Vec.push value type does not match element type"
+compile_expect_failure "$ROOT_DIR/tests/fixtures/negative/58_vec_assignment_type_failure.yc" "assignment type mismatch"
 
 echo ""
 echo "========================================"

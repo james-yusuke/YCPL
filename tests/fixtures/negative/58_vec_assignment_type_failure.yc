@@ -1,0 +1,13 @@
+struct Small {
+    value i32
+}
+
+struct Large {
+    value i64
+}
+
+fn main() {
+    small := Vec<Small>{}
+    large := Vec<Large>{}
+    large = small
+}
