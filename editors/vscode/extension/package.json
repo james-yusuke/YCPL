@@ -31,6 +31,12 @@
   "extensionKind": [
     "workspace"
   ],
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": "limited",
+      "description": "Native language servers are disabled; the bundled TypeScript server is used instead."
+    }
+  },
   "activationEvents": [
     "onLanguage:ycpl",
     "onCommand:YCPL.restartLanguageServer",
