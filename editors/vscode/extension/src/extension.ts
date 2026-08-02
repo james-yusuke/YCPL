@@ -36,6 +36,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   registerCommands(context);
   context.subscriptions.push(
     vscode.workspace.onDidSaveTextDocument((document) => scheduleCheckOnSave(document)),
+    vscode.workspace.onDidGrantWorkspaceTrust(async () => restartLanguageServer(context)),
     vscode.workspace.onDidChangeConfiguration(async (event) => {
       if (event.affectsConfiguration("YCPL.server") || event.affectsConfiguration("YCPL.stlRoot")) {
         await restartLanguageServer(context);
@@ -99,8 +100,10 @@ async function startLanguageServer(context: vscode.ExtensionContext): Promise<vo
   const root = roots[0];
   const mode = config.get<ServerMode>("server.mode", "auto");
   const configuredPath = resolveConfiguredPath(config.get<string>("server.path", "").trim(), root);
-  const native = mode === "typescript" ? undefined : findNativeServer(configuredPath, roots);
-  if (mode === "native" && !native) {
+  const native = mode === "typescript" || !vscode.workspace.isTrusted
+    ? undefined
+    : findNativeServer(configuredPath, roots);
+  if (mode === "native" && vscode.workspace.isTrusted && !native) {
     const message = "YCPL native Language Server was requested but no executable was found.";
     output.error(message);
     status.text = "$(error) YCPL LSP missing";
@@ -112,6 +115,9 @@ async function startLanguageServer(context: vscode.ExtensionContext): Promise<vo
 
   const stlRoot = detectedStlRoot(config, roots);
   const useNative = native !== undefined;
+  if (!vscode.workspace.isTrusted && mode !== "typescript") {
+    output.warn("Workspace is not trusted; using the bundled TypeScript Language Server.");
+  }
   const serverOptions: ServerOptions = useNative
     ? {
         command: native.path,
@@ -238,6 +244,10 @@ async function runCompilerCommand(
   command: "check" | "build" | "build-ir" | "run",
   documentUri?: vscode.Uri
 ): Promise<void> {
+  if (!vscode.workspace.isTrusted) {
+    void vscode.window.showWarningMessage("Trust this workspace before running the YCPL compiler.");
+    return;
+  }
   const roots = workspaceRoots();
   const uri = documentUri ?? vscode.window.activeTextEditor?.document.uri;
   const root = workspaceRootFor(uri) ?? roots[0];
