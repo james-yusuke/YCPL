@@ -26,15 +26,3 @@ My goal is not to turn this into a production-ready product or a widely adopted 
 Instead, I hope people will explore the source code, modify it freely, learn from it, and perhaps gain a better understanding of LLVM, compilers, and language design.
 
 More than anything, I hope this project reminds people that building programming languages can simply be fun.
-
----
-
-## A Personal Note
-
-To be honest, I don't know whether I'll still be around by the time this language is finished.
-
-That's one of the reasons this repository exists in the open.
-
-I'd be happy if you viewed it as the record of one developer building something they genuinely enjoyed creating.
-
-If this project inspires someone to learn, experiment, or even build a language of their own, then it has already achieved something meaningful.
