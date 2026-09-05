@@ -14,7 +14,7 @@
     "test": "node --test dist/test/*.test.js"
   },
   "dependencies": {
-    "vscode-languageserver": "^10.1.0",
+    "vscode-languageserver": "^10.1.1",
     "vscode-languageserver-textdocument": "^1.0.13",
     "vscode-uri": "^3.2.0"
   },
