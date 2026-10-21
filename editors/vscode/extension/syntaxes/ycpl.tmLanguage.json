@@ -136,7 +136,7 @@
       "patterns": [
         {
           "name": "keyword.control.ycpl",
-          "match": "\\b(module|package|import|if|else|for|in|switch|case|default|return|break|continue|defer|scope|as)\\b"
+          "match": "\\b(module|package|import|if|else|for|in|switch|case|default|return|break|continue|defer|as)\\b"
         },
         {
           "name": "keyword.declaration.ycpl",

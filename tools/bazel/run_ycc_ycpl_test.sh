@@ -92,7 +92,7 @@ fn main() {
     defer {
         value = value
     }
-    scope cleanup {
+    {
         value = value
     }
 }

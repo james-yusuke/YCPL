@@ -32,7 +32,7 @@ Identifiers start with a letter or `_`, followed by letters, digits, or `_`.
 
 ```text
 module package import pub extern intrinsic fn struct enum type const owned
-if else for in switch case default return break continue defer scope as
+if else for in switch case default return break continue defer as
 true false none byte cast
 ```
 
@@ -228,17 +228,20 @@ switch color {
 Selectors and case expressions are resolved by the resolver/type checker and
 lowered by the LLVM backend.
 
-## defer, scope, and UFCS
+## defer, Blocks, and UFCS
 
 The standard `ycc` compiler supports `defer`. `defer expr` or `defer { ... }`
-runs in LIFO order when the current scope or function exits.
+runs in LIFO order when the current block or function exits.
 
 ```YCPL
-defer fmt.println("leaving scope")
+defer fmt.println("leaving block")
 ```
 
-`scope name { ... }` is a named lexical scope for making temporary work regions
-explicit.
+Use an ordinary `{ ... }` block for temporary work regions. Standalone blocks
+release their managed temporaries and run deferred actions on exit; values assigned
+to an outer binding or returned from the block escape to the appropriate frame.
+The former `scope name { ... }` syntax has been removed; replace it with `{ ... }`.
+`scope` is now an ordinary identifier.
 
 When exactly one imported module exposes a matching public function,
 `value.method(x)` is treated as `module.method(value, x)`. Managed values do

@@ -135,13 +135,6 @@ export class YcplProviders {
         insertText: "Vec<${1:i32}>{capacity: ${2:16}}",
         detail: "YCPL managed dynamic array"
       },
-      {
-        label: "scope",
-        kind: CompletionItemKind.Snippet,
-        insertTextFormat: InsertTextFormat.Snippet,
-        insertText: "scope ${1:name} {\n    $0\n}",
-        detail: "YCPL named lexical scope"
-      },
       ...localItems,
       ...stdItems
     ];
@@ -277,7 +270,7 @@ export class YcplProviders {
       }
     }
 
-    const pattern = /\b(module|package|import|pub|extern|intrinsic|fn|struct|enum|type|const|owned|if|else|for|in|switch|case|default|return|break|continue|defer|scope|as|true|false|none|i32|i64|bool|char|byte|string|float|double|void|size_t|Type|T|any)\b|\/\/.*$|\/\*[\s\S]*?\*\/|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])'|`[^`]*`|0x[0-9A-Fa-f]+|0b[01]+|[0-9]+(?:\.[0-9]+)?|(:=|==|!=|<=|>=|&&|\|\||[=+\-*/%<>!&|.])/gm;
+    const pattern = /\b(module|package|import|pub|extern|intrinsic|fn|struct|enum|type|const|owned|if|else|for|in|switch|case|default|return|break|continue|defer|as|true|false|none|i32|i64|bool|char|byte|string|float|double|void|size_t|Type|T|any)\b|\/\/.*$|\/\*[\s\S]*?\*\/|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])'|`[^`]*`|0x[0-9A-Fa-f]+|0b[01]+|[0-9]+(?:\.[0-9]+)?|(:=|==|!=|<=|>=|&&|\|\||[=+\-*/%<>!&|.])/gm;
     for (const match of document.text.matchAll(pattern)) {
       const start = match.index ?? 0;
       const value = match[0];

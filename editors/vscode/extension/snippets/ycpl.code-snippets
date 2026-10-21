@@ -111,15 +111,6 @@
     "body": "defer ${1:cleanup}()",
     "description": "Run an action when leaving the current scope"
   },
-  "Scope block": {
-    "prefix": "scope",
-    "body": [
-      "scope ${1:name} {",
-      "    $0",
-      "}"
-    ],
-    "description": "Create a named YCPL scope"
-  },
   "Import std base32": {
     "prefix": "import-base32",
     "body": "import \"std/base32\" as base32",

@@ -357,15 +357,6 @@ namespace ast
         void print(std::ostream &os, int indent = 0) const override;
     };
 
-    struct ScopeStmt : Stmt
-    {
-        std::string name;
-        std::unique_ptr<BlockStmt> body;
-        ScopeStmt(std::string n, std::unique_ptr<BlockStmt> b)
-            : name(std::move(n)), body(std::move(b)) {}
-        void print(std::ostream &os, int indent = 0) const override;
-    };
-
     struct IfStmt : Stmt
     {
         std::unique_ptr<Expr> cond;

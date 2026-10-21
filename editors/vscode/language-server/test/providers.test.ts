@@ -27,6 +27,7 @@ test("completion returns keywords and indexed symbols", async () => {
   assert.ok(items.some((item) => item.label === "greet"));
   assert.equal(items.some((item) => item.label === "match"), false);
   assert.equal(items.some((item) => item.label === "mut"), false);
+  assert.equal(items.some((item) => item.label === "scope"), false);
 });
 
 test("stdlib member completion adds missing import edits", async () => {

@@ -30,15 +30,15 @@ ycc-bootstrap (C++ seed/reference)
 - source探索は`stat`でsymlinkを追跡し、device/inodeで循環を防止します。
 - AST node列、project files、symbols、imports、localsは`Vec<T>`ベースの動的arenaで保持します。
 - 64以上のlocals/functions、32以上のarguments、4フィールド以上のstructを回帰試験し、旧固定上限を撤廃しています。
-- 宣言、型、literal、演算子、代入、関数、struct、enum、alias、pointer、slice、Map、owned、defer、scope、switch、for/for-in、UFCS、extern/intrinsic/variadicを実AST上で解決します。
+- 宣言、型、literal、演算子、代入、関数、struct、enum、alias、pointer、slice、Map、owned、defer、block、switch、for/for-in、UFCS、extern/intrinsic/variadicを実AST上で解決します。
 - `compiler/ycpl`は直接`std/mem`をimportせず、AST・resolver・project loaderの可変長データを`Vec<T>`で保持します。
 
 ## LLVM backend
 
 - named type/struct、function/extern宣言を先に作り、その後でbodyをlowerします。
 - primitive、pointer、slice、Vec、struct、array、Map、alias、enumのABIを扱います。
-- short-circuit、bounds check、break/continue、switch、defer LIFO、scope unwind、compound assignment、cast、UFCS、variadic callをresolved ASTから直接lowerします。
-- managed allocationのfunction/scope frame、escape、child ownership、main init/shutdownを挿入します。
+- short-circuit、bounds check、break/continue、switch、defer LIFO、block unwind、compound assignment、cast、UFCS、variadic callをresolved ASTから直接lowerします。
+- managed allocationのfunction/block frame、escape、child ownership、main init/shutdownを挿入します。
 - 生成moduleは必ずLLVM verifierを通します。
 - fixture名やsource digestによるIR選択、埋め込みstage IR、巨大probe IRは使いません。
 

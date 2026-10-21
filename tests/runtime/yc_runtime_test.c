@@ -2,10 +2,31 @@
 
 #include <assert.h>
 #include <stddef.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <string.h>
 #include <sys/stat.h>
 #include <unistd.h>
+
+static void test_allocation_size_overflow(void) {
+    yc_runtime_init();
+    yc_frame_push();
+    assert(yc_alloc(SIZE_MAX) == NULL);
+    assert(yc_alloc(SIZE_MAX - 1) == NULL);
+    assert(yc_calloc(SIZE_MAX, 2) == NULL);
+    assert(yc_calloc(1, SIZE_MAX) == NULL);
+    assert(yc_runtime_live_allocations() == 0);
+
+    char *original = yc_alloc(8);
+    assert(original != NULL);
+    memcpy(original, "intact", 7);
+    assert(yc_realloc(original, SIZE_MAX) == NULL);
+    assert(strcmp(original, "intact") == 0);
+    assert(yc_runtime_live_allocations() == 1);
+    yc_frame_pop();
+    assert(yc_runtime_live_allocations() == 0);
+    yc_runtime_shutdown();
+}
 
 static void test_selective_escape_and_unbounded_children(void) {
     yc_runtime_init();
@@ -143,6 +164,7 @@ static void test_portable_compiler_support(void) {
 }
 
 int main(void) {
+    test_allocation_size_overflow();
     test_selective_escape_and_unbounded_children();
     test_nested_owner_graph();
     test_unmanaged_pointer_is_ignored();

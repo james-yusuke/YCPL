@@ -130,21 +130,21 @@ test("parser indexes enum and type alias syntax", () => {
   assert.equal(document.references.some((reference) => ["switch", "case", "default"].includes(reference.name)), false);
 });
 
-test("parser handles managed values and scope syntax", () => {
+test("parser handles managed values and ordinary blocks", () => {
   const document = parser.parse("file:///lifetime.yc", 1, [
     "import \"std/bytes\" as bytes",
     "",
     "fn main() {",
     "    b: owned Bytes := bytes.from_string(\"YCPL\")",
-    "    scope encoding {",
+    "    {",
     "        b.len",
     "    }",
     "}"
   ].join("\n"));
 
   assert.equal(document.symbols.find((symbol) => symbol.name === "b")?.typeName, "owned Bytes");
-  assert.equal(document.references.some((reference) => ["owned", "defer", "scope", "encoding"].includes(reference.name)), false);
-  assert.equal(document.scopes.some((scope) => scope.kind === "scope" && scope.name === "scope"), true);
+  assert.equal(document.references.some((reference) => ["owned", "defer"].includes(reference.name)), false);
+  assert.equal(document.scopes.some((scope) => scope.kind === "block"), true);
 });
 
 test("retired language words are ordinary identifiers", () => {
@@ -153,13 +153,17 @@ test("retired language words are ordinary identifiers", () => {
     "    mut := 1",
     "    match := mut + 1",
     "    go := match + 1",
-    "    return go",
+    "    scope := go + 1",
+    "    return scope",
     "}"
   ].join("\n"));
 
   assert.equal(document.symbols.some((symbol) => symbol.name === "mut" && symbol.category === "variable"), true);
   assert.equal(document.symbols.some((symbol) => symbol.name === "match" && symbol.category === "variable"), true);
   assert.equal(document.symbols.some((symbol) => symbol.name === "go" && symbol.category === "variable"), true);
+  assert.equal(document.symbols.some((symbol) => symbol.name === "scope" && symbol.category === "variable"), true);
+  const scopeReference = document.references.find((reference) => reference.name === "scope");
+  assert.ok(scopeReference?.symbolId);
 });
 
 test("parser preserves Vec and Map generic types", () => {

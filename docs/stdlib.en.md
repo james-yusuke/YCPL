@@ -232,7 +232,7 @@ Bytes, StringBuilder, and JsonValue roots keep their backing allocations in the
 same ownership graph.
 
 Pointer and aggregate returns escape their reachable managed values to the
-caller before the callee frame is popped. Scope assignments and
+caller before the callee frame is popped. Assignments from nested blocks and
 break/continue/return paths emit the corresponding deterministic frame unwind.
 
 `extern fn` maps YCPL names to C/LLVM symbols. `intrinsic fn` is reserved for

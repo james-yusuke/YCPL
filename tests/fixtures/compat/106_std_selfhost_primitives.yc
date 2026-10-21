@@ -45,7 +45,7 @@ fn main() {
     b = text.append_char(b, ':')
     b = text.append(b, "ens")
 
-    scope report {
+    {
         fmt.println(text.to_string(b))
         fmt.println(map.get_i32(keys, values, "tokens", 0) + map.get_i32(keys, values, "parser", 0))
         fmt.println(map.has(keys, "parser"))

@@ -385,17 +385,6 @@ namespace ast
                 s->print(os, indent + 2);
     }
 
-    void ScopeStmt::print(std::ostream &os, int indent) const
-    {
-        print_indent(os, indent);
-        os << "ScopeStmt";
-        if (!name.empty())
-            os << "(" << name << ")";
-        os << "\n";
-        if (body)
-            body->print(os, indent + 2);
-    }
-
     void IfStmt::print(std::ostream &os, int indent) const
     {
         print_indent(os, indent);

@@ -13,7 +13,7 @@ mixed into normal examples.
 - `basics/arrays.yc` and `basics/array_iteration.yc`: arrays and iteration
 - `basics/structs.yc`: structs and member access
 - `basics/enum_switch_alias.yc`: enums, switch, and type aliases
-- `basics/defer_scope.yc`: deferred actions and lexical scopes
+- `basics/defer_blocks.yc`: deferred actions and ordinary blocks
 
 ## Standard Library
 

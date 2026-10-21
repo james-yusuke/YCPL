@@ -60,15 +60,15 @@ implicit `Vec<T> -> *T` conversion.
 ## Runtime Ownership
 
 Native binaries statically link `bootstrap/cpp/runtime/yc_runtime.c`. The
-runtime tracks managed allocations in function and scope frames and releases
-them deterministically when control leaves the scope.
+runtime tracks managed allocations in function and standalone-block frames and releases
+them deterministically when control leaves the block.
 
 ```text
 function entry
     -> push frame
     -> register Vec header and backing storage
     -> attach managed children to the ownership graph
-return / scope exit
+return / block exit
     -> move escaping roots to the caller
     -> unwind remaining values in LIFO order
     -> pop frame

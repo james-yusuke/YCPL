@@ -21,6 +21,7 @@ docs/
 | 入口 | 内容 |
 |---|---|
 | [言語構文](language.ja.md) | 構文、型、文、式 |
+| [使い道とローカル検証](usage.ja.md) | CLI・データ変換の入口と一括動作確認 |
 | [Vecとメモリ所有](memory.ja.md) | `Vec<T>`、`[]T`、managed ownership |
 | [セルフホストの検証](self-hosting.ja.md) | bootstrapからstage3までの生成と確認 |
 | [プロジェクトとモジュール](projects.ja.md) | `YCPL.json`、import、公開範囲 |

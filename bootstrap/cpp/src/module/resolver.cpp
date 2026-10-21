@@ -164,12 +164,6 @@ namespace module
         {
             rewrite_stmt(ds->stmt, info, local_functions, modules, errors);
         }
-        else if (auto ss = dynamic_cast<ast::ScopeStmt *>(stmt.get()))
-        {
-            if (ss->body)
-                for (auto &s : ss->body->stmts)
-                    rewrite_stmt(s, info, local_functions, modules, errors);
-        }
         else if (auto vd = dynamic_cast<ast::VarDecl *>(stmt.get()))
         {
             rewrite_expr(vd->init, info, local_functions, modules, errors);

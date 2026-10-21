@@ -399,7 +399,7 @@ fn stmt_has_return(program ProgramAst, stmt_id i32) bool {
     if node.kind == ast.stmt_if() && (stmt_has_return(program, node.b) || stmt_has_return(program, node.c)) { return true }
     if node.kind == ast.stmt_for() && stmt_has_return(program, node.c) { return true }
     if node.kind == ast.stmt_for_in() && stmt_has_return(program, node.b) { return true }
-    if node.kind == ast.stmt_defer() || node.kind == ast.stmt_scope() { return stmt_has_return(program, node.a) }
+    if node.kind == ast.stmt_defer() { return stmt_has_return(program, node.a) }
     i := 0
     for (; i < node.child_count; i++) {
         if stmt_has_return(program, program.arena.children[node.first_child + i]) { return true }
@@ -974,7 +974,7 @@ fn resolve_stmt(state ResolveState, stmt_id i32) ResolveState {
             i := 0
             for (; i < node.child_count; i++) { state = resolve_stmt(state, state.program.arena.children[node.first_child + i]) }
         } else { state = resolve_stmt(state, node.b) }
-    } else if node.kind == ast.stmt_defer() || node.kind == ast.stmt_scope() { state = resolve_stmt(state, node.a) }
+    } else if node.kind == ast.stmt_defer() { state = resolve_stmt(state, node.a) }
     return state
 }
 

@@ -11,5 +11,6 @@ fn main() {
     importas := is + 8
     mut := importas + 9
 
-    fmt.println(mut)
+    scope := mut
+    fmt.println(scope)
 }

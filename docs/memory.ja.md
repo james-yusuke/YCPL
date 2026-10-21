@@ -57,7 +57,7 @@ view := values.as_slice()
 ## Runtime ownership
 
 native binaryには`bootstrap/cpp/runtime/yc_runtime.c`がstatic linkされます。
-runtimeはfunction/scopeごとのframeでmanaged allocationを追跡し、scopeを抜ける時に
+runtimeは関数と独立したブロックごとのframeでmanaged allocationを追跡し、ブロックを抜ける時に
 決定的にreleaseします。
 
 ```text
@@ -65,7 +65,7 @@ function entry
     -> frame push
     -> Vec headerとbacking storageを登録
     -> child managed valueをownership graphへattach
-return / scope exit
+return / block exit
     -> escapeするrootをcallerへ移動
     -> 残りをLIFO unwind
     -> frame pop

@@ -709,15 +709,10 @@ fn parse_statement(p *Parser) *Parser {
         if current(p).kind == tok.lbrace() { p = parse_block(p) } else { p = parse_statement(p) }
         return add_stmt(p, ast.make_stmt(ast.stmt_defer(), at_span(at), 0, 0, p.stmt_result, ast.invalid_id(), ast.invalid_id(), "", "", 0))
     }
-    if at.kind == tok.kw_scope() {
-        p = advance(p)
-        name := ""
-        if current(p).kind == tok.ident() && look(p, 1).kind == tok.lbrace() {
-            name = current_text(p)
-            p = advance(p)
-        }
+    if at.kind == tok.lbrace() {
         p = parse_block(p)
-        return add_stmt(p, ast.make_stmt(ast.stmt_scope(), at_span(at), 0, 0, p.stmt_result, ast.invalid_id(), ast.invalid_id(), name, "", 0))
+        p.program.arena.stmts[p.stmt_result].flags = ast.flag_block_frame()
+        return p
     }
     if at.kind == tok.kw_const() {
         p = advance(p)

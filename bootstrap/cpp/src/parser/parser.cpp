@@ -467,19 +467,6 @@ namespace path
             return std::make_unique<DeferStmt>(std::move(deferred));
         }
 
-        if (check(TokenType::KW_SCOPE))
-        {
-            advance();
-            std::string name;
-            if (check(TokenType::IDENT) && lexer.peek(1).type == TokenType::LBRACE)
-            {
-                name = cur.lexeme;
-                advance();
-            }
-            auto body = parse_block();
-            return std::make_unique<ScopeStmt>(std::move(name), std::move(body));
-        }
-
         if (check(TokenType::KW_IF))
         {
             advance();

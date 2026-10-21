@@ -140,8 +140,8 @@ namespace codegen
             return codegen_vardecl(vd);
         if (auto ds = dynamic_cast<const ast::DeferStmt *>(s))
             return codegen_defer(ds);
-        if (auto sc = dynamic_cast<const ast::ScopeStmt *>(s))
-            return codegen_scope_stmt(sc);
+        if (auto block = dynamic_cast<const ast::BlockStmt *>(s))
+            return codegen_block_stmt(block);
         if (auto as = dynamic_cast<const ast::AssignStmt *>(s))
             return codegen_assign(as);
         if (auto ifs = dynamic_cast<const ast::IfStmt *>(s))
@@ -211,14 +211,14 @@ namespace codegen
         return nullptr;
     }
 
-    Value *CodeGen::codegen_scope_stmt(const ast::ScopeStmt *ss)
+    Value *CodeGen::codegen_block_stmt(const ast::BlockStmt *block)
     {
-        if (!ss || !ss->body)
+        if (!block)
             return nullptr;
         builder.CreateCall(get_runtime_void_fn("yc_frame_push"));
         runtime_scope_depth++;
         push_scope();
-        codegen_block(ss->body.get());
+        codegen_block(block);
         pop_scope();
         if (builder.GetInsertBlock() && !builder.GetInsertBlock()->getTerminator())
             builder.CreateCall(get_runtime_void_fn("yc_frame_pop"));

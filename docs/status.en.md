@@ -30,15 +30,15 @@ ycc-bootstrap (C++ seed/reference)
 - Source discovery follows symlinks with `stat` and prevents cycles with device/inode tracking.
 - AST node sequences, project files, symbols, imports, and locals use `Vec<T>`-backed dynamic arenas.
 - Regression fixtures exercise more than 64 locals/functions, more than 32 arguments, and structs with more than four fields, removing the former fixed limits.
-- Declarations, types, literals, operators, assignments, functions, structs, enums, aliases, pointers, slices, maps, ownership, defer, scope, switch, loops, UFCS, externs, intrinsics, and variadics are resolved on the real AST.
+- Declarations, types, literals, operators, assignments, functions, structs, enums, aliases, pointers, slices, maps, ownership, defer, blocks, switch, loops, UFCS, externs, intrinsics, and variadics are resolved on the real AST.
 - `compiler/ycpl` directly imports no `std/mem`; its AST, resolver, and project-loader variable-length data use `Vec<T>`.
 
 ## LLVM Backend
 
 - Named types, structs, functions, and externs are declared before bodies are lowered.
 - Primitive, pointer, slice, Vec, struct, array, map, alias, and enum ABIs are supported.
-- Resolved AST directly lowers short-circuit logic, bounds checks, break/continue, switch, LIFO defer, scope unwind, compound assignment, casts, UFCS, and variadic calls.
-- Managed-allocation function/scope frames, escape, child ownership, and main initialization/shutdown are emitted by the compiler.
+- Resolved AST directly lowers short-circuit logic, bounds checks, break/continue, switch, LIFO defer, block unwind, compound assignment, casts, UFCS, and variadic calls.
+- Managed-allocation function/block frames, escape, child ownership, and main initialization/shutdown are emitted by the compiler.
 - Every generated module must pass the LLVM verifier.
 - Fixture names, source digests, embedded stage IR, and large probe IR are not used to select generated programs.
 

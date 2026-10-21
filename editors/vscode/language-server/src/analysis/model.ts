@@ -28,7 +28,6 @@ export const keywords = [
   "break",
   "continue",
   "defer",
-  "scope",
   "as",
   "true",
   "false",
@@ -99,7 +98,6 @@ export type ScopeKind =
   | "switch"
   | "case"
   | "default"
-  | "scope"
   | "block"
   | "if"
   | "else"

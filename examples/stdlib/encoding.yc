@@ -14,7 +14,7 @@ fn main() {
     encodedurl := base64.encode_url(b)
     decodedurl := base64.decode_url(encodedurl)
 
-    scope encoding {
+    {
         fmt.println(encodedbase)
         fmt.println(b.eq(decodedbase))
 

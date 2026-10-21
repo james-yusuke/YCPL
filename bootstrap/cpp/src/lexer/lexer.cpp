@@ -31,7 +31,6 @@ namespace lex
         {"none", TokenType::KW_NONE},
         {"type", TokenType::KW_TYPE},
         {"defer", TokenType::KW_DEFER},
-        {"scope", TokenType::KW_SCOPE},
         {"byte", TokenType::KW_BYTE},
     };
 

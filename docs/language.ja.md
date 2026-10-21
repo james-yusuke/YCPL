@@ -30,7 +30,7 @@ fn main() { ... }       -> 実行コードを置ける
 
 ```text
 module package import pub extern intrinsic fn struct enum type const owned
-if else for in switch case default return break continue defer scope as
+if else for in switch case default return break continue defer as
 true false none byte cast
 ```
 
@@ -224,17 +224,19 @@ switch color {
 selectorとcase expressionはresolver/type checkerで解決され、LLVM backendへ
 lowerされます。
 
-## defer、scope、UFCS
+## defer、ブロック、UFCS
 
 標準の`ycc`は`defer`文をサポートします。`defer expr`または
-`defer { ... }`は現在のscopeまたは関数を抜ける際にLIFO順で実行されます。
+`defer { ... }`は現在のブロックまたは関数を抜ける際にLIFO順で実行されます。
 
 ```YCPL
-defer fmt.println("leaving scope")
+defer fmt.println("leaving block")
 ```
 
-`scope name { ... }` は名前付きの lexical scope です。局所的な作業領域を明示したい
-時に使えます。
+局所的な作業領域には通常の `{ ... }` ブロックを使います。独立したブロックを抜ける際に
+managedな一時値を解放し、deferを実行します。外側の変数に代入した値やreturnした値は
+必要なframeへ移動します。旧 `scope name { ... }` 構文は削除したため、`{ ... }` に
+置き換えてください。`scope` は通常の識別子として使用できます。
 
 import 済み module に同名の public function が 1 つだけある場合、`value.method(x)` は
 `module.method(value, x)` として扱われます。managed value は runtime frame が所有するため、

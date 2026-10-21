@@ -8,7 +8,7 @@ syn keyword ycplKeyword module package import as pub extern intrinsic fn
 syn keyword ycplKeyword struct enum const owned
 syn keyword ycplConditional if else switch
 syn keyword ycplRepeat for in break continue
-syn keyword ycplStatement return defer scope
+syn keyword ycplStatement return defer
 syn keyword ycplOperator is or
 syn keyword ycplConstant true false none
 syn keyword ycplTodo TODO FIXME NOTE contained

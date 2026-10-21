@@ -373,6 +373,9 @@ void yc_frame_pop(void) {
 }
 
 void *yc_alloc(size_t size) {
+    if (size > SIZE_MAX - sizeof(YcAllocHeader)) {
+        return NULL;
+    }
     YcAllocHeader *header = (YcAllocHeader *)malloc(sizeof(YcAllocHeader) + size);
     if (!header) {
         return NULL;

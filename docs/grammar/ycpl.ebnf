@@ -67,7 +67,7 @@ statement          = var_decl
                    | const_decl
                    | assignment
                    | defer_statement
-                   | scope_statement
+                   | block
                    | if_statement
                    | for_statement
                    | switch_statement
@@ -82,7 +82,6 @@ assignment_operator
                    = "=" | "+=" | "-=" | "*=" | "/=" | "%=" ;
 
 defer_statement    = "defer" ( expression | block ) ;
-scope_statement    = "scope" [ identifier ] block ;
 if_statement       = "if" expression block [ "else" ( block | if_statement ) ] ;
 for_statement      = "for" ( for_c_style | for_in | [ expression ] ) block ;
 for_c_style        = [ simple_statement ] ";" [ expression ] ";" [ simple_statement ] ;

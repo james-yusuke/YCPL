@@ -352,7 +352,7 @@ fn mark_stmt(backend *Backend, program ProgramAst, stmt_id i32) {
         mark_stmt(backend, program, node.b)
     } else if node.kind == ast.stmt_assign() {
         mark_expr(backend, program, node.b)
-    } else if node.kind == ast.stmt_defer() || node.kind == ast.stmt_scope() {
+    } else if node.kind == ast.stmt_defer() {
         mark_stmt(backend, program, node.a)
     }
     i := 0
@@ -1603,6 +1603,11 @@ fn lower_stmt(backend *Backend, program ProgramAst, stmt_id i32) {
     if stmt_id == ast.invalid_id() || llvm.block_has_terminator(backend.builder) { return }
     node: *StmtNode := &program.arena.stmts[stmt_id]
     if node.kind == ast.stmt_block() {
+        owns_frame := (node.flags & ast.flag_block_frame()) != 0
+        if owns_frame {
+            call_void_runtime(backend, "yc_frame_push")
+            backend.runtime_depth += 1
+        }
         saved_locals := backend.local_len
         defer_mark := backend.defer_len
         i := 0
@@ -1610,6 +1615,10 @@ fn lower_stmt(backend *Backend, program ProgramAst, stmt_id i32) {
         if !llvm.block_has_terminator(backend.builder) { emit_defers(backend, program, defer_mark) }
         backend.defer_len = defer_mark
         backend.local_len = saved_locals
+        if owns_frame {
+            if !llvm.block_has_terminator(backend.builder) { call_void_runtime(backend, "yc_frame_pop") }
+            backend.runtime_depth -= 1
+        }
     } else if node.kind == ast.stmt_local() {
         init_node: *ExprNode := &program.arena.exprs[node.a]
         if init_node.kind == ast.expr_struct() {
@@ -1934,12 +1943,6 @@ fn lower_stmt(backend *Backend, program ProgramAst, stmt_id i32) {
             slot.stmt_id = node.a
             backend.defer_len += 1
         }
-    } else if node.kind == ast.stmt_scope() {
-        call_void_runtime(backend, "yc_frame_push")
-        backend.runtime_depth += 1
-        lower_stmt(backend, program, node.a)
-        if !llvm.block_has_terminator(backend.builder) { call_void_runtime(backend, "yc_frame_pop") }
-        backend.runtime_depth -= 1
     }
 }
 

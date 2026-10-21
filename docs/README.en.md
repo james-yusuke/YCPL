@@ -21,6 +21,7 @@ docs/
 | Start Here | Covers |
 |---|---|
 | [Language Syntax](language.en.md) | Syntax, types, statements, expressions |
+| [Use Cases and Local Verification](usage.en.md) | CLI/data transformation starting points and a complete local check |
 | [Vec and Memory Ownership](memory.en.md) | `Vec<T>`, `[]T`, and managed ownership |
 | [Self-hosting Verification](self-hosting.en.md) | Bootstrap-to-stage3 generation and checks |
 | [Projects and Modules](projects.en.md) | `YCPL.json`, imports, module visibility |

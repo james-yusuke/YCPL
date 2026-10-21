@@ -115,7 +115,7 @@ The backend declares named types, functions, and externs before lowering
 function bodies. It lowers resolved expressions and statements directly via
 the LLVM C API, including structs, enums, aliases, pointers, slices, arrays,
 maps, calls, UFCS, short-circuit operators, bounds checks, loops, switch,
-defer/scope unwind, casts, variadics, and managed ownership transitions.
+defer/block unwind, casts, variadics, and managed ownership transitions.
 LLVM module verification is mandatory.
 
 Source discovery follows symlinks using `stat`, tracks visited device/inode
@@ -132,7 +132,7 @@ symbols, and instructions are not ignored.
 The conformance surface includes primitive types, pointers, slices, arrays,
 structs, enums, aliases, `Vec<T>`, `Map`, `none`, `owned`, functions,
 extern/intrinsic and variadic calls, modules/import aliases/public visibility,
-`if`, `switch`, `for`, `for-in`, `break`, `continue`, `defer`, `scope`, and
+`if`, `switch`, `for`, `for-in`, `break`, `continue`, `defer`, blocks, and
 UFCS calls.
 
 `Vec<T>` is a compiler-built-in managed dynamic array. Construct it with
@@ -142,7 +142,7 @@ handle, while `[]T` is a non-growing view. The public API exposes neither a raw
 data pointer nor manual `free`.
 
 `none` is a null literal rather than an optional type. Managed allocations use
-deterministic function/scope frames; returned roots move to the caller and
+deterministic function/block frames; returned roots move to the caller and
 array/Vec/map/text/bytes/json ownership graphs release their children together.
 
 ## C and LLVM APIs
@@ -187,6 +187,7 @@ See [the VS Code extension guide](editors/vscode/extension/README.md).
 
 ## Documentation
 
+- [Use cases and local verification](docs/usage.en.md)
 - [Language reference](docs/language.en.md)
 - [Vec and memory ownership](docs/memory.en.md)
 - [Self-hosting verification](docs/self-hosting.en.md)

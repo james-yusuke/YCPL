@@ -3,7 +3,7 @@ import "std/fmt" as fmt
 fn main() i32 {
     defer fmt.println("function")
 
-    scope outer {
+    {
         defer fmt.println("outer")
         fmt.println("body")
     }
@@ -17,7 +17,7 @@ fn main() i32 {
         break
     }
 
-    scope early {
+    {
         defer fmt.println("early")
         return 0
     }

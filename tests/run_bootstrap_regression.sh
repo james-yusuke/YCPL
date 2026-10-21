@@ -3,7 +3,7 @@
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT_DIR="$(dirname "$SCRIPT_DIR")"
 YCC="${YCC:-$ROOT_DIR/build/ycc}"
-LINKFLAGS="${LINKFLAGS:--no-pie}"
+LINKFLAGS="${LINKFLAGS--no-pie}"
 export YCPL_STL_ROOT="${YCPL_STL_ROOT:-$ROOT_DIR/stl}"
 
 llvm_bindir() {
@@ -551,7 +551,7 @@ compile_run_and_verify "$ROOT_DIR/examples/basics/const_and_none.yc" $'ok\nset'
 compile_run_and_verify "$ROOT_DIR/examples/basics/array_iteration.yc" "15"
 compile_run_and_verify "$ROOT_DIR/examples/basics/short_circuit.yc" $'safe\n67'
 compile_run_and_verify "$ROOT_DIR/examples/basics/enum_switch_alias.yc" $'10\n20\n30' "switch i32"
-compile_run_and_verify "$ROOT_DIR/examples/basics/defer_scope.yc" $'body\nouter\nloop\nloop\nearly\nfunction'
+compile_run_and_verify "$ROOT_DIR/examples/basics/defer_blocks.yc" $'body\nouter\nloop\nloop\nearly\nfunction'
 compile_run_and_verify "$ROOT_DIR/examples/stdlib/fmt_str_math.yc" $'std ready\nlen5\n1\n7\n3.000000'
 compile_run_with_input_and_verify "$ROOT_DIR/examples/stdlib/io_echo.yc" "lsp-io" "lsp-io"
 compile_run_and_verify "$ROOT_DIR/examples/stdlib/json.yc" $'1\n42\n1\nYCPL\n2\nyes\n10\n{"x":3,"y":4}'
@@ -589,7 +589,7 @@ compile_run_and_verify "$ROOT_DIR/tests/fixtures/runtime/113_managed_value_roots
 compile_run_and_verify "$ROOT_DIR/tests/fixtures/runtime/114_vec_managed_ownership.yc" $'2\n2\n2\n2' "@yc_attach_child" "@yc_release" "vec.clear" "vec.replace"
 compile_run_and_verify "$ROOT_DIR/tests/fixtures/runtime/116_std_system_expanded.yc" $'1\n1\n1\n1\n1\nYCPL\n1\n1\n4\n1\n1\n1\n1\n1\n1\n1\n1\n1\nA-B\n1\n1\n1'
 compile_run_and_verify "$ROOT_DIR/tests/fixtures/runtime/117_std_fs_bytes_expanded.yc" $'1\n1\nbytes\n1'
-compile_run_and_verify "$ROOT_DIR/tests/fixtures/runtime/scope_escape_cleanup.yc" $'scope escape\n0\n0' "@yc_move_to_ancestor" "@yc_frame_push" "@yc_frame_pop"
+compile_run_and_verify "$ROOT_DIR/tests/fixtures/runtime/block_escape_cleanup.yc" $'block escape\nnested escape\n0\n0' "@yc_move_to_ancestor" "@yc_frame_push" "@yc_frame_pop"
 compile_run_and_verify "$ROOT_DIR/tests/fixtures/runtime/process_argv.yc" "0" "@yc_process_run_packed"
 
 echo ""
@@ -627,6 +627,8 @@ compile_expect_failure "$ROOT_DIR/tests/fixtures/negative/39_missing_return_fail
 
 echo ""
 echo "--- Negative Parser/Lexer Tests ---"
+compile_expect_failure "$ROOT_DIR/tests/fixtures/negative/retired_scope_failure.yc" "unknown"
+compile_expect_failure "$ROOT_DIR/tests/fixtures/negative/block_local_escape_failure.yc" "unknown"
 compile_expect_failure "$ROOT_DIR/tests/fixtures/negative/41_unclosed_string_failure.yc" "unterminated string literal"
 compile_expect_failure "$ROOT_DIR/tests/fixtures/negative/42_unclosed_comment_failure.yc" "unclosed block comment"
 compile_expect_failure "$ROOT_DIR/tests/fixtures/negative/43_invalid_char_failure.yc" "unterminated/invalid char literal"

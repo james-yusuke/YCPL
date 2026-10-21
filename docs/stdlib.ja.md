@@ -228,7 +228,7 @@ Vec、array、map、Bytes、StringBuilder、JsonValueのrootとbacking allocatio
 ownership graph で管理されます。
 
 pointer returnとaggregate returnは、callee frameをpopする前に到達可能なmanaged
-valueをcallerへescapeさせます。scope assignmentとbreak/continue/return pathでは、
+valueをcallerへescapeさせます。blockから外側へのassignmentとbreak/continue/return pathでは、
 対応する決定的なframe unwindを生成します。
 
 `extern fn` は YCPL 名を C/LLVM symbol に対応させます。`intrinsic fn` は bundled

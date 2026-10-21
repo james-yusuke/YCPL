@@ -113,7 +113,7 @@ arguments、struct fieldsの固定上限はなくなりました。
 
 backendはnamed type、function、externを先に宣言し、その後でfunction bodyを
 lowerします。struct、enum、alias、pointer、slice、array、Map、call、UFCS、
-short-circuit、bounds check、loop、switch、defer/scope unwind、cast、variadic、
+short-circuit、bounds check、loop、switch、defer/block unwind、cast、variadic、
 managed ownership transitionを含む解決済みASTをLLVM C APIへ直接lowerします。
 生成moduleは必ずLLVM verifierを通ります。
 
@@ -131,7 +131,7 @@ instructionは比較対象から除外しません。
 conformance対象にはprimitive type、pointer、slice、array、struct、enum、alias、
 `Vec<T>`、`Map`、`none`、`owned`、function、extern/intrinsic/variadic call、module/import
 alias/public visibility、`if`、`switch`、`for`、`for-in`、`break`、`continue`、
-`defer`、`scope`、UFCS callが含まれます。
+`defer`、通常のブロック、UFCS callが含まれます。
 
 `Vec<T>`はコンパイラ組み込みのmanaged動的配列です。`Vec<T>{}`または
 `Vec<T>{capacity: n}`で構築し、`push`、`len`、`capacity`、`reserve`、`clear`、
@@ -140,7 +140,7 @@ index read/write、`as_slice`を使用できます。Vecのコピーは同じhan
 `free`は公開APIにありません。
 
 `none`はoptional typeではなくnull literalです。managed allocationは決定的な
-function/scope frameで管理されます。returnされたrootはcallerへ移動し、array、
+function/block frameで管理されます。returnされたrootはcallerへ移動し、array、
 Vec、map、text、bytes、jsonのownership graphはchildとともに解放されます。
 
 ## C APIとLLVM API
@@ -184,6 +184,7 @@ npm run package --prefix editors/vscode/extension
 
 ## ドキュメント
 
+- [使い道とローカル検証](docs/usage.ja.md)
 - [言語リファレンス](docs/language.ja.md)
 - [Vecとメモリ所有](docs/memory.ja.md)
 - [セルフホストの検証](docs/self-hosting.ja.md)

@@ -3,19 +3,29 @@ import "std/text" as text
 
 extern fn runtime_live_allocations() i64 as "yc_runtime_live_allocations"
 
-fn build_in_scope() string {
+fn build_in_block() string {
     result: string := none
-    scope temporary {
-        result = text.concat("scope", " escape")
+    {
+        {
+            result = text.concat("block", " escape")
+        }
     }
     return result
+}
+
+fn return_from_block() string {
+    {
+        {
+            return text.concat("nested", " escape")
+        }
+    }
 }
 
 fn loop_cleanup() i64 {
     before := runtime_live_allocations()
     i: i32 := 0
     for (; i < 8; i++) {
-        scope iteration {
+        {
             temporary := text.concat("loop", " value")
             if temporary == none {
                 break
@@ -31,7 +41,7 @@ fn loop_cleanup() i64 {
 fn break_cleanup() i64 {
     before := runtime_live_allocations()
     for {
-        scope iteration {
+        {
             temporary := text.concat("break", " value")
             if temporary != none {
                 break
@@ -42,7 +52,8 @@ fn break_cleanup() i64 {
 }
 
 fn main() {
-    fmt.println(build_in_scope())
+    fmt.println(build_in_block())
+    fmt.println(return_from_block())
     fmt.println(loop_cleanup())
     fmt.println(break_cleanup())
 }

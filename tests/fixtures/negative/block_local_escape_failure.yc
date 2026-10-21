@@ -1,0 +1,6 @@
+fn main() {
+    {
+        temporary := 1
+    }
+    value := temporary
+}

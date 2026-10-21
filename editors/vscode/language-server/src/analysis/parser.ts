@@ -286,9 +286,6 @@ export class YcplParser {
       if (keywordSet.has(token.text) || primitiveSet.has(token.text)) {
         continue;
       }
-      if (isScopeLabelToken(text, token)) {
-        continue;
-      }
       if (symbols.some((symbol) => sameRangeOffset(text, lineOffsets, symbol.selectionRange, token.start, token.end))) {
         continue;
       }
@@ -750,9 +747,6 @@ function buildScopes(uri: string, text: string, lineOffsets: number[], functionR
 
 function classifyBlockScope(text: string, openBraceOffset: number): YcplScope["kind"] {
   const before = text.slice(Math.max(0, openBraceOffset - 160), openBraceOffset);
-  if (/\bscope(?:\s+[A-Za-z_][A-Za-z0-9_]*)?\s*$/.test(before)) {
-    return "scope";
-  }
   if (/\bdefault\s*$/.test(before)) {
     return "default";
   }
@@ -786,12 +780,6 @@ function scopeForOffset(scopes: YcplScope[], offset: number): YcplScope {
 
 function fnScopeForSymbol(scopes: YcplScope[], symbol: YcplSymbol): YcplScope {
   return scopes.find((scope) => scope.kind === "function" && scope.name === symbol.name) ?? rootScope(scopes);
-}
-
-function isScopeLabelToken(text: string, token: Token): boolean {
-  const before = text.slice(Math.max(0, token.start - 32), token.start);
-  const after = text.slice(token.end, Math.min(text.length, token.end + 32));
-  return /\bscope\s+$/.test(before) && /^\s*\{/.test(after);
 }
 
 function resolveTokenSymbol(text: string, token: Token, scopes: YcplScope[], symbols: YcplSymbol[]): YcplSymbol | undefined {

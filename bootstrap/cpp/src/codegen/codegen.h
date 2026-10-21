@@ -165,7 +165,7 @@ namespace codegen
         llvm::Value *codegen_assign(const ast::AssignStmt *as);
         llvm::Value *codegen_vardecl(const ast::VarDecl *vd);
         llvm::Value *codegen_defer(const ast::DeferStmt *ds);
-        llvm::Value *codegen_scope_stmt(const ast::ScopeStmt *ss);
+        llvm::Value *codegen_block_stmt(const ast::BlockStmt *block);
         llvm::Value *codegen_c_style_for_loop(const ast::ForCStyleStmt *forStmt);
 
         // Type and function lowering.
