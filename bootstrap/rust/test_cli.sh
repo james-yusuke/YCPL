@@ -33,6 +33,17 @@ grep -qx 'Hello World' run.log
 grep -qx 'argument with spaces' run.log
 test -f 'native with spaces/merged.o'
 test -f 'native with spaces/yc_runtime.o'
+link_dir='link path with spaces $(touch injected)'
+mkdir "$link_dir"
+LINKFLAGS="${LINKFLAGS:-} -L'$link_dir'" "$seed" run 'a file.yc' -o 'quoted link flags' > linkflags.log
+grep -qx 'Hello World' linkflags.log
+test ! -e injected
+if LINKFLAGS="'" "$seed" build 'a file.yc' -o 'invalid link flags' > linkflags.log 2>&1; then
+  printf 'Invalid LINKFLAGS quoting was accepted\n' >&2
+  exit 1
+fi
+grep -q 'invalid LINKFLAGS quoting' linkflags.log
+test ! -e 'invalid link flags/merged'
 mkdir src
 cp 'a file.yc' src/main.yc
 printf '{"src":["src"],"output":"configured output"}\n' > YCPL.json
@@ -52,4 +63,4 @@ test ! -e invalid-version/merged.ll
 printf 'fn main() {\n  println(1, }\n' > malformed.yc
 if "$seed" check malformed.yc > malformed.log 2>&1; then exit 1; fi
 grep -q "malformed.yc:2:.*expected ')'" malformed.log
-printf 'Rust CLI, paths, arguments, project output, cycles and LLVM version verified\n'
+printf 'Rust CLI, quoted flags, paths, arguments, project output, cycles and LLVM version verified\n'

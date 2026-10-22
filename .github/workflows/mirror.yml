@@ -9,6 +9,8 @@ on:
 
 jobs:
   mirror:
+    # Dependabot runs cannot access repository Actions secrets.
+    if: github.actor != 'dependabot[bot]'
     runs-on: ubuntu-latest
 
     steps:
