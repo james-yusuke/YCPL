@@ -39,6 +39,7 @@ let workspaceRoots: string[] = [];
 
 connection.onInitialize((params: InitializeParams): InitializeResult => {
   workspaceRoots = workspaceRootPaths(params);
+  index.setWorkspaceRoots(workspaceRoots);
   const options = params.initializationOptions as { stlRoot?: string } | undefined;
   providers = new YcplProviders(
     index,
@@ -141,6 +142,7 @@ connection.onNotification(
         ...event.added.map((folder) => URI.parse(folder.uri).fsPath)
       ])
     ];
+    index.setWorkspaceRoots(workspaceRoots);
     for (const document of index.allDocuments()) {
       if (documents.get(document.uri)) continue;
       const file = URI.parse(document.uri).fsPath;

@@ -32,6 +32,12 @@ literal='$(touch injected) ; `echo unsafe` "quoted"'
 test ! -e "$work/injected"
 grep -Fqx -- "$literal" "$work/run.log"
 grep -Fxq 84 "$work/run.log"
+for option in -o --output; do
+  (cd "$work" && "$ycc" run main.yc -- "$option" 'program data') > "$work/options.log" 2>&1
+  grep -Fqx -- "$option" "$work/options.log"
+  test -x "$work/build/merged"
+  test ! -e "$work/program data"
+done
 # A symlink back to the main module must reuse its parsed identity.
 ln -s main.yc "$work/cycle.yc"
 printf 'import "./cycle.yc" as cycle\n' > "$work/cyclic.yc"
@@ -42,4 +48,4 @@ if ! "$ycc" check "$work/cyclic.yc" > "$work/cycle.log" 2>&1; then
   cat "$work/cycle.log" >&2
   exit 1
 fi
-printf 'Development workflows: relative imports, symlink identity, spaced paths, literal argv passed\n'
+printf 'Development workflows: relative imports, symlink identity, spaced paths, literal argv and option separator passed\n'

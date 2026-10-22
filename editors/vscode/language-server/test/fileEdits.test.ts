@@ -41,3 +41,15 @@ test("directory moves preserve extensionless modules and leave stdlib alone", ()
   assert.equal(result.changes?.[main.uri].length, 1);
   assert.equal(result.changes?.[main.uri][0].newText, '"./library"');
 });
+
+test("project imports in nested files use the shared src-relative resolver", () => {
+  const parser = new YcplParser();
+  const app = parser.parse("file:///work/src/client/main.yc", 0, 'import "math" as math\n');
+  const math = parser.parse("file:///work/src/math.yc", 0, "pub fn answer() i32 { return 42 }");
+  const result = renameFileImports(
+    [app, math],
+    [{ oldUri: math.uri, newUri: "file:///work/src/numbers.yc" }],
+    ["/work"]
+  );
+  assert.equal(result.changes?.[app.uri][0].newText, '"numbers"');
+});

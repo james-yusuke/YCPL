@@ -3,6 +3,7 @@ import { URI } from "vscode-uri";
 import { TextEdit, type FileRename, type WorkspaceEdit } from "vscode-languageserver/node";
 import type { YcplDocument } from "./model.js";
 import { offsetAt, rangeFromOffsets } from "./text.js";
+import { importCandidates, projectRoot } from "./importPaths.js";
 
 /** Update relative imports before file/directory moves, including imports inside moved files. */
 export function renameFileImports(
@@ -33,18 +34,16 @@ export function renameFileImports(
       const name = imported.modulePath;
       if (/^(?:std|c)\//.test(name) || path.isAbsolute(name)) continue;
       const relative = name.startsWith(".");
-      const root = roots
-        .filter((root) => before.startsWith(root + path.sep))
-        .sort((a, b) => b.length - a.length)[0];
+      const root = projectRoot(before, roots);
       if (!relative && !root) continue;
-      const base = path.resolve(relative ? path.dirname(before) : root!, name);
-      const target = [base, base + ".yc", path.join(base, "index.yc")].find((file) => known.has(file));
+      const target = importCandidates(before, name, roots).find((file) => known.has(file));
       if (!target) continue;
       const newTarget = mapped(target);
       if (newTarget === target && before === after) continue;
       let value = path
         .relative(relative ? path.dirname(after) : mapped(root!), newTarget)
         .replaceAll(path.sep, "/");
+      if (!relative) value = value.replace(/^src\//, "");
       if (!name.endsWith(".yc"))
         value = value.endsWith("/index.yc") ? value.slice(0, -9) : value.replace(/\.yc$/, "");
       if (relative && !value.startsWith(".")) value = "./" + value;

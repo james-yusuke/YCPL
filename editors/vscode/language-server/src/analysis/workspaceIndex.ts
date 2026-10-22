@@ -7,9 +7,9 @@ import {
   type YcplDocument,
   type YcplSymbol
 } from "./model.js";
-import * as path from "node:path";
 import { URI } from "vscode-uri";
 import { offsetAt } from "./text.js";
+import { importCandidates, projectRoot } from "./importPaths.js";
 
 /** Maintains the incremental symbol and reference index for open and scanned files. */
 export class WorkspaceIndex {
@@ -18,6 +18,13 @@ export class WorkspaceIndex {
   private referencesBySymbolId = new Map<SymbolId, Map<string, SymbolReference[]>>();
   private crossReferences: Map<SymbolId, SymbolReference[]> | undefined;
   private names = new Map<string, YcplSymbol[]>();
+
+  constructor(private roots: string[] = []) {}
+
+  setWorkspaceRoots(roots: string[]): void {
+    this.roots = [...roots];
+    this.crossReferences = undefined;
+  }
 
   /** Adds or replaces a document in the workspace index. */
   update(document: YcplDocument): void {
@@ -168,13 +175,16 @@ export class WorkspaceIndex {
       if (typeLookup && !isTypeCategory(symbol.category)) return false;
       const target = this.documents.get(symbol.uri);
       if (!target) return false;
-      if (!qualifier && document.moduleName && document.moduleName === target.moduleName) return true;
+      const sourceFile = URI.parse(document.uri).fsPath;
+      const targetFile = URI.parse(symbol.uri).fsPath;
+      const sameProject = projectRoot(sourceFile, this.roots) === projectRoot(targetFile, this.roots);
+      if (!qualifier && sameProject && document.moduleName && document.moduleName === target.moduleName)
+        return true;
       if (!symbol.exported) return false;
       return imports.some((entry) => {
-        if (target.moduleName === entry.modulePath.replaceAll("/", ".")) return true;
-        const imported = path.resolve(path.dirname(URI.parse(document.uri).fsPath), entry.modulePath);
-        const file = URI.parse(symbol.uri).fsPath;
-        return file === `${imported}.yc` || file === imported || path.dirname(file) === imported;
+        if (!entry.modulePath.startsWith(".") && !sameProject) return false;
+        if (sameProject && target.moduleName === entry.modulePath.replaceAll("/", ".")) return true;
+        return importCandidates(sourceFile, entry.modulePath, this.roots).includes(targetFile);
       });
     });
     return candidates.length === 1 ? candidates[0] : undefined;

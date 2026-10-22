@@ -47,6 +47,53 @@ test("organizing imports preserves comments and side effects and ignores aliases
   assert.equal(organizeImports(parser.parse(document.uri, 2, organized)).length, 0);
 });
 
+test("organizing imports preserves blank-line groups", () => {
+  const source =
+    'import "std/text" as text\n\nimport "./math.yc" as math\nfn main() { text.len("ok") math.answer() }\n';
+  assert.equal(apply(source, organizeImports(parser.parse("file:///groups.yc", 0, source))), source);
+});
+
+test("nested files resolve src imports within their configured project", () => {
+  const index = new WorkspaceIndex();
+  const app = parser.parse(
+    "file:///project/src/client/main.yc",
+    0,
+    'import "math" as math\nfn main() { math.twice(2) }\n'
+  );
+  const library = parser.parse(
+    "file:///project/src/math.yc",
+    0,
+    "module unrelated\npub fn twice(value i32) i32 { return value * 2 }\n"
+  );
+  const other = parser.parse("file:///other/src/math.yc", 0, library.text);
+  for (const document of [app, library, other]) index.update(document);
+  const providers = new YcplProviders(index, new StandardLibraryIndex(undefined), new NullCompilerBridge());
+  const request = { textDocument: { uri: app.uri }, position: { line: 1, character: 18 } };
+  assert.equal(providers.definition(request).length, 0);
+  index.setWorkspaceRoots(["/project", "/other"]);
+  assert.equal(providers.definition(request)[0]?.uri, library.uri);
+  const edits = providers.rename({ ...request, newName: "doubleValue" })!.changes!;
+  assert.deepEqual(Object.keys(edits).sort(), [app.uri, library.uri].sort());
+});
+
+test("parameter hints skip a UFCS receiver but retain namespace call parameters", () => {
+  const index = new WorkspaceIndex(["/project"]);
+  const document = parser.parse(
+    "file:///project/main.yc",
+    0,
+    'import "math" as math\nstruct Point { x i32 }\npub fn add(receiver Point, amount i32) i32 { return receiver.x + amount }\nfn use(point Point) {\n    point.add(2)\n    math.twice(3)\n}\n'
+  );
+  index.update(document);
+  index.update(
+    parser.parse("file:///project/math.yc", 0, "pub fn twice(value i32) i32 { return value * 2 }\n")
+  );
+  const providers = new YcplProviders(index, new StandardLibraryIndex(undefined), new NullCompilerBridge());
+  const labels = providers
+    .inlayHints({ textDocument: { uri: document.uri }, range: Range.create(0, 0, 8, 0) })
+    .map((hint) => hint.label);
+  assert.deepEqual(labels, ["amount:", "value:"]);
+});
+
 test("cross-file references resolve public imports, rename together, and respect visibility", () => {
   const index = new WorkspaceIndex();
   const library = parser.parse(
@@ -252,7 +299,7 @@ test("struct filling declines fields without a valid generated zero expression",
 });
 
 test("inlining preserves storage identity and rejects parenthesized writes", () => {
-  for (const use of ["pointer := &value", "(value) += 1"]) {
+  for (const use of ["pointer := &value", "pointer := &(value)", "pointer := & ( (value))", "(value) += 1"]) {
     const index = new WorkspaceIndex();
     const document = parser.parse(
       "file:///inline-address.yc",

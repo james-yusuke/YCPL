@@ -65,7 +65,7 @@ export function organizeImports(document: YcplDocument): TextEdit[] {
       .trim();
     if (prefix.trim() || (suffix && !suffix.startsWith("//") && !suffix.startsWith("/*"))) continue;
     const previous = groups.at(-1);
-    if (previous && /^\s*$/.test(document.text.slice(previous.end, start))) {
+    if (previous && previous.end === start) {
       previous.end = end;
       previous.imports.push(imported);
     } else {
@@ -297,7 +297,7 @@ export function inlineVariable(
     references.some(
       (reference) =>
         reference.uri !== document.uri ||
-        /&\s*$/.test(
+        /&\s*(?:\(\s*)*$/.test(
           document.code.slice(0, offsetAt(document.text, document.lineOffsets, reference.range.start))
         ) ||
         /^\s*\)*\s*(?:=(?!=)|[+*/%&|^<>-]+=|\+\+|--)/.test(

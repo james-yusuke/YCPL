@@ -34,6 +34,7 @@ fn standard_library_root() string {
 fn output_dir(argc i32, argv *string) string {
     i := 2
     for (; i < argc; i++) {
+        if str.eq(argv[i], "--") { break }
         if str.eq(argv[i], "-o") || str.eq(argv[i], "--output") {
             if i + 1 < argc { return argv[i + 1] }
         }

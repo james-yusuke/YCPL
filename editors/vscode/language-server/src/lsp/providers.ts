@@ -496,9 +496,15 @@ export class YcplProviders {
           this.index.referenceAt(document.uri, positionAtIndex(document, calleeOffset))?.symbolId
       );
       if (!target?.parameters?.length) continue;
+      const receiver = document.code.slice(start, calleeOffset).match(/^([A-Za-z_]\w*)\s*\.\s*$/);
+      const receiverSymbol = receiver
+        ? this.index.symbolById(
+            this.index.referenceAt(document.uri, positionAtIndex(document, start))?.symbolId
+          )
+        : undefined;
       let depth = 0;
       let argument = end;
-      let parameter = 0;
+      let parameter = receiverSymbol && ["variable", "parameter"].includes(receiverSymbol.category) ? 1 : 0;
       for (let i = end; i < Math.min(document.code.length, end + 8192); i += 1) {
         const char = document.code[i];
         if ((char === ")" && depth === 0) || (char === "," && depth === 0)) {
