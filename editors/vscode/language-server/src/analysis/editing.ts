@@ -5,6 +5,7 @@ import {
   type FormattingOptions,
   type Range
 } from "vscode-languageserver/node";
+import { hasUnresolvedBareNames } from "./importUsage.js";
 import { scanLexical } from "./lexical.js";
 import type { YcplDocument, YcplSymbol } from "./model.js";
 import { offsetAt, rangeFromOffsets } from "./text.js";
@@ -78,6 +79,12 @@ export function organizeImports(document: YcplDocument): TextEdit[] {
     code.fill(" ", start, end);
   }
   const usedCode = code.join("");
+  const implicitImports = hasUnresolvedBareNames(
+    document.code,
+    document.lineOffsets,
+    document.references,
+    document.imports.map((entry) => entry.alias)
+  );
   return groups.flatMap((group) => {
     const seen = new Set<string>();
     const entries = group.imports
@@ -96,7 +103,8 @@ export function organizeImports(document: YcplDocument): TextEdit[] {
           )
         )
           return true;
-        if (imported.alias && !new RegExp(`\\b${imported.alias}\\s*\\.`).test(usedCode)) return false;
+        if (!implicitImports && imported.alias && !new RegExp(`\\b${imported.alias}\\s*\\.`).test(usedCode))
+          return false;
         const key = `${imported.modulePath}:${imported.alias ?? ""}`;
         if (seen.has(key)) return false;
         seen.add(key);

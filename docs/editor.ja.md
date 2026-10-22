@@ -70,7 +70,7 @@ Run・Debug・Coverage のプロファイル、ワークスペース・ファイ
 ## デバッグ
 
 F5、**Debug Current File or Project**、**Debug Test at Cursor**、Test Explorer の
-Debug は LLVM 22 の `lldb-dap` を使います。見つからなければ
+Debug は LLVM 22 以降の `lldb-dap` を使います。見つからなければ
 `YCPL.debug.adapterPath` を指定してください。`ycc -g` が DWARF と最適化を抑えた
 コードを生成し、ソースのブレークポイント、ステップ実行、スタック、引数・ローカル変数を
 表示できます。構造体にはフィールド情報を付けます。再帰型や managed container の
@@ -89,7 +89,8 @@ Debug は LLVM 22 の `lldb-dap` を使います。見つからなければ
 ```
 
 既存バイナリ、pid による attach、LLDB の `coreFile` も指定できます。
-Ubuntu は `lldb-22`、macOS は Homebrew の `llvm@22` を利用できます。
+Ubuntu は `lldb-22`、macOS は `brew install lldb` で別途導入してください。
+`llvm@22` のコンパイラパッケージに adapter が同梱されているとは限りません。
 Remote/Container ではワークスペース側の拡張ホストで実行します。
 自動デプロイの設定は生成しません。
 

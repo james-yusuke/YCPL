@@ -271,3 +271,10 @@ test("inlining preserves storage identity and rejects parenthesized writes", () 
     );
   }
 });
+
+test("organizing imports preserves modules needed by unqualified public types", () => {
+  const source = 'import "./point.yc" as point\nfn main() {\n    value := Point{x: 42}\n}\n';
+  const document = parser.parse("file:///typed-import.yc", 0, source);
+  assert.equal(apply(source, organizeImports(document)), source);
+  assert.ok(!document.diagnostics.some((diagnostic) => diagnostic.message.includes("not used")));
+});

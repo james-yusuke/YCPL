@@ -163,6 +163,8 @@ export function registerDebugging(context: vscode.ExtensionContext, output: vsco
         const candidates = [
           configured,
           ...(process.env.LLVM_BINDIR ? [path.join(process.env.LLVM_BINDIR, "lldb-dap")] : []),
+          "/opt/homebrew/opt/lldb/bin/lldb-dap",
+          "/usr/local/opt/lldb/bin/lldb-dap",
           findOnPath("lldb-dap"),
           "/opt/homebrew/opt/llvm@22/bin/lldb-dap",
           "/usr/local/opt/llvm@22/bin/lldb-dap",
@@ -172,7 +174,9 @@ export function registerDebugging(context: vscode.ExtensionContext, output: vsco
           (candidate): candidate is string => !!candidate && isExecutable(candidate)
         );
         if (!adapter)
-          throw new Error("LLVM 22 lldb-dap not found. Set YCPL.debug.adapterPath to its executable.");
+          throw new Error(
+            "lldb-dap not found. Install LLDB (brew install lldb on macOS) or set YCPL.debug.adapterPath."
+          );
         return new vscode.DebugAdapterExecutable(adapter);
       }
     })

@@ -77,7 +77,7 @@ through imports are included. There is no guessed or synthetic coverage. LLVM 22
 ## Debugging
 
 **Debug Current File or Project**, F5, Debug Test at Cursor and Test Explorer Debug
-use LLVM 22 `lldb-dap`. It is discovered from `LLVM_BINDIR`, LLVM installation paths
+use `lldb-dap` (LLVM 22 or newer). It is discovered from `LLVM_BINDIR`, Homebrew LLDB, LLVM installation paths
 or `PATH`; set `YCPL.debug.adapterPath` to override. Builds use the self-hosted
 compiler's `-g` flag and unoptimized LLVM code. Source breakpoints, stepping, stack
 frames, parameters and local values are available. Structs carry field metadata;
@@ -96,8 +96,8 @@ Go-style collection visualizers. Debug objects are retained until the session en
 ```
 
 Existing native executables, `attach` by pid and LLDB `coreFile` configurations are
-also supported. On Ubuntu install `lldb-22`; macOS Homebrew `llvm@22` includes the
-adapter. Remote/container sessions use the workspace extension's execution host;
+also supported. On Ubuntu install `lldb-22`; on macOS install the separate Homebrew `lldb` formula
+with `brew install lldb`. The `llvm@22` compiler package does not guarantee an adapter. Remote/container sessions use the workspace extension's execution host;
 no remote deployment configuration is generated automatically.
 
 ## Profiling

@@ -272,7 +272,9 @@ jobs:
         with:
           node-version: 24
       - name: Install LLVM 22
-        run: scripts/setup-llvm.sh 22
+        run: |
+          scripts/setup-llvm.sh 22
+          brew install lldb
       - name: Build self-hosted compiler for editor tests
         run: |
           eval "$(scripts/setup-llvm.sh 22 --print-env)"
@@ -301,7 +303,7 @@ jobs:
           tests/test_development_workflows.sh
       - name: Check LLDB adapter installation
         run: |
-          "$LLVM_BINDIR/lldb-dap" --version
+          "$(brew --prefix lldb)/bin/lldb-dap" --version
       - name: Test packaged VSIX with both servers
         run: |
           npm run test:extension --prefix editors/vscode/extension

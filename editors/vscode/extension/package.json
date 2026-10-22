@@ -295,7 +295,7 @@
           "type": "string",
           "default": "",
           "scope": "resource",
-          "description": "Path to LLVM 22 lldb-dap. Discovered from LLVM_BINDIR, PATH, or standard LLVM installation paths when empty."
+          "description": "Path to lldb-dap (LLVM 22 or newer). Discovered from LLVM_BINDIR, Homebrew lldb, PATH, or standard LLVM paths when empty."
         },
         "YCPL.testing.benchmarkIterations": {
           "type": "integer",

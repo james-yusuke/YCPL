@@ -1,3 +1,4 @@
+import { hasUnresolvedBareNames } from "./importUsage.js";
 import { scanLexical } from "./lexical.js";
 import { DiagnosticSeverity, SymbolKind } from "vscode-languageserver/node";
 import {
@@ -85,7 +86,7 @@ export class YcplParser {
     );
     const references = this.parseReferences(uri, code, lineOffsets, tokens, scopes, symbols);
     const calls = this.parseCalls(uri, code, lineOffsets, scopes, symbols, functionRanges);
-    const diagnostics = this.parseDiagnostics(code, lineOffsets, symbols, imports);
+    const diagnostics = this.parseDiagnostics(code, lineOffsets, symbols, imports, references);
     const moduleName = symbols.find(
       (symbol) => symbol.category === "module" || symbol.category === "package"
     )?.name;
@@ -436,7 +437,8 @@ export class YcplParser {
     text: string,
     lineOffsets: number[],
     symbols: YcplSymbol[],
-    imports: ImportInfo[]
+    imports: ImportInfo[],
+    references: SymbolReference[]
   ): ParsedDiagnostic[] {
     const diagnostics: ParsedDiagnostic[] = [];
     pushDelimiterDiagnostics(text, lineOffsets, diagnostics);
@@ -459,9 +461,15 @@ export class YcplParser {
     const importedAliases = new Set(
       imports.map((entry) => entry.alias).filter((entry): entry is string => !!entry)
     );
+    const implicitImports = hasUnresolvedBareNames(
+      text,
+      lineOffsets,
+      references,
+      imports.map((entry) => entry.alias)
+    );
     for (const alias of importedAliases) {
       const pattern = new RegExp(`\\b${escapeRegExp(alias)}\\s*\\.`, "g");
-      if (!pattern.test(text)) {
+      if (!implicitImports && !pattern.test(text)) {
         const imported = imports.find((entry) => entry.alias === alias);
         if (imported?.aliasRange) {
           diagnostics.push({
