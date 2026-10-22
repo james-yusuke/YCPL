@@ -273,17 +273,15 @@ export class YcplTesting implements vscode.Disposable {
               String(config.get<number>("testing.fuzzStartSeed", 0))
             ];
             const result = debug
-              ? {
-                  ...(await debugTest(
-                    path.join(directory, "merged"),
-                    arguments_,
-                    directory,
-                    environment,
-                    token
-                  )),
-                  stdout: "",
-                  stderr: ""
-                }
+              ? await debugTest(
+                  path.join(directory, "merged"),
+                  arguments_,
+                  directory,
+                  environment,
+                  token,
+                  append,
+                  run
+                )
               : await execute(
                   path.join(directory, "merged"),
                   arguments_,
@@ -302,6 +300,12 @@ export class YcplTesting implements vscode.Disposable {
               run.passed(item, elapsed);
               summary.passed += 1;
             } else {
+              if (debug) {
+                const diagnostic = `${entry.name}: exit ${result.code}\n${result.stdout}${result.stderr}`;
+                this.output.appendLine(diagnostic);
+                summary.errors ??= [];
+                summary.errors.push(diagnostic);
+              }
               run.failed(
                 item,
                 new vscode.TestMessage(

@@ -10,21 +10,31 @@ import {
   isExecutable,
   resolveConfiguredPath
 } from "./runtime.js";
-import { execute } from "./process.js";
+import { execute, type ProcessResult } from "./process.js";
 
 export async function debugTest(
   program: string,
   args: string[],
   cwd: string,
   env: NodeJS.ProcessEnv,
-  token: vscode.CancellationToken
-): Promise<{ code: number; cancelled: boolean }> {
-  if (token.isCancellationRequested) return { code: -1, cancelled: true };
+  token: vscode.CancellationToken,
+  output?: (text: string) => void,
+  testRun?: vscode.TestRun
+): Promise<ProcessResult> {
+  if (token.isCancellationRequested) return { code: -1, stdout: "", stderr: "", cancelled: true };
   const id = randomUUID();
   let session: vscode.DebugSession | undefined;
   let code = -1;
-  let settle: (result: { code: number; cancelled: boolean }) => void = () => undefined;
-  const finished = new Promise<{ code: number; cancelled: boolean }>((resolve) => {
+  let stdout = "",
+    stderr = "";
+  const result = (): ProcessResult => ({ code, stdout, stderr, cancelled: token.isCancellationRequested });
+  const record = (text: string, error = false): void => {
+    if (error) stderr = (stderr + text).slice(-2097152);
+    else stdout = (stdout + text).slice(-2097152);
+    output?.(text);
+  };
+  let settle: (result: ProcessResult) => void = () => undefined;
+  const finished = new Promise<ProcessResult>((resolve) => {
     settle = resolve;
   });
   const tracker = vscode.debug.registerDebugAdapterTrackerFactory("ycpl", {
@@ -34,16 +44,20 @@ export async function debugTest(
       return {
         onDidSendMessage(message) {
           if (message.type === "event" && message.event === "exited") code = message.body.exitCode;
+          if (message.type === "event" && message.event === "output")
+            record(message.body.output ?? "", message.body.category === "stderr");
+          if (message.type === "response" && message.command === "launch" && !message.success)
+            record(message.message ?? "Debugger launch failed.\n", true);
         },
-        onError() {
-          settle({ code: -1, cancelled: token.isCancellationRequested });
+        onError(error) {
+          record(`${error.message}\n`, true);
+          settle(result());
         }
       };
     }
   });
   const end = vscode.debug.onDidTerminateDebugSession((candidate) => {
-    if (candidate.configuration.__ycplTest === id)
-      settle({ code, cancelled: token.isCancellationRequested || code === -1 });
+    if (candidate.configuration.__ycplTest === id) settle(result());
   });
   const cancel = token.onCancellationRequested(() => {
     if (session) void vscode.debug.stopDebugging(session);
@@ -61,9 +75,13 @@ export async function debugTest(
         env,
         console: "internalConsole",
         __ycplTest: id
-      }
+      },
+      { testRun }
     );
-    if (!accepted) return { code: -1, cancelled: true };
+    if (!accepted) {
+      record("Debug session did not start.\n", true);
+      return result();
+    }
     if (token.isCancellationRequested && session) await vscode.debug.stopDebugging(session);
     return await finished;
   } finally {
