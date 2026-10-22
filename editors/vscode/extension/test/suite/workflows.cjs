@@ -4,6 +4,7 @@ const fs = require("node:fs/promises");
 const vscode = require("vscode");
 
 async function runWorkflows() {
+  console.log("YCPL workflow: configure compiler");
   const root = vscode.workspace.workspaceFolders[0].uri;
   const repository = process.env.YCPL_TEST_REPOSITORY;
   assert.ok(repository, "integration runner supplies the repository");
@@ -27,33 +28,26 @@ async function runWorkflows() {
     'import "./math.yc" as math\npub fn test_pass() bool { return math.add(20, 22) == 42 }\npub fn test_fail() bool { return false }\npub fn benchmark_add() bool { return math.add(1, 2) == 3 }\npub fn fuzz_identity(seed i32) bool { return seed >= 0 }\n'
   );
   await vscode.window.showTextDocument(await vscode.workspace.openTextDocument(tests));
-  const result = await vscode.commands.executeCommand("YCPL.testFile", tests);
+  const result = await command("YCPL.testFile", tests);
   assert.deepEqual(
     result,
     { passed: 3, failed: 1, errored: 0, skipped: 0 },
     "Test Explorer compiles and executes real passing/failing tests and benchmarks"
   );
   await vscode.window.showTextDocument(await vscode.workspace.openTextDocument(math));
-  const lenses = await vscode.commands.executeCommand("vscode.executeCodeLensProvider", math);
+  const lenses = await command("vscode.executeCodeLensProvider", math);
   const referencesLens = lenses.find((lens) => lens.command?.command === "YCPL.references");
   assert.ok(referencesLens, "reference lens has an executable command");
   assert.ok(
-    (await vscode.commands.executeCommand(
-      referencesLens.command.command,
-      ...referencesLens.command.arguments
-    )) > 0,
+    (await command(referencesLens.command.command, ...referencesLens.command.arguments)) > 0,
     "reference lens opens actual reference locations"
   );
-  await vscode.commands.executeCommand("closeReferenceSearch");
+  await command("closeReferenceSearch");
   await vscode.window.showTextDocument(await vscode.workspace.openTextDocument(tests));
   vscode.window.activeTextEditor.selection = new vscode.Selection(1, 10, 1, 10);
   let debugged;
   try {
-    debugged = await deadline(
-      vscode.commands.executeCommand("YCPL.debugTestAtCursor"),
-      90000,
-      "Test Explorer debug did not finish"
-    );
+    debugged = await deadline(command("YCPL.debugTestAtCursor"), 90000, "Test Explorer debug did not finish");
   } catch (error) {
     const session = vscode.debug.activeDebugSession;
     if (session) {
@@ -83,7 +77,7 @@ async function runWorkflows() {
     "other_test.yc",
     'import "./math.yc" as math\npub fn test_other() bool { return math.add(1, 1) == 2 }\n'
   );
-  const coverage = await vscode.commands.executeCommand("YCPL.coverage");
+  const coverage = await command("YCPL.coverage");
   assert.deepEqual(
     { ...coverage, coverage: undefined },
     { coverage: undefined, passed: 4, failed: 1, errored: 0, skipped: 0 },
@@ -93,13 +87,13 @@ async function runWorkflows() {
   assert.ok(coverage.coverage.covered > 0 && coverage.coverage.total >= coverage.coverage.covered);
   const utility = await write("utility.yc", "pub fn identity(value i32) i32 { return value }\n");
   await vscode.window.showTextDocument(await vscode.workspace.openTextDocument(utility));
-  await vscode.commands.executeCommand("YCPL.generateTests");
+  await command("YCPL.generateTests");
   const generated = vscode.window.activeTextEditor.document;
   assert.equal(path.basename(generated.uri.fsPath), "utility_test.yc");
   assert.match(generated.getText(), /test_identity/);
   assert.match(generated.getText(), /return false/);
   await generated.save();
-  await vscode.commands.executeCommand("YCPL.toggleTestFile");
+  await command("YCPL.toggleTestFile");
   assert.equal(vscode.window.activeTextEditor.document.uri.toString(), utility.toString());
   const tasks = await vscode.tasks.fetchTasks({ type: "ycpl" });
   assert.ok(
@@ -111,7 +105,7 @@ async function runWorkflows() {
     'import "std/text" as unused\nimport "std/fmt" as fmt\nfn main() { fmt.println("ok") }\n'
   );
   await vscode.window.showTextDocument(await vscode.workspace.openTextDocument(imported));
-  await vscode.commands.executeCommand("YCPL.organizeImports");
+  await command("YCPL.organizeImports");
   assert.ok(!vscode.window.activeTextEditor.document.getText().includes("unused"));
   await vscode.window.activeTextEditor.document.save();
   const profileSource = await write(
@@ -119,7 +113,7 @@ async function runWorkflows() {
     "fn helper(value i32) i32 { return value + 1 }\nfn main() i32 { return helper(41) - 42 }\n"
   );
   await vscode.window.showTextDocument(await vscode.workspace.openTextDocument(profileSource));
-  const profile = await vscode.commands.executeCommand("YCPL.profile");
+  const profile = await command("YCPL.profile");
   assert.ok(profile, "execution profiler returns its saved report");
   assert.match(await fs.readFile(profile.fsPath, "utf8"), /helper/);
   if (process.platform === "darwin") {
@@ -129,15 +123,15 @@ async function runWorkflows() {
       'import "c/yc_runtime" as runtime\nfn main() i32 { runtime.sleep_millis(3000) return 0 }\n'
     );
     await vscode.window.showTextDocument(await vscode.workspace.openTextDocument(sampled));
-    const cpu = await vscode.commands.executeCommand("YCPL.profileCPU");
+    const cpu = await command("YCPL.profileCPU");
     assert.ok(cpu, "macOS sample captures the real YCPL process");
     assert.match(await fs.readFile(cpu.fsPath, "utf8"), /Sampling|Call graph/);
     await vscode.window.showTextDocument(await vscode.workspace.openTextDocument(profileSource));
-    const memory = await vscode.commands.executeCommand("YCPL.profileMemory");
+    const memory = await command("YCPL.profileMemory");
     assert.ok(memory, "macOS leaks runs the program and returns a report");
     assert.match(await fs.readFile(memory.fsPath, "utf8"), /leak/i);
   }
-  const scratch = await vscode.commands.executeCommand("YCPL.playground");
+  const scratch = await command("YCPL.playground");
   assert.match(scratch.fsPath, /playground/);
   await runDebugger(write, root);
 }
@@ -215,6 +209,11 @@ async function runDebugger(write, root) {
       await vscode.debug.stopDebugging();
   }
 }
+async function command(id, ...args) {
+  console.log(`YCPL workflow: ${id}`);
+  return deadline(vscode.commands.executeCommand(id, ...args), 90000, `${id} did not finish`);
+}
+
 async function deadline(promise, milliseconds, message) {
   let timer;
   try {
@@ -228,4 +227,4 @@ async function deadline(promise, milliseconds, message) {
     clearTimeout(timer);
   }
 }
-module.exports = { runWorkflows };
+module.exports = { runWorkflows, command, deadline };
