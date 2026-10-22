@@ -43,7 +43,12 @@ export async function debugTest(
       session = candidate;
       return {
         onDidSendMessage(message) {
-          if (message.type === "event" && message.event === "exited") code = message.body.exitCode;
+          if (message.type === "event" && message.event === "exited") {
+            code = message.body.exitCode;
+            settle(result());
+          }
+          if (message.type === "event" && message.event === "stopped")
+            record(`Debugger stopped: ${message.body.reason} ${message.body.description ?? ""}\n`);
           if (message.type === "event" && message.event === "output")
             record(message.body.output ?? "", message.body.category === "stderr");
           if (message.type === "response" && message.command === "launch" && !message.success)
@@ -51,6 +56,11 @@ export async function debugTest(
         },
         onError(error) {
           record(`${error.message}\n`, true);
+          settle(result());
+        },
+        onExit() {
+          if (code === -1 && !token.isCancellationRequested)
+            record("Debug adapter exited before reporting the test status.\n", true);
           settle(result());
         }
       };
@@ -74,6 +84,7 @@ export async function debugTest(
         cwd,
         env,
         console: "internalConsole",
+        stopOnEntry: false,
         __ycplTest: id
       },
       { testRun }
@@ -85,6 +96,11 @@ export async function debugTest(
     if (token.isCancellationRequested && session) await vscode.debug.stopDebugging(session);
     return await finished;
   } finally {
+    if (session)
+      await vscode.debug.stopDebugging(session).then(
+        () => undefined,
+        () => undefined
+      );
     cancel.dispose();
     end.dispose();
     tracker.dispose();

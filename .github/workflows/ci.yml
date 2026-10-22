@@ -307,6 +307,7 @@ jobs:
           "$YCC" build examples/basics/hello.yc -g -o "$RUNNER_TEMP/ycpl-debug-smoke"
           "$(brew --prefix lldb)/bin/lldb" --batch -o run -- "$RUNNER_TEMP/ycpl-debug-smoke/merged"
       - name: Test packaged VSIX with both servers
+        timeout-minutes: 10
         run: |
           npm run test:extension --prefix editors/vscode/extension
           npm run test:extension:native --prefix editors/vscode/extension

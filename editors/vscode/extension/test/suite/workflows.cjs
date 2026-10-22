@@ -47,7 +47,33 @@ async function runWorkflows() {
   await vscode.commands.executeCommand("closeReferenceSearch");
   await vscode.window.showTextDocument(await vscode.workspace.openTextDocument(tests));
   vscode.window.activeTextEditor.selection = new vscode.Selection(1, 10, 1, 10);
-  const debugged = await vscode.commands.executeCommand("YCPL.debugTestAtCursor");
+  let debugged;
+  try {
+    debugged = await deadline(
+      vscode.commands.executeCommand("YCPL.debugTestAtCursor"),
+      90000,
+      "Test Explorer debug did not finish"
+    );
+  } catch (error) {
+    const session = vscode.debug.activeDebugSession;
+    if (session) {
+      try {
+        const threads = await deadline(session.customRequest("threads"), 3000, "debug threads");
+        for (const thread of threads.threads ?? [])
+          console.error(
+            "Debug stop:",
+            await deadline(session.customRequest("stackTrace", { threadId: thread.id }), 3000, "debug stack")
+          );
+      } catch (diagnostic) {
+        console.error(String(diagnostic));
+      }
+      void vscode.debug.stopDebugging(session).then(
+        () => undefined,
+        () => undefined
+      );
+    }
+    throw error;
+  }
   assert.deepEqual(
     debugged,
     { passed: 1, failed: 0, errored: 0, skipped: 0 },
@@ -187,6 +213,19 @@ async function runDebugger(write, root) {
     vscode.debug.removeBreakpoints([breakpoint]);
     if (vscode.debug.activeDebugSession?.name === "YCPL integration debug")
       await vscode.debug.stopDebugging();
+  }
+}
+async function deadline(promise, milliseconds, message) {
+  let timer;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise((_resolve, reject) => {
+        timer = setTimeout(() => reject(new Error(message)), milliseconds);
+      })
+    ]);
+  } finally {
+    clearTimeout(timer);
   }
 }
 module.exports = { runWorkflows };
