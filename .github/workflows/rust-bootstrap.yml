@@ -1,0 +1,81 @@
+name: Rust bootstrap
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+concurrency:
+  group: rust-bootstrap-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Cargo and Bazel (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-15, ubuntu-24.04]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+      - name: Linux prerequisites
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential curl gnupg wget libedit-dev libffi-dev libxml2-dev libzstd-dev zlib1g-dev lld
+      - name: Install LLVM 22
+        run: scripts/setup-llvm.sh 22
+      - name: Export LLVM environment
+        shell: bash
+        run: |
+          eval "$(scripts/setup-llvm.sh 22 --print-env)"
+          {
+            echo "LLVM_CONFIG=$LLVM_CONFIG"
+            echo "LLVM_BINDIR=$LLVM_BINDIR"
+            echo "LLVM_DIR=$LLVM_DIR"
+            echo "LLC=$LLVM_BINDIR/llc"
+          } >> "$GITHUB_ENV"
+          echo "$LLVM_BINDIR" >> "$GITHUB_PATH"
+          if [ "$RUNNER_OS" = Linux ]; then
+            wrapper="$RUNNER_TEMP/ycpl-clang"
+            printf '#!/usr/bin/env bash\nexec %q -D_POSIX_C_SOURCE=200809L -no-pie -fuse-ld=lld "$@"\n' "$LLVM_BINDIR/clang" > "$wrapper"
+            chmod +x "$wrapper"
+            echo "CLANG=$wrapper" >> "$GITHUB_ENV"
+            echo 'LINKFLAGS=-no-pie -fuse-ld=lld' >> "$GITHUB_ENV"
+          else
+            echo "CLANG=$LLVM_BINDIR/clang" >> "$GITHUB_ENV"
+          fi
+      - name: Install Rust 1.97.1
+        run: |
+          rustup toolchain install 1.97.1 --profile minimal --component rustfmt --component clippy
+          rustup override set 1.97.1
+      - uses: bazelbuild/setup-bazelisk@v3
+      - uses: actions/cache@v6
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            ~/.cache/bazel
+          key: rust-bootstrap-${{ runner.os }}-${{ hashFiles('bootstrap/rust/Cargo.lock', 'MODULE.bazel', 'MODULE.bazel.lock') }}
+          restore-keys: rust-bootstrap-${{ runner.os }}-
+      - name: Cargo, format, CLI, conformance and Rust-seeded fixed point
+        run: |
+          mkdir -p build/rust-verification
+          bootstrap/rust/verify.sh cargo 2>&1 | tee build/rust-verification/cargo.log
+      - name: Native Bazel bridge and Rust-seeded fixed point
+        run: bootstrap/rust/verify.sh bazel 2>&1 | tee build/rust-verification/bazel.log
+      - name: Upload verification logs
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: rust-bootstrap-${{ runner.os }}
+          path: build/rust-verification/*.log

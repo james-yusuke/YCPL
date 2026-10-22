@@ -31,6 +31,7 @@ library, examples, and a YCPL-written LSP. Source files use the `.yc` extension.
 
 ```text
 bootstrap/cpp/          C++ seed and reference compiler
+bootstrap/rust/         independent Rust seed with a cxx/LLVM C++ bridge
 compiler/ycpl/          self-hosted YCPL compiler
 bootstrap/cpp/runtime/  external managed-allocation runtime
 stl/c/                  C and LLVM API declarations
@@ -48,6 +49,9 @@ binaries with `build`, and builds then executes with `run`.
 ## Build
 
 LLVM 22, `llc`, and `clang` remain external prerequisites.
+
+The optional [Rust seed](bootstrap/rust/README.md) supports Cargo and native
+Bazel builds, with a separate Rust-seeded stage1–3 fixed-point check.
 
 ```sh
 eval "$(scripts/setup-llvm.sh 22 --print-env)"

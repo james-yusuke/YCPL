@@ -21,6 +21,11 @@ stage3, and stage3 is promoted as the standard `ycc`.
 
 ## Recommended Verification
 
+The optional [Rust seed](../bootstrap/rust/README.md) provides an independent
+chain through `//:ycc-stage1-from-rust`, `//:ycc-stage2-from-rust` and
+`//:ycc-stage3-from-rust`. Run `bootstrap/rust/verify.sh cargo` or
+`bootstrap/rust/verify.sh bazel` for conformance and the same fixed-point oracle.
+
 Configure LLVM 22 and let Bazel generate every stage:
 
 ```sh

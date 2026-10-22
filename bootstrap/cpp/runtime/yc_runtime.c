@@ -33,6 +33,8 @@ typedef struct YcAllocHeader {
     struct YcAllocHeader *first_child;
     struct YcAllocHeader *sibling_prev;
     struct YcAllocHeader *sibling_next;
+    struct YcAllocHeader *range_left;
+    struct YcAllocHeader *range_right;
 } YcAllocHeader;
 
 static YcAllocHeader *yc_head = NULL;
@@ -43,6 +45,7 @@ static YcAllocHeader **yc_registry = NULL;
 static size_t yc_registry_cap = 0;
 static size_t yc_registry_count = 0;
 static size_t yc_registry_used = 0;
+static YcAllocHeader *yc_ranges = NULL;
 
 #define YC_REGISTRY_TOMBSTONE ((YcAllocHeader *)(uintptr_t)1)
 
@@ -54,6 +57,67 @@ static uintptr_t yc_ptr_hash(void *ptr) {
     x *= (uintptr_t)0xc4ceb9fe1a85ec53ULL;
     x ^= x >> 33;
     return x;
+}
+
+// An address-ordered treap provides interior-pointer lookup without scanning
+// every live allocation. Its priority is independent of allocation order.
+static YcAllocHeader *yc_range_merge(YcAllocHeader *left, YcAllocHeader *right) {
+    if (!left) return right;
+    if (!right) return left;
+    if (yc_ptr_hash(left) < yc_ptr_hash(right)) {
+        left->range_right = yc_range_merge(left->range_right, right);
+        return left;
+    }
+    right->range_left = yc_range_merge(left, right->range_left);
+    return right;
+}
+
+static YcAllocHeader *yc_range_insert(YcAllocHeader *root, YcAllocHeader *node) {
+    if (!root) return node;
+    if ((uintptr_t)node < (uintptr_t)root) {
+        root->range_left = yc_range_insert(root->range_left, node);
+        if (yc_ptr_hash(root->range_left) < yc_ptr_hash(root)) {
+            YcAllocHeader *next = root->range_left;
+            root->range_left = next->range_right;
+            next->range_right = root;
+            return next;
+        }
+    } else {
+        root->range_right = yc_range_insert(root->range_right, node);
+        if (yc_ptr_hash(root->range_right) < yc_ptr_hash(root)) {
+            YcAllocHeader *next = root->range_right;
+            root->range_right = next->range_left;
+            next->range_left = root;
+            return next;
+        }
+    }
+    return root;
+}
+
+static YcAllocHeader *yc_range_remove(YcAllocHeader *root, YcAllocHeader *node) {
+    if (!root) return NULL;
+    if (root == node) return yc_range_merge(root->range_left, root->range_right);
+    if ((uintptr_t)node < (uintptr_t)root) {
+        root->range_left = yc_range_remove(root->range_left, node);
+    } else {
+        root->range_right = yc_range_remove(root->range_right, node);
+    }
+    return root;
+}
+
+static YcAllocHeader *yc_range_find(void *ptr) {
+    uintptr_t address = (uintptr_t)ptr;
+    YcAllocHeader *node = yc_ranges;
+    YcAllocHeader *candidate = NULL;
+    while (node) {
+        if (address < (uintptr_t)(node + 1)) {
+            node = node->range_left;
+        } else {
+            candidate = node;
+            node = node->range_right;
+        }
+    }
+    return candidate && address - (uintptr_t)(candidate + 1) < candidate->size ? candidate : NULL;
 }
 
 static int yc_registry_resize(size_t next_cap) {
@@ -241,7 +305,8 @@ static YcAllocHeader *yc_header_from_ptr(void *ptr) {
 }
 
 static YcAllocHeader *yc_header_containing_ptr(void *ptr) {
-    return yc_header_from_ptr(ptr);
+    YcAllocHeader *header = yc_header_from_ptr(ptr);
+    return header ? header : yc_range_find(ptr);
 }
 
 static YcAllocHeader *yc_owner_root(YcAllocHeader *header) {
@@ -328,6 +393,7 @@ static void yc_release_header(YcAllocHeader *header) {
     yc_frame_unlink(header);
     yc_unlink(header);
     yc_registry_remove(header);
+    yc_ranges = yc_range_remove(yc_ranges, header);
     header->magic = 0;
     free(header);
 }
@@ -337,6 +403,7 @@ void yc_runtime_init(void) {
 }
 
 void yc_runtime_shutdown(void) {
+    yc_ranges = NULL;
     while (yc_head) {
         YcAllocHeader *next = yc_head->next;
         yc_head->magic = 0;
@@ -387,9 +454,12 @@ void *yc_alloc(size_t size) {
     header->first_child = NULL;
     header->sibling_prev = NULL;
     header->sibling_next = NULL;
+    header->range_left = NULL;
+    header->range_right = NULL;
     yc_link(header);
     yc_frame_link(header, yc_current_frame);
     yc_registry_insert(header);
+    yc_ranges = yc_range_insert(yc_ranges, header);
     return (void *)(header + 1);
 }
 
@@ -449,6 +519,20 @@ void yc_attach_child(void *parent, void *child) {
         return;
     }
     yc_link_owner(parent_header, child_header);
+}
+
+// A field pointer may refer into a collection's backing storage. Attach new
+// fields to the collection graph, so reallocating the backing storage cannot
+// release the fields that were copied to the replacement allocation.
+void yc_attach_child_to_owner(void *parent, void *child) {
+    if (!parent || !yc_header_from_ptr(child)) {
+        return;
+    }
+    YcAllocHeader *header = yc_header_containing_ptr(parent);
+    YcAllocHeader *root = yc_owner_root(header);
+    if (root) {
+        yc_attach_child(root + 1, child);
+    }
 }
 
 void yc_replace_child(void *parent, void *old_child, void *new_child) {

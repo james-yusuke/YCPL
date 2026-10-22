@@ -1,0 +1,25 @@
+[package]
+name = "ycpl-bootstrap-rust"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.97.1"
+build = "build.rs"
+
+[[bin]]
+name = "ycc-bootstrap-rust"
+path = "src/main.rs"
+
+[dependencies]
+cxx = "=1.0.205"
+serde_json = "1"
+shlex = "1"
+
+[build-dependencies]
+cxx-build = "=1.0.205"
+shlex = "1"
+
+[dev-dependencies]
+tempfile = "3"
+
+[package.metadata.tools]
+cxxbridge-cmd = "=1.0.205"

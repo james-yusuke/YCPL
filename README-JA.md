@@ -31,6 +31,7 @@ managed runtime、標準ライブラリ、examples、YCPL製LSPを含む実験�
 
 ```text
 bootstrap/cpp/          C++ seed/reference compiler
+bootstrap/rust/         cxx/LLVM C++ bridge を使う独立した Rust seed
 compiler/ycpl/          セルフホストYCPLコンパイラ
 bootstrap/cpp/runtime/  外部managed-allocation runtime
 stl/c/                  C APIおよびLLVM API宣言

@@ -1,7 +1,57 @@
 load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_test")
 load("@rules_shell//shell:sh_test.bzl", "sh_test")
+load("//bootstrap/rust:stages.bzl", "rust_seed_stages")
 
 package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "stl_sources",
+    srcs = glob(["stl/**"]),
+)
+
+alias(
+    name = "ycc-bootstrap-rust",
+    actual = "//bootstrap/rust:ycc-bootstrap-rust",
+)
+
+rust_seed_stages(name = "rust")
+
+sh_test(
+    name = "rust_conformance_test",
+    timeout = "eternal",
+    srcs = ["//bootstrap/rust:test_conformance.sh"],
+    args = ["$(rootpath :ycc-bootstrap-rust)"],
+    data = [
+        "tests/run_bootstrap_regression.sh",
+        "tests/run_conformance.sh",
+        ":yc_runtime_src",
+        ":ycc-bootstrap-rust",
+    ] + glob([
+        "stl/**",
+        "examples/**",
+        "tests/fixtures/**",
+    ]),
+    tags = ["exclusive"],
+)
+
+sh_test(
+    name = "rust_self_host_test",
+    timeout = "eternal",
+    srcs = ["//bootstrap/rust:test_fixed_point.sh"],
+    data = [
+        "tests/run_bootstrap_regression.sh",
+        "tests/run_conformance.sh",
+        ":yc_runtime_src",
+        ":ycc-stage2-from-rust",
+        ":ycc-stage3-from-rust",
+    ] + glob([
+        "compiler/ycpl/**",
+        "stl/**",
+        "examples/**",
+        "tests/fixtures/**",
+    ]),
+    tags = ["exclusive"],
+)
 
 cc_library(
     name = "ycclib",
@@ -122,31 +172,32 @@ genrule(
 
 genrule(
     name = "ycc_bin",
+    srcs = [":ycc-stage3"],
     outs = ["ycc"],
     cmd = "cp $(location :ycc-stage3) $@ && chmod +x $@",
     executable = True,
-    srcs = [":ycc-stage3"],
 )
 
 genrule(
     name = "ycc_ycpl_alias",
+    srcs = [":ycc"],
     outs = ["ycc-ycpl"],
     cmd = "cp $(location :ycc) $@ && chmod +x $@",
     executable = True,
-    srcs = [":ycc"],
 )
 
 sh_test(
     name = "ycc_ycpl_test",
+    timeout = "eternal",
     srcs = ["//tools/bazel:run_self_host_fixed_point_test.sh"],
     data = [
+        "tests/run_bootstrap_regression.sh",
+        "tests/run_conformance.sh",
+        ":yc_runtime_src",
         ":ycc",
         ":ycc-stage2",
         ":ycc-stage3",
         ":ycc-ycpl",
-        ":yc_runtime_src",
-        "tests/run_bootstrap_regression.sh",
-        "tests/run_conformance.sh",
     ] + glob([
         "compiler/ycpl/**",
         "examples/**",
@@ -154,20 +205,20 @@ sh_test(
         "tests/fixtures/**",
     ]),
     tags = ["exclusive"],
-    timeout = "eternal",
 )
 
 sh_test(
     name = "self_host_stage_test",
+    timeout = "eternal",
     srcs = ["//tools/bazel:run_self_host_fixed_point_test.sh"],
     data = [
+        "tests/run_bootstrap_regression.sh",
+        "tests/run_conformance.sh",
+        ":yc_runtime_src",
         ":ycc",
         ":ycc-stage2",
         ":ycc-stage3",
         ":ycc-ycpl",
-        ":yc_runtime_src",
-        "tests/run_bootstrap_regression.sh",
-        "tests/run_conformance.sh",
     ] + glob([
         "compiler/ycpl/**",
         "examples/**",
@@ -175,15 +226,14 @@ sh_test(
         "tests/fixtures/**",
     ]),
     tags = ["exclusive"],
-    timeout = "eternal",
 )
 
 sh_test(
     name = "examples_test",
     srcs = ["//tools/bazel:run_examples_test.sh"],
     data = [
-        ":ycc",
         ":yc_runtime_src",
+        ":ycc",
     ] + glob([
         "examples/**",
         "stl/**",
@@ -195,8 +245,8 @@ sh_test(
     name = "lsp_protocol_test",
     srcs = ["//tools/bazel:run_lsp_protocol_test.sh"],
     data = [
-        ":ycc",
         ":yc_runtime_src",
+        ":ycc",
     ] + glob([
         "stl/**",
         "tools/lsp/**",

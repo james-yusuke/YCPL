@@ -15,6 +15,7 @@ void *yc_calloc(size_t count, size_t size);
 void *yc_realloc(void *ptr, size_t size);
 void yc_release(void *ptr);
 void yc_attach_child(void *parent, void *child);
+void yc_attach_child_to_owner(void *parent, void *child);
 void yc_replace_child(void *parent, void *old_child, void *new_child);
 void *yc_move_to_parent(void *ptr);
 void *yc_move_to_ancestor(void *ptr, size_t levels);

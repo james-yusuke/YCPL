@@ -88,6 +88,58 @@ static void test_unmanaged_pointer_is_ignored(void) {
     yc_runtime_shutdown();
 }
 
+static void test_fields_survive_backing_storage_replacement(void) {
+    yc_runtime_init();
+    yc_frame_push();
+    void *collection = yc_alloc(8);
+    char *backing = yc_alloc(64);
+    yc_attach_child(collection, backing);
+    yc_frame_push();
+    char *first = yc_alloc(8);
+    char *later = yc_alloc(8);
+    strcpy(first, "first");
+    strcpy(later, "later");
+    yc_attach_child_to_owner(backing, first);
+    yc_attach_child_to_owner(backing + 32, later);
+    yc_frame_pop();
+    assert(yc_runtime_live_allocations() == 4);
+    yc_release(backing);
+    assert(strcmp(first, "first") == 0);
+    assert(strcmp(later, "later") == 0);
+    assert(yc_runtime_live_allocations() == 3);
+    yc_release(collection);
+    assert(yc_runtime_live_allocations() == 0);
+    yc_frame_pop();
+    yc_runtime_shutdown();
+}
+
+static void test_interior_pointer_index_under_allocation_churn(void) {
+    enum { count = 4096 };
+    unsigned char *blocks[count];
+    yc_runtime_init();
+    yc_frame_push();
+    yc_frame_push();
+    for (size_t i = 0; i < count; ++i) {
+        blocks[i] = yc_alloc(32);
+        assert(blocks[i] != NULL);
+        blocks[i][17] = (unsigned char)i;
+    }
+    for (size_t i = 0; i < count; ++i) {
+        size_t index = (i * 4051) % count;
+        yc_move_to_parent(blocks[index] + 17);
+    }
+    yc_frame_pop();
+    assert(yc_runtime_live_allocations() == count);
+    for (size_t i = 0; i < count; ++i) {
+        size_t index = (i * 4051) % count;
+        assert(blocks[index][17] == (unsigned char)index);
+        yc_release(blocks[index]);
+        assert(yc_runtime_live_allocations() == count - i - 1);
+    }
+    yc_frame_pop();
+    yc_runtime_shutdown();
+}
+
 static void test_portable_compiler_support(void) {
     char root[256];
     char src[280];
@@ -168,6 +220,8 @@ int main(void) {
     test_selective_escape_and_unbounded_children();
     test_nested_owner_graph();
     test_unmanaged_pointer_is_ignored();
+    test_fields_survive_backing_storage_replacement();
+    test_interior_pointer_index_under_allocation_churn();
     test_portable_compiler_support();
     return 0;
 }

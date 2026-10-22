@@ -1,0 +1,89 @@
+load("@rules_cc//cc:defs.bzl", "cc_library")
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_test")
+load("@rules_shell//shell:sh_test.bzl", "sh_test")
+
+package(default_visibility = ["//visibility:public"])
+
+exports_files([
+    "Cargo.toml",
+    "Cargo.lock",
+    "test_conformance.sh",
+    "test_fixed_point.sh",
+])
+
+# Both build systems compile this bridge definition and the same LLVM wrapper.
+# cxxbridge is built as a host Rust binary by rules_rust, without `cargo build`.
+genrule(
+    name = "cxx_bridge",
+    srcs = ["src/bridge.rs"],
+    outs = [
+        "generated/bridge.rs.h",
+        "generated/bridge.rs.cc",
+    ],
+    cmd = "$(execpath @cxx//:codegen) $(execpath src/bridge.rs) -o $(execpath generated/bridge.rs.h) -o $(execpath generated/bridge.rs.cc)",
+    tools = ["@cxx//:codegen"],
+)
+
+genrule(
+    name = "cxx_header",
+    outs = ["generated/rust/cxx.h"],
+    cmd = "$(execpath @cxx//:codegen) --header > $@",
+    tools = ["@cxx//:codegen"],
+)
+
+cc_library(
+    name = "llvm_bridge",
+    srcs = [
+        "generated/bridge.rs.cc",
+        "src/llvm_bridge.cc",
+    ],
+    hdrs = [
+        "generated/rust/cxx.h",
+        "include/llvm_bridge.h",
+    ],
+    copts = [
+        "-std=c++20",
+        "-fexceptions",
+    ],
+    includes = [
+        "generated",
+        "include",
+    ],
+    deps = ["@llvm_config//:llvm"],
+)
+
+rust_binary(
+    name = "ycc-bootstrap-rust",
+    srcs = glob(["src/**/*.rs"]),
+    crate_name = "ycc_bootstrap_rust",
+    crate_root = "src/main.rs",
+    data = [
+        "//:stl_sources",
+        "//:yc_runtime_src",
+    ],
+    edition = "2024",
+    link_deps = [":llvm_bridge"],
+    rustc_env = {"CARGO_MANIFEST_DIR": "bootstrap/rust"},
+    deps = [
+        "@rust_crates//:cxx",
+        "@rust_crates//:serde_json",
+        "@rust_crates//:shlex",
+    ],
+)
+
+rust_test(
+    name = "unit_tests",
+    crate = ":ycc-bootstrap-rust",
+    deps = ["@rust_crates//:tempfile"],
+)
+
+sh_test(
+    name = "cli_test",
+    srcs = ["test_cli.sh"],
+    args = ["$(rootpath :ycc-bootstrap-rust)"],
+    data = [
+        ":ycc-bootstrap-rust",
+        "//:stl_sources",
+        "//:yc_runtime_src",
+    ],
+)

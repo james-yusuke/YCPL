@@ -5,6 +5,11 @@
 YCPLの標準コンパイラ`ycc`はYCPLで実装されています。C++版
 `ycc-bootstrap`は初回seedとreference専用です。
 
+[Rust seed](../bootstrap/rust/README.ja.md) の独立した生成経路も利用できます。
+公開ターゲットは `//:ycc-stage1-from-rust`・`//:ycc-stage2-from-rust`・
+`//:ycc-stage3-from-rust` です。`bootstrap/rust/verify.sh cargo` または
+`bootstrap/rust/verify.sh bazel` で conformance と既存 oracle による固定点を確認します。
+
 ## 生成チェーン
 
 ```text
