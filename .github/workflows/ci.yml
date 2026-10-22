@@ -297,6 +297,16 @@ jobs:
       - name: Build self-hosted compiler for editor tests
         run: |
           eval "$(scripts/setup-llvm.sh 22 --print-env)"
+          if [ "$RUNNER_OS" = Linux ]; then
+            editor_clang="$RUNNER_TEMP/ycpl-editor-clang"
+            {
+              echo '#!/usr/bin/env bash'
+              printf 'exec %q -D_POSIX_C_SOURCE=200809L -no-pie -fuse-ld=lld "$@"\n' "$LLVM_BINDIR/clang"
+            } > "$editor_clang"
+            chmod +x "$editor_clang"
+            export CLANG="$editor_clang"
+            export LINKFLAGS='-no-pie -fuse-ld=lld'
+          fi
           cmake -S . -B build/editor-ci-bootstrap -DCMAKE_BUILD_TYPE=Release
           cmake --build build/editor-ci-bootstrap --parallel 4
           (cd compiler/ycpl && ../../build/editor-ci-bootstrap/ycc build -o ../../build/editor-ci-compiler)
@@ -304,6 +314,9 @@ jobs:
             echo "LLVM_CONFIG=$LLVM_CONFIG"
             echo "LLVM_BINDIR=$LLVM_BINDIR"
             echo "LLVM_DIR=$LLVM_DIR"
+            echo "LLC=$LLC"
+            echo "CLANG=$CLANG"
+            echo "LINKFLAGS=$LINKFLAGS"
             echo "YCC=$GITHUB_WORKSPACE/build/editor-ci-compiler/ycc"
             echo "YCPL_TEST_COMPILER=$GITHUB_WORKSPACE/build/editor-ci-compiler/ycc"
             echo "YCPL_RUNTIME_SRC=$GITHUB_WORKSPACE/bootstrap/cpp/runtime/yc_runtime.c"
