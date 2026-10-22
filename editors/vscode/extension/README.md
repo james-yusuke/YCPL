@@ -83,6 +83,9 @@ compiler's `-g` flag and unoptimized LLVM code. Source breakpoints, stepping, st
 frames, parameters and local values are available. Structs carry field metadata;
 recursive/managed containers currently expose their underlying handles rather than
 Go-style collection visualizers. Debug objects are retained until the session ends.
+External symbol lookup is disabled by default so startup does not wait for network
+debug-symbol servers. Enable `YCPL.debug.externalSymbols` when needed. Local YCPL
+DWARF remains available; `launch.json` also accepts additional LLDB `initCommands`.
 
 ```json
 {

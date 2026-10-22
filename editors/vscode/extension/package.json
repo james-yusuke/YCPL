@@ -297,6 +297,12 @@
           "scope": "resource",
           "description": "Path to lldb-dap (LLVM 22 or newer). Discovered from LLVM_BINDIR, Homebrew lldb, PATH, or standard LLVM paths when empty."
         },
+        "YCPL.debug.externalSymbols": {
+          "type": "boolean",
+          "default": false,
+          "scope": "resource",
+          "description": "Allow LLDB external symbol lookup, including network symbol servers. Local YCPL debug information remains available when disabled."
+        },
         "YCPL.testing.benchmarkIterations": {
           "type": "integer",
           "minimum": 1,
@@ -446,6 +452,13 @@
               "stopOnEntry": {
                 "type": "boolean",
                 "default": false
+              },
+              "initCommands": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "LLDB startup commands, applied after the YCPL external-symbol policy."
               },
               "console": {
                 "type": "string",

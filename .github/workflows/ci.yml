@@ -334,6 +334,7 @@ jobs:
           tools/lsp/run_tests.sh
           tests/test_development_workflows.sh
       - name: Check LLDB adapter installation
+        timeout-minutes: 1
         run: |
           editor_debugger_bin="$LLVM_BINDIR"
           if [ "$RUNNER_OS" = macOS ]; then
@@ -341,7 +342,7 @@ jobs:
           fi
           "$editor_debugger_bin/lldb-dap" --version
           "$YCC" build examples/basics/hello.yc -g -o "$RUNNER_TEMP/ycpl-debug-smoke"
-          "$editor_debugger_bin/lldb" --batch -o run -- "$RUNNER_TEMP/ycpl-debug-smoke/merged"
+          "$editor_debugger_bin/lldb" --batch -O 'settings set symbols.enable-external-lookup false' -o run -- "$RUNNER_TEMP/ycpl-debug-smoke/merged"
       - name: Test packaged VSIX with both servers
         timeout-minutes: 5
         run: |

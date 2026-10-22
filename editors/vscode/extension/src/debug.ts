@@ -138,17 +138,24 @@ export function registerDebugging(context: vscode.ExtensionContext, output: vsco
       provideDebugConfigurations: () => [
         { type: "ycpl", request: "launch", name: "YCPL: Debug File", program: "${file}", stopOnEntry: false }
       ],
-      resolveDebugConfiguration(_folder, configuration) {
+      resolveDebugConfiguration(folder, configuration) {
         if (!vscode.workspace.isTrusted) {
           void vscode.window.showWarningMessage("Trust this workspace before debugging YCPL programs.");
           return undefined;
         }
+        const externalSymbols = vscode.workspace
+          .getConfiguration("YCPL", folder?.uri)
+          .get<boolean>("debug.externalSymbols", false);
         return {
           ...configuration,
           type: configuration.type || "ycpl",
           request: configuration.request || "launch",
           name: configuration.name || "YCPL: Debug",
-          program: configuration.program ?? "${file}"
+          program: configuration.program ?? "${file}",
+          initCommands: [
+            ...(externalSymbols ? [] : ["settings set symbols.enable-external-lookup false"]),
+            ...(configuration.initCommands ?? [])
+          ]
         };
       },
       async resolveDebugConfigurationWithSubstitutedVariables(folder, configuration, token) {

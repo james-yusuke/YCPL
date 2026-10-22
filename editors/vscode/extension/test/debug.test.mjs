@@ -113,3 +113,37 @@ test(
 test("cancelling a debug test does not wait for the debug UI", { timeout: 1000 }, async () => {
   assert.equal((await scenario("cancel")).cancelled, true);
 });
+
+test("debug startup uses local symbols by default and preserves explicit LLDB commands", async () => {
+  for (const externalSymbols of [false, true]) {
+    let provider;
+    globalThis.__ycplDebugFixture = {
+      workspace: {
+        isTrusted: true,
+        getConfiguration: () => ({ get: () => externalSymbols })
+      },
+      commands: { registerCommand: () => ({ dispose() {} }) },
+      debug: {
+        registerDebugConfigurationProvider(_type, value) {
+          provider = value;
+          return { dispose() {} };
+        },
+        registerDebugAdapterDescriptorFactory: () => ({ dispose() {} }),
+        onDidTerminateDebugSession: () => ({ dispose() {} })
+      }
+    };
+    try {
+      const url = `data:text/javascript;base64,${Buffer.from(outputFiles[0].text).toString("base64")}#${generation++}`;
+      const { registerDebugging } = await import(url);
+      registerDebugging({ subscriptions: [] }, {});
+      const command = "settings set target.max-children-count 64";
+      const resolved = provider.resolveDebugConfiguration(undefined, { initCommands: [command] });
+      assert.deepEqual(
+        resolved.initCommands,
+        externalSymbols ? [command] : ["settings set symbols.enable-external-lookup false", command]
+      );
+    } finally {
+      delete globalThis.__ycplDebugFixture;
+    }
+  }
+});

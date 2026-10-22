@@ -76,6 +76,10 @@ Debug は LLVM 22 以降の `lldb-dap` を使います。見つからなけれ�
 表示できます。構造体にはフィールド情報を付けます。再帰型や managed container の
 表示は現状の内部ハンドルに基づき、Go 専用のコレクション表示とは異なります。
 オブジェクトファイルはデバッグセッション終了まで保持します。
+外部シンボル探索は既定で無効にし、ネットワーク上の debug symbol server に
+接続せず起動できます。必要な場合は `YCPL.debug.externalSymbols` を有効にします。
+ローカルの YCPL DWARF は常に利用できます。`launch.json` の `initCommands` で
+追加の LLDB 初期化コマンドも指定できます。
 
 ```json
 {
