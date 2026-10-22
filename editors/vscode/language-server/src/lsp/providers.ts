@@ -22,6 +22,8 @@ import {
   MarkupKind,
   Position,
   Range,
+  ResponseError,
+  ErrorCodes,
   SemanticTokens,
   SemanticTokensBuilder,
   SignatureHelp,
@@ -68,6 +70,15 @@ import { StandardLibraryIndex, type StandardLibrarySymbol } from "../analysis/st
 import { lineText, offsetAt, rangeFromOffsets, wordAtPosition } from "../analysis/text.js";
 import type { WorkspaceIndex } from "../analysis/workspaceIndex.js";
 import type { CompilerBridge } from "../compiler/compilerBridge.js";
+import {
+  extractFunction,
+  extractVariable,
+  fillStruct,
+  formatSource,
+  inferredType,
+  inlineVariable,
+  organizeImports
+} from "../analysis/editing.js";
 
 const tokenTypeMap = new Map(semanticTokenTypes.map((name, index) => [name, index]));
 const tokenModifierMap = new Map(semanticTokenModifiers.map((name, index) => [name, 1 << index]));
@@ -90,12 +101,19 @@ export class YcplProviders {
   /** Provides context-aware completions for YCPL documents. */
   async completion(params: CompletionParams): Promise<CompletionItem[]> {
     const document = this.requireDocument(params.textDocument.uri);
-    const line = lineText(document.text, document.lineOffsets, params.position.line).slice(0, params.position.character);
+    const line = lineText(document.text, document.lineOffsets, params.position.line).slice(
+      0,
+      params.position.character
+    );
     const stdlibItems = await this.stdlib.completionItems();
     if (/\bimport\s+"[^"]*$/.test(line)) {
       return stdlibItems
         .filter((item) => item.kind === CompletionItemKind.Module)
-        .map((item) => ({ label: item.modulePath, kind: item.kind, detail: item.detail }));
+        .map((item) => ({
+          label: item.modulePath,
+          kind: item.kind,
+          detail: item.detail
+        }));
     }
     if (line.trimEnd().endsWith(".")) {
       const alias = line.trimEnd().match(/([A-Za-z_][A-Za-z0-9_]*)\.$/)?.[1];
@@ -106,7 +124,10 @@ export class YcplProviders {
     const stdItems = this.stdlibFunctionCompletions(document, stdlibItems);
     return [
       ...keywords.map((label) => ({ label, kind: CompletionItemKind.Keyword })),
-      ...primitiveTypes.map((label) => ({ label, kind: CompletionItemKind.TypeParameter })),
+      ...primitiveTypes.map((label) => ({
+        label,
+        kind: CompletionItemKind.TypeParameter
+      })),
       {
         label: "main",
         kind: CompletionItemKind.Snippet,
@@ -158,7 +179,10 @@ export class YcplProviders {
     const doc = symbol.documentation ? `\n\n${symbol.documentation}` : "";
     const type = symbol.typeName ? `\n\nType: \`${symbol.typeName}\`` : "";
     return {
-      contents: { kind: MarkupKind.Markdown, value: `${signature}${type}${doc}` },
+      contents: {
+        kind: MarkupKind.Markdown,
+        value: `${signature}${type}${doc}`
+      },
       range: word.range
     };
   }
@@ -171,6 +195,17 @@ export class YcplProviders {
       return [];
     }
     return [Location.create(symbol.uri, symbol.selectionRange)];
+  }
+
+  typeDefinition(params: DefinitionParams): Location[] {
+    const document = this.requireDocument(params.textDocument.uri);
+    const symbol = this.symbolForPosition(document, params.position);
+    if (!symbol) return [];
+    if (isTypeCategory(symbol.category)) return [Location.create(symbol.uri, symbol.selectionRange)];
+    const owner = this.index.getDocument(symbol.uri) ?? document;
+    const name = inferredType(owner, symbol);
+    const target = name ? this.index.resolveType(owner, name) : undefined;
+    return target ? [Location.create(target.uri, target.selectionRange)] : [];
   }
 
   /** Provides implementation locations. */
@@ -195,6 +230,27 @@ export class YcplProviders {
     if (!symbol) {
       return undefined;
     }
+    if (
+      !/^[A-Za-z_]\w*$/.test(params.newName) ||
+      keywords.includes(params.newName as (typeof keywords)[number]) ||
+      primitiveTypes.includes(params.newName as (typeof primitiveTypes)[number])
+    ) {
+      throw new ResponseError(ErrorCodes.InvalidParams, "Choose a valid YCPL identifier.");
+    }
+    const owner = this.index.getDocument(symbol.uri) ?? document;
+    if (
+      owner.symbols.some(
+        (candidate) =>
+          candidate.id !== symbol.id &&
+          candidate.scopeId === symbol.scopeId &&
+          candidate.name === params.newName
+      )
+    ) {
+      throw new ResponseError(
+        ErrorCodes.InvalidParams,
+        `The name '${params.newName}' is already declared in this scope.`
+      );
+    }
     const changes: Record<string, TextEdit[]> = {};
     for (const location of this.index.findReferencesBySymbolId(symbol.id, true)) {
       changes[location.uri] = changes[location.uri] ?? [];
@@ -206,7 +262,10 @@ export class YcplProviders {
   /** Validates a rename request and returns the target range. */
   prepareRename(params: PrepareRenameParams): Range | undefined {
     const document = this.requireDocument(params.textDocument.uri);
-    return this.index.referenceAt(document.uri, params.position)?.range ?? this.index.declarationAt(document.uri, params.position)?.selectionRange;
+    return (
+      this.index.referenceAt(document.uri, params.position)?.range ??
+      this.index.declarationAt(document.uri, params.position)?.selectionRange
+    );
   }
 
   /** Provides outline symbols for one document. */
@@ -214,7 +273,15 @@ export class YcplProviders {
     const document = this.requireDocument(params.textDocument.uri);
     return document.symbols
       .filter((symbol) => symbol.category !== "parameter")
-      .map((symbol) => DocumentSymbol.create(symbol.name, symbol.detail ?? symbol.category, symbol.kind, symbol.range, symbol.selectionRange));
+      .map((symbol) =>
+        DocumentSymbol.create(
+          symbol.name,
+          symbol.detail ?? symbol.category,
+          symbol.kind,
+          symbol.range,
+          symbol.selectionRange
+        )
+      );
   }
 
   /** Provides global workspace symbols. */
@@ -231,12 +298,18 @@ export class YcplProviders {
     if (!match) {
       return undefined;
     }
-    const symbol = this.functionSymbolForCallMatch(document, match, offset - prefix.length + (match.index ?? 0));
+    const symbol = this.functionSymbolForCallMatch(
+      document,
+      match,
+      offset - prefix.length + (match.index ?? 0)
+    );
     if (!symbol?.parameters) {
       return undefined;
     }
     const signature = SignatureInformation.create(symbol.detail ?? `${symbol.name}()`);
-    signature.parameters = symbol.parameters.map((param) => ({ label: param.typeName ? `${param.name} ${param.typeName}` : param.name }));
+    signature.parameters = symbol.parameters.map((param) => ({
+      label: param.typeName ? `${param.name} ${param.typeName}` : param.name
+    }));
     return {
       signatures: [signature],
       activeSignature: 0,
@@ -249,8 +322,16 @@ export class YcplProviders {
     const document = this.requireDocument(params.textDocument.uri);
     const builder = new SemanticTokensBuilder();
     const pushed = new Set<string>();
-    const tokens: Array<{ range: Range; kind: SemanticKind; modifiers: Array<typeof semanticTokenModifiers[number]> }> = [];
-    const addToken = (range: Range, kind: SemanticKind, modifiers: Array<typeof semanticTokenModifiers[number]> = []) => {
+    const tokens: Array<{
+      range: Range;
+      kind: SemanticKind;
+      modifiers: Array<(typeof semanticTokenModifiers)[number]>;
+    }> = [];
+    const addToken = (
+      range: Range,
+      kind: SemanticKind,
+      modifiers: Array<(typeof semanticTokenModifiers)[number]> = []
+    ) => {
       const key = rangeKey(range);
       if (pushed.has(key)) {
         return;
@@ -260,7 +341,11 @@ export class YcplProviders {
     };
 
     for (const symbol of document.symbols) {
-      addToken(symbol.selectionRange, categoryToSemanticKind(symbol.category), symbol.exported ? ["declaration"] : []);
+      addToken(
+        symbol.selectionRange,
+        categoryToSemanticKind(symbol.category),
+        symbol.exported ? ["declaration"] : []
+      );
     }
 
     for (const reference of document.references) {
@@ -274,11 +359,15 @@ export class YcplProviders {
       const range = rangeFromOffsets(document.lineOffsets, span.start, span.end);
       for (let line = range.start.line; line <= range.end.line; line += 1) {
         const start = line === range.start.line ? range.start.character : 0;
-        const end = line === range.end.line ? range.end.character : lineText(document.text, document.lineOffsets, line).length;
+        const end =
+          line === range.end.line
+            ? range.end.character
+            : lineText(document.text, document.lineOffsets, line).length;
         if (end > start) addToken(Range.create(line, start, line, end), span.kind);
       }
     }
-    const pattern = /\b[A-Za-z_][A-Za-z0-9_]*\b|0x[0-9A-Fa-f]+|0b[01]+|[0-9]+(?:\.[0-9]+)?|(:=|==|!=|<=|>=|&&|\|\||[=+\-*/%<>!&|.])/g;
+    const pattern =
+      /\b[A-Za-z_][A-Za-z0-9_]*\b|0x[0-9A-Fa-f]+|0b[01]+|[0-9]+(?:\.[0-9]+)?|(:=|==|!=|<=|>=|&&|\|\||[=+\-*/%<>!&|.])/g;
     for (const match of document.code.matchAll(pattern)) {
       const start = match.index ?? 0;
       const value = match[0];
@@ -295,7 +384,11 @@ export class YcplProviders {
     }
 
     tokens
-      .sort((left, right) => left.range.start.line - right.range.start.line || left.range.start.character - right.range.start.character)
+      .sort(
+        (left, right) =>
+          left.range.start.line - right.range.start.line ||
+          left.range.start.character - right.range.start.character
+      )
       .forEach((token) => this.pushToken(builder, token.range, token.kind, token.modifiers));
     return builder.build();
   }
@@ -303,7 +396,11 @@ export class YcplProviders {
   /** Formats a full document. */
   async formatDocument(params: DocumentFormattingParams): Promise<TextEdit[]> {
     const document = this.requireDocument(params.textDocument.uri);
-    return (await this.compiler.format(document)) ?? [TextEdit.replace(fullRange(document), formatText(document.text))];
+    return (
+      (await this.compiler.format(document)) ?? [
+        TextEdit.replace(fullRange(document), formatSource(document.text, params.options))
+      ]
+    );
   }
 
   /** Formats a selected range. */
@@ -313,9 +410,13 @@ export class YcplProviders {
     if (compilerEdits) {
       return compilerEdits;
     }
-    const start = offsetAt(document.text, document.lineOffsets, params.range.start);
-    const end = offsetAt(document.text, document.lineOffsets, params.range.end);
-    return [TextEdit.replace(params.range, formatText(document.text.slice(start, end)))];
+    const edits = formatSource(document.text, params.options).split(/\r?\n/);
+    const original = document.text.split(/\r?\n/);
+    return edits.flatMap((text, line) =>
+      line >= params.range.start.line && line <= params.range.end.line && text !== original[line]
+        ? [TextEdit.replace(Range.create(line, 0, line, original[line].length), text)]
+        : []
+    );
   }
 
   /** Provides folding ranges from balanced braces and region comments. */
@@ -330,7 +431,9 @@ export class YcplProviders {
         const start = stack.pop();
         const end = positionAtIndex(document, i);
         if (start && end.line > start.line) {
-          ranges.push(FoldingRange.create(start.line, end.line, start.character, end.character, FoldingRangeKind.Region));
+          ranges.push(
+            FoldingRange.create(start.line, end.line, start.character, end.character, FoldingRangeKind.Region)
+          );
         }
       }
     }
@@ -342,7 +445,10 @@ export class YcplProviders {
     const document = this.requireDocument(params.textDocument.uri);
     return params.positions.map((position) => {
       const word = wordAtPosition(document.text, document.lineOffsets, position);
-      const lineRange = Range.create(Position.create(position.line, 0), Position.create(position.line, lineText(document.text, document.lineOffsets, position.line).length));
+      const lineRange = Range.create(
+        Position.create(position.line, 0),
+        Position.create(position.line, lineText(document.text, document.lineOffsets, position.line).length)
+      );
       return {
         range: word?.range ?? lineRange,
         parent: { range: lineRange, parent: { range: fullRange(document) } }
@@ -357,7 +463,8 @@ export class YcplProviders {
     if (!symbol) {
       return [];
     }
-    return this.index.findReferencesBySymbolId(symbol.id, true)
+    return this.index
+      .findReferencesBySymbolId(symbol.id, true)
       .filter((location) => location.uri === params.textDocument.uri)
       .map((location) => DocumentHighlight.create(location.range, DocumentHighlightKind.Text));
   }
@@ -365,25 +472,94 @@ export class YcplProviders {
   /** Provides inferred type and parameter-name inlay hints. */
   inlayHints(params: InlayHintParams): InlayHint[] {
     const document = this.requireDocument(params.textDocument.uri);
-    return document.symbols
-      .filter((symbol) => rangeContains(params.range, symbol.selectionRange.start) && symbol.category === "variable" && !symbol.typeName)
-      .map((symbol) => InlayHint.create(symbol.selectionRange.end, ": inferred", InlayHintKind.Type));
+    const hints = document.symbols.flatMap((symbol) => {
+      if (
+        !rangeContains(params.range, symbol.selectionRange.start) ||
+        symbol.category !== "variable" ||
+        symbol.typeName
+      )
+        return [];
+      const type = inferredType(document, symbol);
+      return type ? [InlayHint.create(symbol.selectionRange.end, `: ${type}`, InlayHintKind.Type)] : [];
+    });
+    for (const call of document.calls) {
+      if (
+        call.range.start.line > params.range.end.line ||
+        call.range.end.line < params.range.start.line - 128
+      )
+        continue;
+      const start = offsetAt(document.text, document.lineOffsets, call.range.start);
+      const end = offsetAt(document.text, document.lineOffsets, call.range.end);
+      const calleeOffset = start + document.code.slice(start, end).lastIndexOf(call.callee);
+      const target = this.index.symbolById(
+        call.calleeSymbolId ??
+          this.index.referenceAt(document.uri, positionAtIndex(document, calleeOffset))?.symbolId
+      );
+      if (!target?.parameters?.length) continue;
+      let depth = 0;
+      let argument = end;
+      let parameter = 0;
+      for (let i = end; i < Math.min(document.code.length, end + 8192); i += 1) {
+        const char = document.code[i];
+        if ((char === ")" && depth === 0) || (char === "," && depth === 0)) {
+          const definition = target.parameters[parameter++];
+          while (argument < i && /\s/.test(document.text[argument])) argument += 1;
+          const position = positionAtIndex(document, argument);
+          if (
+            definition &&
+            argument < i &&
+            document.text.slice(argument, i).trim() !== definition.name &&
+            rangeContains(params.range, position)
+          ) {
+            hints.push(InlayHint.create(position, `${definition.name}:`, InlayHintKind.Parameter));
+          }
+          argument = i + 1;
+          if (char === ")") break;
+        } else if (["(", "[", "{"].includes(char)) depth += 1;
+        else if (")]}".includes(char)) depth -= 1;
+      }
+    }
+    return hints;
   }
 
   /** Provides quick fixes for simple diagnostics. */
   codeActions(params: CodeActionParams): CodeAction[] {
-    const actions: CodeAction[] = [];
+    const document = this.requireDocument(params.textDocument.uri);
+    const actions: CodeAction[] = [
+      {
+        title: "Organize imports",
+        kind: CodeActionKind.SourceOrganizeImports,
+        edit: { changes: { [document.uri]: organizeImports(document) } }
+      },
+      ...extractVariable(document, params.range),
+      ...extractFunction(document, params.range, this.index),
+      ...inlineVariable(document, this.symbolForPosition(document, params.range.start), this.index),
+      ...fillStruct(document, params.range, (name) => {
+        const type = this.index.resolveType(document, name);
+        return type ? (this.index.getDocument(type.uri)?.symbols ?? []) : [];
+      })
+    ];
     for (const diagnostic of params.context.diagnostics) {
       const message = typeof diagnostic.message === "string" ? diagnostic.message : diagnostic.message.value;
       if (message.includes("not used")) {
-        actions.push(CodeAction.create("Remove unused import", {
-          changes: {
-            [params.textDocument.uri]: [TextEdit.del(lineRangeContaining(diagnostic.range))]
-          }
-        }, CodeActionKind.QuickFix));
+        const imported = document.imports.find((entry) => rangeContains(entry.range, diagnostic.range.start));
+        if (imported)
+          actions.push(
+            CodeAction.create(
+              "Remove unused import",
+              {
+                changes: { [document.uri]: [TextEdit.del(imported.range)] }
+              },
+              CodeActionKind.QuickFix
+            )
+          );
       }
     }
-    return actions;
+    return actions.filter(
+      (action) =>
+        !params.context.only ||
+        params.context.only.some((kind) => action.kind === kind || action.kind?.startsWith(`${kind}.`))
+    );
   }
 
   /** Provides reference-count codelenses for declarations. */
@@ -391,9 +567,17 @@ export class YcplProviders {
     const document = this.requireDocument(params.textDocument.uri);
     return document.symbols
       .filter((symbol) => symbol.category === "function" || isTypeCategory(symbol.category))
-      .map((symbol) => CodeLens.create(symbol.selectionRange, {
-        title: `${Math.max(0, this.index.findReferencesBySymbolId(symbol.id, false).length)} references`,
-        command: ""
+      .map((symbol) => ({
+        range: symbol.selectionRange,
+        command: {
+          title: `${Math.max(0, this.index.findReferencesBySymbolId(symbol.id, false).length)} references`,
+          command: "editor.action.showReferences",
+          arguments: [
+            symbol.uri,
+            symbol.selectionRange.start,
+            this.index.findReferencesBySymbolId(symbol.id, false)
+          ]
+        }
       }));
   }
 
@@ -408,8 +592,11 @@ export class YcplProviders {
 
   /** Returns incoming calls for a function. */
   incomingCalls(item: CallHierarchyItem): CallHierarchyIncomingCall[] {
-    const symbolId = callHierarchySymbolId(item)
-      ?? this.index.getDocument(item.uri)?.symbols.find((symbol) => symbol.category === "function" && symbol.name === item.name)?.id;
+    const symbolId =
+      callHierarchySymbolId(item) ??
+      this.index
+        .getDocument(item.uri)
+        ?.symbols.find((symbol) => symbol.category === "function" && symbol.name === item.name)?.id;
     if (!symbolId) {
       return [];
     }
@@ -425,7 +612,10 @@ export class YcplProviders {
         if (existing) {
           existing.fromRanges.push(call.range);
         } else {
-          incoming.set(key, { from: toCallHierarchyItem(caller), fromRanges: [call.range] });
+          incoming.set(key, {
+            from: toCallHierarchyItem(caller),
+            fromRanges: [call.range]
+          });
         }
       }
     }
@@ -434,8 +624,11 @@ export class YcplProviders {
 
   /** Returns outgoing calls for a function. */
   outgoingCalls(item: CallHierarchyItem): CallHierarchyOutgoingCall[] {
-    const symbolId = callHierarchySymbolId(item)
-      ?? this.index.getDocument(item.uri)?.symbols.find((symbol) => symbol.category === "function" && symbol.name === item.name)?.id;
+    const symbolId =
+      callHierarchySymbolId(item) ??
+      this.index
+        .getDocument(item.uri)
+        ?.symbols.find((symbol) => symbol.category === "function" && symbol.name === item.name)?.id;
     if (!symbolId) {
       return [];
     }
@@ -454,18 +647,27 @@ export class YcplProviders {
       if (existing) {
         existing.fromRanges.push(call.range);
       } else {
-        outgoing.set(key, { to: toCallHierarchyItem(callee), fromRanges: [call.range] });
+        outgoing.set(key, {
+          to: toCallHierarchyItem(callee),
+          fromRanges: [call.range]
+        });
       }
     }
     return [...outgoing.values()];
   }
 
-  private memberCompletions(document: YcplDocument, alias: string | undefined, position: Position, stdlibItems: Awaited<ReturnType<StandardLibraryIndex["completionItems"]>>): CompletionItem[] {
+  private memberCompletions(
+    document: YcplDocument,
+    alias: string | undefined,
+    position: Position,
+    stdlibItems: Awaited<ReturnType<StandardLibraryIndex["completionItems"]>>
+  ): CompletionItem[] {
     if (!alias) {
       return [];
     }
     const imported = document.imports.find((entry) => entry.alias === alias);
-    const modulePath = imported?.modulePath ?? stdlibItems.find((item) => item.moduleAlias === alias)?.modulePath;
+    const modulePath =
+      imported?.modulePath ?? stdlibItems.find((item) => item.moduleAlias === alias)?.modulePath;
     if (!modulePath) {
       return this.ufcsCompletions(document, alias, position, stdlibItems);
     }
@@ -481,7 +683,8 @@ export class YcplProviders {
         insertText: item.kind === CompletionItemKind.Function ? `${item.symbolName}($0)` : undefined,
         additionalTextEdits: importEdit ? [importEdit] : undefined
       }));
-    const workspaceMembers = this.index.workspaceSymbols("")
+    const workspaceMembers = this.index
+      .workspaceSymbols("")
       .filter((symbol) => symbol.containerName === modulePath)
       .map((symbol) => ({
         label: symbol.name,
@@ -493,15 +696,27 @@ export class YcplProviders {
     return [...stdlibMembers, ...workspaceMembers];
   }
 
-  private ufcsCompletions(document: YcplDocument, receiverName: string, position: Position, stdlibItems: StandardLibrarySymbol[]): CompletionItem[] {
-    const receiver = this.visibleSymbolsForPosition(document, position).find((symbol) => symbol.name === receiverName);
+  private ufcsCompletions(
+    document: YcplDocument,
+    receiverName: string,
+    position: Position,
+    stdlibItems: StandardLibrarySymbol[]
+  ): CompletionItem[] {
+    const receiver = this.visibleSymbolsForPosition(document, position).find(
+      (symbol) => symbol.name === receiverName
+    );
     const receiverType = canonicalTypeName(receiver?.typeName);
     if (!receiverType) {
       return [];
     }
     const importedModulePaths = new Set(document.imports.map((entry) => entry.modulePath));
     return stdlibItems
-      .filter((item) => item.kind === CompletionItemKind.Function && item.symbolName && importedModulePaths.has(item.modulePath))
+      .filter(
+        (item) =>
+          item.kind === CompletionItemKind.Function &&
+          item.symbolName &&
+          importedModulePaths.has(item.modulePath)
+      )
       .filter((item) => canonicalTypeName(item.parameters?.[0]?.typeName) === receiverType)
       .map((item) => ({
         label: item.symbolName ?? item.label,
@@ -513,7 +728,10 @@ export class YcplProviders {
       }));
   }
 
-  private stdlibFunctionCompletions(document: YcplDocument, stdlibItems: Awaited<ReturnType<StandardLibraryIndex["completionItems"]>>): CompletionItem[] {
+  private stdlibFunctionCompletions(
+    document: YcplDocument,
+    stdlibItems: Awaited<ReturnType<StandardLibraryIndex["completionItems"]>>
+  ): CompletionItem[] {
     return stdlibItems
       .filter((item) => item.symbolName && item.kind === CompletionItemKind.Function)
       .map((item) => {
@@ -541,16 +759,25 @@ export class YcplProviders {
     return this.index.symbolById(this.index.referenceAt(document.uri, position)?.symbolId);
   }
 
-  private functionSymbolForCallMatch(document: YcplDocument, match: RegExpMatchArray, matchStart: number): YcplSymbol | undefined {
+  private functionSymbolForCallMatch(
+    document: YcplDocument,
+    match: RegExpMatchArray,
+    matchStart: number
+  ): YcplSymbol | undefined {
     const name = match[2] ?? match[1];
     const paren = match[0].lastIndexOf("(");
     const beforeParen = match[0].slice(0, paren).replace(/\s+$/u, "");
     const calleeStart = matchStart + beforeParen.length - name.length;
-    const symbol = this.index.symbolById(this.index.referenceAt(document.uri, positionAtIndex(document, calleeStart))?.symbolId);
+    const symbol = this.index.symbolById(
+      this.index.referenceAt(document.uri, positionAtIndex(document, calleeStart))?.symbolId
+    );
     return symbol?.category === "function" ? symbol : undefined;
   }
 
-  private semanticKindForReference(document: YcplDocument, reference: SymbolReference): SemanticKind | undefined {
+  private semanticKindForReference(
+    document: YcplDocument,
+    reference: SymbolReference
+  ): SemanticKind | undefined {
     const symbol = this.index.symbolById(reference.symbolId);
     return symbol ? categoryToSemanticKind(symbol.category) : undefined;
   }
@@ -560,11 +787,13 @@ export class YcplProviders {
     const scopesById = new Map(document.scopes.map((scope) => [scope.id, scope]));
     let scope: YcplDocument["scopes"][number] | undefined = document.scopes
       .filter((candidate) => offset >= candidate.startOffset && offset <= candidate.endOffset)
-      .sort((left, right) => (left.endOffset - left.startOffset) - (right.endOffset - right.startOffset))[0];
+      .sort((left, right) => left.endOffset - left.startOffset - (right.endOffset - right.startOffset))[0];
     const visible: YcplSymbol[] = [];
     const seen = new Set<string>();
     while (scope) {
-      const scoped = document.symbols.filter((symbol) => symbol.scopeId === scope?.id && symbol.category !== "field");
+      const scoped = document.symbols.filter(
+        (symbol) => symbol.scopeId === scope?.id && symbol.category !== "field"
+      );
       for (const symbol of scoped) {
         if (!seen.has(symbol.name)) {
           visible.push(symbol);
@@ -584,13 +813,27 @@ export class YcplProviders {
     return document;
   }
 
-  private pushToken(builder: SemanticTokensBuilder, range: Range, tokenType: SemanticKind, modifiers: Array<typeof semanticTokenModifiers[number]> = []): void {
+  private pushToken(
+    builder: SemanticTokensBuilder,
+    range: Range,
+    tokenType: SemanticKind,
+    modifiers: Array<(typeof semanticTokenModifiers)[number]> = []
+  ): void {
     const type = tokenTypeMap.get(tokenType);
     if (type === undefined || range.start.line !== range.end.line) {
       return;
     }
-    const modifierBits = modifiers.reduce((bits, modifier) => bits | (tokenModifierMap.get(modifier) ?? 0), 0);
-    builder.push(range.start.line, range.start.character, range.end.character - range.start.character, type, modifierBits);
+    const modifierBits = modifiers.reduce(
+      (bits, modifier) => bits | (tokenModifierMap.get(modifier) ?? 0),
+      0
+    );
+    builder.push(
+      range.start.line,
+      range.start.character,
+      range.end.character - range.start.character,
+      type,
+      modifierBits
+    );
   }
 }
 
@@ -638,23 +881,10 @@ function completionKindForSymbol(symbol: YcplSymbol): CompletionItemKind {
 function fullRange(document: YcplDocument): Range {
   const lines = document.lineOffsets.length;
   const lastLine = Math.max(0, lines - 1);
-  return Range.create(Position.create(0, 0), Position.create(lastLine, lineText(document.text, document.lineOffsets, lastLine).length));
-}
-
-function formatText(text: string): string {
-  let depth = 0;
-  const lines = text.split(/\r?\n/);
-  return lines.map((line) => {
-    const trimmed = line.trim();
-    if (trimmed.startsWith("}")) {
-      depth = Math.max(0, depth - 1);
-    }
-    const formatted = trimmed.length === 0 ? "" : `${"    ".repeat(depth)}${trimmed}`;
-    if (trimmed.endsWith("{")) {
-      depth += 1;
-    }
-    return formatted;
-  }).join("\n");
+  return Range.create(
+    Position.create(0, 0),
+    Position.create(lastLine, lineText(document.text, document.lineOffsets, lastLine).length)
+  );
 }
 
 function positionAtIndex(document: YcplDocument, offset: number): Position {

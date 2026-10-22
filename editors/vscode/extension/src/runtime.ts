@@ -90,9 +90,10 @@ export function isBootstrapCompiler(candidate: string): boolean {
 }
 
 export function findProjectRoot(startPath: string, workspaceRoots: readonly string[]): string | undefined {
-  let current = fs.existsSync(startPath) && fs.statSync(startPath).isDirectory()
-    ? path.resolve(startPath)
-    : path.dirname(path.resolve(startPath));
+  let current =
+    fs.existsSync(startPath) && fs.statSync(startPath).isDirectory()
+      ? path.resolve(startPath)
+      : path.dirname(path.resolve(startPath));
   const boundaries = workspaceRoots.map((root) => path.resolve(root));
   while (true) {
     if (fs.existsSync(path.join(current, "YCPL.json"))) {
@@ -107,14 +108,17 @@ export function findProjectRoot(startPath: string, workspaceRoots: readonly stri
 }
 
 export function compilerTarget(sourcePath: string, workspaceRoots: readonly string[]): CompilerTarget {
-  const projectRoot = findProjectRoot(sourcePath, workspaceRoots);
+  const scratch = path
+    .resolve(sourcePath)
+    .split(path.sep)
+    .some((part, index, parts) => part === ".ycpl" && parts[index + 1] === "playground");
+  const projectRoot = scratch ? undefined : findProjectRoot(sourcePath, workspaceRoots);
   if (projectRoot) {
     return { cwd: projectRoot, input: ".", projectRoot };
   }
   const resolved = path.resolve(sourcePath);
-  const directory = fs.existsSync(resolved) && fs.statSync(resolved).isDirectory()
-    ? resolved
-    : path.dirname(resolved);
+  const directory =
+    fs.existsSync(resolved) && fs.statSync(resolved).isDirectory() ? resolved : path.dirname(resolved);
   return { cwd: directory, input: resolved };
 }
 

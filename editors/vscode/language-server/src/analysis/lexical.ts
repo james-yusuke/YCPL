@@ -5,7 +5,10 @@ export interface LexicalSpan {
 }
 
 /** Mask literals and nested comments once, retaining UTF-16 offsets and lines. */
-export function scanLexical(text: string): { code: string; spans: LexicalSpan[] } {
+export function scanLexical(text: string): {
+  code: string;
+  spans: LexicalSpan[];
+} {
   const spans: LexicalSpan[] = [];
   const parts: string[] = [];
   let copied = 0;

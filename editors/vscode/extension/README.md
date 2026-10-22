@@ -1,69 +1,141 @@
 # YCPL for Visual Studio Code
 
-YCPL language support with a native self-hosted Language Server when available
-and a bundled TypeScript fallback everywhere else.
+YCPL 0.4 provides editing, project tasks, Test Explorer, coverage and native debugging.
+[日本語ガイド](https://github.com/james-yusuke/YCPL/blob/main/docs/editor.ja.md)
 
-## Language Server selection
+## Setup
 
-`YCPL.server.mode` defaults to `auto`. The extension selects:
+Install LLVM 22 and build the self-hosted `ycc`. Set `YCPL.compiler.path` to that
+executable; bootstrap executables are excluded from automatic discovery. Configure
+`YCPL.stlRoot` and `YCPL.runtimeSource` when working outside the YCPL repository.
+**YCPL: Show Environment** displays the selected paths; **Configure Compiler** opens
+an executable picker. Compiler execution requires a trusted workspace.
 
-1. `YCPL.server.path`
-2. `tools/lsp/build/YCPL-lsp` in an open workspace
-3. `YCPL-lsp` on `PATH`
-4. the TypeScript server bundled in the VSIX
+The bundled TypeScript language server is the default. It provides the complete
+editing and refactoring features below. `YCPL.server.mode = auto` checks a configured
+`YCPL.server.path`, workspace `tools/lsp/build/YCPL-lsp`, then `PATH`, and falls back
+to TypeScript if the native server cannot initialize. `native` requires that server.
+The native server provides the common protocol features; advanced extraction and
+import actions use the TypeScript server. The status bar shows the active server.
+Settings changes and **Restart Language Server** restart it safely.
 
-Use `native` to require the YCPL-written server or `typescript` to force the
-portable fallback. The status bar and YCPL Output channel show the active
-server. Changes to server settings restart the client automatically.
+## Editing and projects
 
-Both servers provide completion, hover, definition/declaration/type
-definition/implementation, references, rename, symbols, signature help,
-semantic tokens, formatting, folding, selection ranges, highlights, inlay
-hints, code actions, code lenses, and call hierarchy.
+| Area | YCPL support |
+|---|---|
+| IntelliSense | Completion, stdlib auto imports, signatures, hover, snippets, semantic highlighting |
+| Navigation | Definition, declaration, type definition, references, rename, workspace/document symbols, call hierarchy, highlights, reference lenses |
+| Formatting | Document and range formatting; preserves multiline raw strings, nested comments and character literals; format on save |
+| Imports | Add Import, Organize Imports, remove unused aliases, organize on save; preserves attached comments and side-effect imports |
+| Refactoring | Extract expression to variable, extract whole statements to function with pointer captures, inline a constant literal, fill an empty struct with primitive fields |
+| Diagnostics | Parser diagnostics while editing; real compiler diagnostics on save and Check; task problem matcher |
+| Projects | New Project, local playground, `YCPL.json` completion/validation, multi-root indexing, check/build/build-ir/run tasks |
+| Code generation | Generate Tests creates visible TODOs that return false; Toggle Test File switches implementation and test |
 
-Version 0.3 improves LSP indexing and current-language highlighting, including
-nested comments, multiline raw strings, `cast` and nested `Vec`/`Map` types.
-The client watches YCPL source files and releases its watcher on restart.
+Refactorings are offered only where the current resolver can preserve semantics.
+Extraction rejects control-flow exits and escaping locals; inlining rejects mutable
+or nonliteral initializers. Rename rejects keywords, invalid names and collisions.
+Go interface implementation and struct-tag rewriting do not have equivalents in
+YCPL's current language. YCPL has no Go module/package vulnerability database.
 
-## Compiler commands
+Build commands use `.ycpl/build` unless `YCPL.outputDirectory` is configured. A
+parent `YCPL.json` selects project mode. **Open Local Playground** creates an isolated
+source under `.ycpl/playground`, even inside a project. **Run** opens a terminal
+with the compiled executable; `YCPL.run.arguments` is passed literally. Interactive
+input works. Build, check, test and profile operations support cancellation.
 
-The Command Palette contains check, build, build-ir, run, Language Server
-restart, and output commands. The extension discovers the self-hosted `ycc`
-through `YCPL.compiler.path`, `bazel-bin/ycc`, `build/ycc`, then `PATH`.
-Bootstrap executables are intentionally ignored.
+## Tests, benchmarks and property checks
 
-A parent `YCPL.json` selects project mode; otherwise the active `.yc` file is
-used. `YCPL.checkOnSave` is enabled by default with a 300ms debounce.
-Compiler output in `file:line:column: message` format is published as editor
-diagnostics. Builds use `.ycpl/build` unless `YCPL.outputDirectory` is changed.
+Put public boolean functions in `*_test.yc`:
 
-`YCPL.stlRoot` and `YCPL.runtimeSource` override `YCPL_STL_ROOT` and
-`YCPL_RUNTIME_SRC`. `YCPL.run.arguments` is passed after `--`.
+```yc
+import "./math.yc" as math
 
-## Build, test, and package
+pub fn test_add() bool { return math.add(20, 22) == 42 }
+pub fn benchmark_add() bool { return math.add(1, 2) == 3 }
+pub fn fuzz_identity(seed i32) bool { return math.add(seed, 0) == seed }
+```
+
+Test Explorer discovers these signatures and provides Run, Debug and Coverage
+profiles. Commands run the workspace, current file or function at the cursor;
+Run Test lenses are clickable. True passes, false fails, build errors are reported
+as errors, and cancelled tests are skipped. Generated runners use relative imports
+and temporary per-run directories, which are removed afterwards.
+
+`YCPL.testing.benchmarkIterations` controls benchmark repetitions. Timings report
+real elapsed time and ns/op **including process startup**, without claiming
+microbenchmark isolation. `fuzz_*` checks use consecutive deterministic i32 seeds;
+`YCPL.testing.fuzzIterations` and `fuzzStartSeed` control them. Failures print the
+seed for reproduction. These are seeded property checks, without a coverage-guided
+mutation engine, corpus minimization or automatic input generation for other types.
+
+Coverage uses LLVM's GCOV instrumentation and executed line counts. Test Explorer
+shows covered/uncovered source lines in workspace files; helper functions reached
+through imports are included. There is no guessed or synthetic coverage. LLVM 22
+`opt`, `clang`, `llvm-cov` and the clang profile runtime must be installed.
+
+## Debugging
+
+**Debug Current File or Project**, F5, Debug Test at Cursor and Test Explorer Debug
+use LLVM 22 `lldb-dap`. It is discovered from `LLVM_BINDIR`, LLVM installation paths
+or `PATH`; set `YCPL.debug.adapterPath` to override. Builds use the self-hosted
+compiler's `-g` flag and unoptimized LLVM code. Source breakpoints, stepping, stack
+frames, parameters and local values are available. Structs carry field metadata;
+recursive/managed containers currently expose their underlying handles rather than
+Go-style collection visualizers. Debug objects are retained until the session ends.
+
+```json
+{
+  "type": "ycpl",
+  "request": "launch",
+  "name": "YCPL: Debug",
+  "program": "${file}",
+  "args": ["literal argument"],
+  "console": "integratedTerminal"
+}
+```
+
+Existing native executables, `attach` by pid and LLDB `coreFile` configurations are
+also supported. On Ubuntu install `lldb-22`; macOS Homebrew `llvm@22` includes the
+adapter. Remote/container sessions use the workspace extension's execution host;
+no remote deployment configuration is generated automatically.
+
+## Profiling
+
+- **Collect Execution Profile** instruments LLVM IR and opens exact function/block
+  counts from `llvm-profdata`. This is not CPU or allocation sampling.
+- **Collect CPU Samples** uses macOS `sample` for `YCPL.profiling.duration` seconds,
+  then stops the owned target; Linux uses `perf record`/`perf report` until exit.
+  Linux requires a kernel configuration that permits perf events.
+- **Collect Memory Profile** uses macOS `leaks --atExit`, or Linux Valgrind Massif
+  with `ms_print`. Install these system tools before using the command.
+
+Reports and raw data are retained under `.ycpl/profiles`. Program arguments and
+compiler environment overrides apply to every profile. Process output is bounded,
+commands never pass through a shell, and cancellation terminates owned children.
+
+## Build and reverify
 
 From the repository root:
 
 ```sh
+eval "$(scripts/setup-llvm.sh 22 --print-env)"
 npm ci --prefix editors/vscode/language-server
-npm run check --prefix editors/vscode/language-server
 npm ci --prefix editors/vscode/extension
+npm run check --prefix editors/vscode/language-server
 npm run check --prefix editors/vscode/extension
+YCC="$PWD/bazel-bin/ycc" tests/test_development_workflows.sh
+tools/lsp/run_tests.sh
 npm run test:extension --prefix editors/vscode/extension
-tools/lsp/build.sh
 npm run test:extension:native --prefix editors/vscode/extension
-npm run package --prefix editors/vscode/extension
 npm run check-package --prefix editors/vscode/extension
 ```
 
-The VSIX is written to
-`editors/vscode/extension/artifacts/ycpl-vscode.vsix`. It contains the
-extension, grammar, snippets, icon, and bundled TypeScript server, but no
-platform-specific native executable.
-
-For interactive development, run `YCPL: Debug VSCode Extension` from the
-repository workspace.
-
-Set `VSCODE_EXECUTABLE_PATH` to a local VS Code executable to run the packaged
-extension tests without downloading another editor. Both test modes exercise
-completion, document symbols and a server restart from the extracted VSIX.
+Use `npm run format --prefix editors/vscode/extension` to apply the checked
+Prettier configuration. The VSIX at `editors/vscode/extension/artifacts/ycpl-vscode.vsix`
+contains both JavaScript bundles, grammar, snippets and project schema, without
+source, tests or node_modules. Integration tests extract that VSIX and exercise
+actual test success/failure, coverage, profiles and an LLDB source breakpoint.
+Set `YCPL_TEST_COMPILER` to another self-hosted compiler and
+`VSCODE_EXECUTABLE_PATH` to a local VS Code executable to reuse installations.
+CI runs the packaged workflows on macOS and Ubuntu.

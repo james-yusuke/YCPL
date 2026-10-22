@@ -107,6 +107,8 @@ case "$(uname -s)" in
     $SUDO apt-get install -y \
       "clang-$LLVM_VERSION" \
       "clang-format-$LLVM_VERSION" \
+      "lldb-$LLVM_VERSION" \
+      "libclang-rt-$LLVM_VERSION-dev" \
       "llvm-$LLVM_VERSION-dev" \
       "llvm-$LLVM_VERSION-runtime" \
       "llvm-$LLVM_VERSION-tools"

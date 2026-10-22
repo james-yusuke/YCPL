@@ -63,6 +63,8 @@ TEST_SRCDIR="$OUT_DIR" TEST_WORKSPACE=runfiles \
   tools/bazel/run_self_host_fixed_point_test.sh
 
 export YCC="$OUT_DIR/stage3/merged"
+export YCPL_TEST_COMPILER="$YCC"
+tests/test_development_workflows.sh
 npm run check --prefix editors/vscode/language-server
 npm run check --prefix editors/vscode/extension
 tools/lsp/run_tests.sh

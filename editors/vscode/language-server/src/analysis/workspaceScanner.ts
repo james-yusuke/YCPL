@@ -39,7 +39,18 @@ export class WorkspaceScanner {
 }
 
 async function* walk(root: string): AsyncGenerator<string> {
-  const ignored = new Set([".git", "node_modules", "build", "dist", ".vscode", ".vscode-test", ".ycpl", "artifacts", "out", "target"]);
+  const ignored = new Set([
+    ".git",
+    "node_modules",
+    "build",
+    "dist",
+    ".vscode",
+    ".vscode-test",
+    ".ycpl",
+    "artifacts",
+    "out",
+    "target"
+  ]);
   let entries;
   try {
     entries = await fs.readdir(root, { withFileTypes: true });

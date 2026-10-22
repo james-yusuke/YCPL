@@ -1,16 +1,19 @@
 #!/usr/bin/env node
 import * as fs from "node:fs/promises";
+import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   CallHierarchyIncomingCallsRequest,
   CallHierarchyOutgoingCallsRequest,
   CallHierarchyPrepareRequest,
+  WillRenameFilesRequest,
   createConnection,
   DidChangeConfigurationNotification,
   FileChangeType,
   ProposedFeatures,
   TextDocuments,
   TextDocumentSyncKind,
+  type DidChangeWorkspaceFoldersParams,
   type InitializeParams,
   type InitializeResult
 } from "vscode-languageserver/node";
@@ -20,6 +23,7 @@ import { YcplParser } from "./analysis/parser.js";
 import { StandardLibraryIndex } from "./analysis/stdlib.js";
 import { WorkspaceScanner } from "./analysis/workspaceScanner.js";
 import { WorkspaceIndex } from "./analysis/workspaceIndex.js";
+import { renameFileImports } from "./analysis/fileEdits.js";
 import { semanticTokenModifiers, semanticTokenTypes } from "./analysis/model.js";
 import { NullCompilerBridge } from "./compiler/compilerBridge.js";
 import { YcplProviders } from "./lsp/providers.js";
@@ -36,7 +40,11 @@ let workspaceRoots: string[] = [];
 connection.onInitialize((params: InitializeParams): InitializeResult => {
   workspaceRoots = workspaceRootPaths(params);
   const options = params.initializationOptions as { stlRoot?: string } | undefined;
-  providers = new YcplProviders(index, new StandardLibraryIndex(workspaceRoots[0], options?.stlRoot), compiler);
+  providers = new YcplProviders(
+    index,
+    new StandardLibraryIndex(workspaceRoots[0], options?.stlRoot),
+    compiler
+  );
 
   return {
     capabilities: {
@@ -47,7 +55,7 @@ connection.onInitialize((params: InitializeParams): InitializeResult => {
       },
       completionProvider: {
         resolveProvider: false,
-        triggerCharacters: [".", "\"", "/"]
+        triggerCharacters: [".", '"', "/"]
       },
       hoverProvider: true,
       definitionProvider: true,
@@ -86,7 +94,7 @@ connection.onInitialize((params: InitializeParams): InitializeResult => {
           supported: true,
           changeNotifications: true
         },
-        fileOperations: {}
+        fileOperations: { willRename: { filters: [{ scheme: "file", pattern: { glob: "**/*" } }] } }
       }
     }
   };
@@ -122,11 +130,41 @@ connection.onDidChangeWatchedFiles((event) => {
   }
 });
 
+connection.onNotification(
+  "workspace/didChangeWorkspaceFolders",
+  (params: DidChangeWorkspaceFoldersParams) => {
+    const event = params.event;
+    const removed = new Set(event.removed.map((folder) => URI.parse(folder.uri).fsPath));
+    workspaceRoots = [
+      ...new Set([
+        ...workspaceRoots.filter((root) => !removed.has(root)),
+        ...event.added.map((folder) => URI.parse(folder.uri).fsPath)
+      ])
+    ];
+    for (const document of index.allDocuments()) {
+      if (documents.get(document.uri)) continue;
+      const file = URI.parse(document.uri).fsPath;
+      if (
+        !workspaceRoots.some((root) => {
+          const relative = path.relative(root, file);
+          return relative !== ".." && !relative.startsWith(".." + path.sep) && !path.isAbsolute(relative);
+        })
+      )
+        index.remove(document.uri);
+    }
+    void scanWorkspaces();
+  }
+);
+
+connection.onRequest(WillRenameFilesRequest.type, (params) =>
+  renameFileImports(index.allDocuments(), params.files, workspaceRoots)
+);
+
 connection.onCompletion((params) => providers.completion(params));
 connection.onHover((params) => providers.hover(params));
 connection.onDefinition((params) => providers.definition(params));
 connection.onDeclaration((params) => providers.definition(params));
-connection.onTypeDefinition((params) => providers.definition(params));
+connection.onTypeDefinition((params) => providers.typeDefinition(params));
 connection.onImplementation((params) => providers.implementation(params));
 connection.onReferences((params) => providers.references(params));
 connection.onPrepareRename((params) => providers.prepareRename(params));
@@ -144,8 +182,12 @@ connection.languages.inlayHint.on((params) => providers.inlayHints(params));
 connection.onCodeAction((params) => providers.codeActions(params));
 connection.onCodeLens((params) => providers.codeLens(params));
 connection.onRequest(CallHierarchyPrepareRequest.type, (params) => providers.prepareCallHierarchy(params));
-connection.onRequest(CallHierarchyIncomingCallsRequest.type, (params) => providers.incomingCalls(params.item));
-connection.onRequest(CallHierarchyOutgoingCallsRequest.type, (params) => providers.outgoingCalls(params.item));
+connection.onRequest(CallHierarchyIncomingCallsRequest.type, (params) =>
+  providers.incomingCalls(params.item)
+);
+connection.onRequest(CallHierarchyOutgoingCallsRequest.type, (params) =>
+  providers.outgoingCalls(params.item)
+);
 
 documents.listen(connection);
 connection.listen();
@@ -155,7 +197,11 @@ async function indexAndPublish(document: TextDocument): Promise<void> {
   index.update(parsed);
   const diagnostics = await providers.diagnostics(parsed);
   if (index.getDocument(document.uri) === parsed && documents.get(document.uri)?.version === parsed.version) {
-    connection.sendDiagnostics({ uri: document.uri, version: parsed.version, diagnostics });
+    connection.sendDiagnostics({
+      uri: document.uri,
+      version: parsed.version,
+      diagnostics
+    });
   }
 }
 

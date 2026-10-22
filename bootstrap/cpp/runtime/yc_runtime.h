@@ -34,6 +34,7 @@ int yc_fs_rename(const char *from, const char *to);
 int yc_fs_create_dir(const char *path);
 int yc_fs_create_dirs(const char *path);
 int yc_fs_stat(const char *path, int *kind_out, size_t *size_out);
+int yc_fs_same_file(const char *left, const char *right);
 char *yc_executable_dir(void);
 char *yc_current_dir(void);
 long long yc_unix_millis(void);

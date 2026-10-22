@@ -219,6 +219,9 @@ jobs:
           npm run check --prefix editors/vscode/extension
           npm run check --prefix editors/vscode/language-server
 
+      - name: Check editor compiler workflows
+        run: YCC="$GITHUB_WORKSPACE/bazel-bin/ycc" tests/test_development_workflows.sh
+
       - name: Test VSCode Extension Host
         run: xvfb-run -a npm run test:extension --prefix editors/vscode/extension
 
@@ -259,3 +262,45 @@ jobs:
             echo "| VSIX package | \`npm run package && npm run check-package\` |"
             echo "| Native and TypeScript LSP protocol | \`tools/lsp/run_tests.sh\` |"
           } >> "$GITHUB_STEP_SUMMARY"
+
+  macos-editor:
+    name: Packaged editor workflows (macOS)
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+      - name: Install LLVM 22
+        run: scripts/setup-llvm.sh 22
+      - name: Build self-hosted compiler for editor tests
+        run: |
+          eval "$(scripts/setup-llvm.sh 22 --print-env)"
+          cmake -S . -B build/editor-ci-bootstrap -DCMAKE_BUILD_TYPE=Release
+          cmake --build build/editor-ci-bootstrap --parallel 4
+          (cd compiler/ycpl && ../../build/editor-ci-bootstrap/ycc build -o ../../build/editor-ci-compiler)
+          {
+            echo "LLVM_CONFIG=$LLVM_CONFIG"
+            echo "LLVM_BINDIR=$LLVM_BINDIR"
+            echo "LLVM_DIR=$LLVM_DIR"
+            echo "YCC=$GITHUB_WORKSPACE/build/editor-ci-compiler/ycc"
+            echo "YCPL_TEST_COMPILER=$GITHUB_WORKSPACE/build/editor-ci-compiler/ycc"
+            echo "YCPL_RUNTIME_SRC=$GITHUB_WORKSPACE/bootstrap/cpp/runtime/yc_runtime.c"
+            echo "YCPL_STL_ROOT=$GITHUB_WORKSPACE/stl"
+          } >> "$GITHUB_ENV"
+          echo "$LLVM_BINDIR" >> "$GITHUB_PATH"
+      - name: Install editor dependencies
+        run: |
+          npm ci --prefix editors/vscode/language-server
+          npm ci --prefix editors/vscode/extension
+      - name: Check editor and protocol
+        run: |
+          npm run check --prefix editors/vscode/language-server
+          npm run check --prefix editors/vscode/extension
+          tools/lsp/run_tests.sh
+          tests/test_development_workflows.sh
+      - name: Test packaged VSIX with both servers
+        run: |
+          npm run test:extension --prefix editors/vscode/extension
+          npm run test:extension:native --prefix editors/vscode/extension
+          npm run check-package --prefix editors/vscode/extension

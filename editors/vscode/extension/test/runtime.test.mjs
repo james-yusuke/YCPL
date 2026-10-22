@@ -56,12 +56,14 @@ test("never selects a bootstrap compiler", () => {
 });
 
 test("parses compiler diagnostics", () => {
-  assert.deepEqual(parseCompilerDiagnostics("./src/main.yc:5:7: unknown symbol"), [{
-    file: "./src/main.yc",
-    line: 5,
-    column: 7,
-    message: "unknown symbol"
-  }]);
+  assert.deepEqual(parseCompilerDiagnostics("./src/main.yc:5:7: unknown symbol"), [
+    {
+      file: "./src/main.yc",
+      line: 5,
+      column: 7,
+      message: "unknown symbol"
+    }
+  ]);
 });
 
 test("builds compiler arguments for file and run commands", () => {
@@ -70,9 +72,18 @@ test("builds compiler arguments for file and run commands", () => {
   fs.writeFileSync(source, "fn main() i32 { return 0 }");
   assert.deepEqual(compilerTarget(source, [fileRoot]), { cwd: fileRoot, input: source });
   assert.deepEqual(compilerArguments("build", source, path.join(fileRoot, ".ycpl", "build")), [
-    "build", source, "-o", path.join(fileRoot, ".ycpl", "build")
+    "build",
+    source,
+    "-o",
+    path.join(fileRoot, ".ycpl", "build")
   ]);
   assert.deepEqual(compilerArguments("run", source, "out", ["one", "two words"]), [
-    "run", source, "-o", "out", "--", "one", "two words"
+    "run",
+    source,
+    "-o",
+    "out",
+    "--",
+    "one",
+    "two words"
   ]);
 });

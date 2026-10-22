@@ -1,0 +1,155 @@
+module compiler.ycpl.codegen.debug
+
+import "c/llvm" as llvm
+import "ast/project" as project
+import "ast/nodes" as ast
+import "std/str" as str
+import "std/text" as text
+import "std/os" as os
+
+pub struct DebugInfo {
+    ok bool
+    enabled bool
+    builder *byte
+    context *byte
+    mod *byte
+    ir_builder *byte
+    scope *byte
+    file *byte
+    files Vec<i64>
+    types Vec<i64>
+    metadata Vec<i64>
+}
+
+fn native_layout(mod *byte) bool {
+    llvm.initialize_x86_target_info()
+    llvm.initialize_x86_target()
+    llvm.initialize_x86_target_mc()
+    llvm.initialize_arm64_target_info()
+    llvm.initialize_arm64_target()
+    llvm.initialize_arm64_target_mc()
+    triple := llvm.default_target_triple()
+    target: *byte = none
+    error: string = none
+    if llvm.target_from_triple(triple, &target, &error) != 0 { return false }
+    machine := llvm.target_machine(target, triple, "generic", "", 0, 2, 0)
+    if machine == none { return false }
+    data := llvm.target_data_layout(machine)
+    layout := llvm.data_layout_string(data)
+    llvm.set_target(mod, triple)
+    llvm.set_data_layout(mod, layout)
+    llvm.dispose_message(layout)
+    llvm.dispose_message(triple)
+    llvm.target_data_dispose(data)
+    llvm.target_machine_dispose(machine)
+    return true
+}
+
+pub fn create(enabled bool, ctx *byte, mod *byte, ir_builder *byte, syntax ProjectAstResult) DebugInfo {
+    info := DebugInfo{ok: true, enabled: enabled, builder: none, context: ctx, mod: mod, ir_builder: ir_builder, scope: none, file: none, files: Vec<i64>{}, types: Vec<i64>{}, metadata: Vec<i64>{}}
+    if !enabled { return info }
+    if !native_layout(mod) {
+        info.ok = false
+        return info
+    }
+    info.builder = llvm.di_builder(mod)
+    i := 0
+    for (; i < syntax.files; i++) {
+        path := project.path_at(syntax, i)
+        if path[0] != '/' { path = text.concat3(os.cwd(), "/", path) }
+        file := llvm.di_file(info.builder, path, str.len(path), "", 0)
+        info.files.push(cast(i64, file))
+    }
+    files: Vec<i64> := info.files
+    llvm.di_compile_unit(info.builder, 1, cast(*byte, files[0]), "YCPL", 4, 0, "", 0, 0, "", 0, 1, 0, 0, 0, "", 0, "", 0)
+    llvm.module_flag(mod, 1, "Debug Info Version", 18, llvm.value_metadata(llvm.const_int(llvm.i32_type(ctx), 3, 0)))
+    llvm.module_flag(mod, 1, "Dwarf Version", 13, llvm.value_metadata(llvm.const_int(llvm.i32_type(ctx), 4, 0)))
+    return info
+}
+
+pub fn begin_function(info *DebugInfo, function *byte, file_id i32, name string, linkage string, line i32) {
+    if !info.enabled { return }
+    files: Vec<i64> := info.files
+    info.file = cast(*byte, files[file_id])
+    typ := llvm.di_subroutine(info.builder, info.file, none, 0, 0)
+    info.scope = llvm.di_function(info.builder, info.file, name, str.len(name), linkage, str.len(linkage), info.file, line, typ, 0, 1, line, 0, 0)
+    llvm.set_subprogram(function, info.scope)
+    llvm.add_attribute(function, -1, llvm.string_attribute(info.context, "frame-pointer", 13, "all", 3))
+    llvm.set_debug_location(info.ir_builder, none)
+}
+
+pub fn location(info *DebugInfo, line i32, col i32) {
+    if !info.enabled || info.scope == none { return }
+    llvm.set_debug_location(info.ir_builder, llvm.di_location(info.context, line, col, info.scope, none))
+}
+
+pub fn clear_location(info *DebugInfo) {
+    if info.enabled { llvm.set_debug_location(info.ir_builder, none) }
+}
+
+fn type_metadata(info *DebugInfo, typ *byte) *byte {
+    types: Vec<i64> := info.types
+    metadata: Vec<i64> := info.metadata
+    i := 0
+    for (; i < types.len(); i++) {
+        if types[i] == cast(i64, typ) { return cast(*byte, metadata[i]) }
+    }
+
+    kind := llvm.type_kind(typ)
+    if kind == 8 {
+        width := llvm.int_width(typ)
+        if width == 1 { return llvm.di_basic(info.builder, "bool", 4, 8, 2, 0) }
+        if width == 8 { return llvm.di_basic(info.builder, "byte", 4, 8, 7, 0) }
+        if width == 64 { return llvm.di_basic(info.builder, "i64", 3, 64, 5, 0) }
+        return llvm.di_basic(info.builder, "i32", 3, 32, 5, 0)
+    }
+    if kind == 2 { return llvm.di_basic(info.builder, "float", 5, 32, 4, 0) }
+    if kind == 3 { return llvm.di_basic(info.builder, "double", 6, 64, 4, 0) }
+    if kind == 12 {
+        character_type := llvm.di_basic(info.builder, "char", 4, 8, 6, 0)
+        return llvm.di_pointer(info.builder, character_type, 64, 64, 0, "", 0)
+    }
+    name := llvm.type_to_string(typ)
+    result := llvm.di_unspecified(info.builder, name, str.len(name))
+    llvm.dispose_message(name)
+    return result
+}
+
+pub fn register_struct(info *DebugInfo, typ *byte, name string, file_id i32, line i32, names Vec<string>, types *i64, count i32) {
+    if !info.enabled { return }
+    files: Vec<i64> := info.files
+    file := cast(*byte, files[file_id])
+    layout := llvm.module_data_layout(info.mod)
+    members := llvm.refs(count)
+    i := 0
+    for (; i < count; i++) {
+        field_type := llvm.refs_get(types, i)
+        field_name := names[i]
+        metadata := llvm.di_member(info.builder, file, field_name, str.len(field_name), file, line, llvm.abi_size(layout, field_type) * 8, llvm.abi_alignment(layout, field_type) * 8, llvm.offset_of(layout, typ, i) * 8, 0, type_metadata(info, field_type))
+        llvm.refs_set(members, i, metadata)
+    }
+    metadata := llvm.di_struct(info.builder, file, name, str.len(name), file, line, llvm.abi_size(layout, typ) * 8, llvm.abi_alignment(layout, typ) * 8, 0, none, members, count, 0, none, "", 0)
+    info.types.push(cast(i64, typ))
+    info.metadata.push(cast(i64, metadata))
+}
+
+pub fn local(info *DebugInfo, address *byte, typ *byte, name string, line i32, col i32, argument i32) {
+    if !info.enabled { return }
+    metadata := type_metadata(info, typ)
+    variable: *byte = none
+    if argument > 0 {
+        variable = llvm.di_parameter(info.builder, info.scope, name, str.len(name), argument, info.file, line, metadata, 1, 0)
+    } else {
+        variable = llvm.di_auto(info.builder, info.scope, name, str.len(name), info.file, line, metadata, 1, 0, 0)
+    }
+    expression := llvm.di_expression(info.builder, none, 0)
+    at := llvm.di_location(info.context, line, col, info.scope, none)
+    llvm.di_declare(info.builder, address, variable, expression, at, llvm.insert_block(info.ir_builder))
+}
+
+pub fn finish(info *DebugInfo) {
+    if info.enabled {
+        llvm.di_finalize(info.builder)
+        llvm.di_dispose(info.builder)
+    }
+}

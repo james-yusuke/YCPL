@@ -25,14 +25,25 @@ async function run() {
   const document = await vscode.workspace.openTextDocument(files[0]);
   await vscode.window.showTextDocument(document);
   await waitFor(async () => {
-    const completions = await vscode.commands.executeCommand("vscode.executeCompletionItemProvider", document.uri, new vscode.Position(1, 4));
+    const completions = await vscode.commands.executeCommand(
+      "vscode.executeCompletionItemProvider",
+      document.uri,
+      new vscode.Position(1, 4)
+    );
     return completions?.items.some((item) => item.label === "Vec");
   });
   const symbols = await vscode.commands.executeCommand("vscode.executeDocumentSymbolProvider", document.uri);
-  assert.ok(symbols.some((symbol) => symbol.name === "main"), "packaged server indexes the open document");
+  assert.ok(
+    symbols.some((symbol) => symbol.name === "main"),
+    "packaged server indexes the open document"
+  );
+  await require("./workflows.cjs").runWorkflows();
   await vscode.commands.executeCommand("YCPL.restartLanguageServer");
   await waitFor(async () => {
-    const symbols = await vscode.commands.executeCommand("vscode.executeDocumentSymbolProvider", document.uri);
+    const symbols = await vscode.commands.executeCommand(
+      "vscode.executeDocumentSymbolProvider",
+      document.uri
+    );
     return symbols?.some((symbol) => symbol.name === "main");
   });
 }

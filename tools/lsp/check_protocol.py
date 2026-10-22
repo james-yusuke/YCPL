@@ -256,10 +256,24 @@ def main():
     case(binary, "cross_file_references", [cross_lib_open + cross_app_open + cross_references], lambda _raw, obj: len(obj.get("result", [])) == 3 and any(item.get("uri") == "file:///lib.yc" for item in obj["result"]) and any(item.get("uri") == "file:///app.yc" for item in obj["result"]), "references across open documents")
     case(binary, "prepare_rename", [cross_app_open + cross_prepare_rename], lambda _raw, obj: obj.get("result", {}).get("start", {}).get("line") == 3 and obj["result"]["start"]["character"] == 4, "prepare rename word range")
     case(binary, "cross_file_rename", [cross_lib_open + cross_app_open + cross_rename], lambda _raw, obj: len(obj.get("result", {}).get("changes", {}).get("file:///lib.yc", [])) == 1 and len(obj["result"]["changes"].get("file:///app.yc", [])) == 2 and obj["result"]["changes"]["file:///app.yc"][0]["newText"] == "calculate", "rename across open documents")
+    large_source = "".join(f"fn response_{index:05d}() {{}}\n" for index in range(1200))
+    large_uri = "file:///" + "/".join("directory_" + "x" * 70 for _ in range(10)) + "/large_response.yc"
+    large_open = make_msg(json.dumps({"jsonrpc": "2.0", "method": "textDocument/didOpen", "params": {"textDocument": {"uri": large_uri, "text": large_source}}}))
+    large_symbols = make_msg('{"jsonrpc":"2.0","id":101,"method":"workspace/symbol","params":{"query":"response_"}}')
+    case(binary, "large_workspace_response", [large_open + large_symbols], lambda raw, obj: obj.get("id") == 101 and len(obj.get("result", [])) == 1200 and len(raw) > 1048576, "workspace response grows beyond the old fixed buffer")
     case(binary, "workspace_symbol", [cross_lib_open + cross_app_open + workspace_symbol], lambda _raw, obj: any(item.get("name") == "compute" and item.get("location", {}).get("uri") == "file:///lib.yc" for item in obj.get("result", [])), "workspace symbol query")
     case(binary, "selection_range", [cross_app_open + selection_range], lambda _raw, obj: len(obj.get("result", [])) == 1 and obj["result"][0]["range"]["start"]["line"] == 4 and obj["result"][0]["range"]["start"]["character"] == 4, "selection range for word")
     case(binary, "contextual_hover", [cross_lib_open + cross_app_open + contextual_hover], lambda raw, _obj: "Widget" in raw and "YCPL variable or field" in raw, "contextual hover")
     case(binary, "formatting", [did_open + formatting], lambda raw, _obj: '"newText":"fn main() {\\n    return 0\\n}\\n"' in raw, "formatted document text")
+    for name, original, required in [
+        ("format_for_header", "fn main(){for(i:=0;i<3;i++){}}", "for(i:=0;i<3;i++)"),
+        ("format_literals", "fn main(){ch:='}';raw:=`{\\n}`;/* a /* nested */ } */return 0}", "/* a /* nested */ } */"),
+        ("format_expansion", "{" * 700 + "}" * 700, None),
+        ("format_controls", "fn main(){//\x08\x01\nreturn 0}", "//\x08\x01"),
+    ]:
+        opened = make_msg(json.dumps({"jsonrpc": "2.0", "method": "textDocument/didOpen", "params": {"textDocument": {"uri": "file:///main.yc", "text": original}}}))
+        request = make_msg(json.dumps({"jsonrpc": "2.0", "id": 99, "method": "textDocument/formatting", "params": {"textDocument": {"uri": "file:///main.yc"}, "options": {"tabSize": 4, "insertSpaces": True}}}))
+        case(binary, name, [opened + request], lambda _raw, obj: obj.get("id") == 99 and len(obj.get("result", [])) == 1 and (required is None or required in obj["result"][0]["newText"]), "safe formatting preserves syntax and bounds expansion")
     case(binary, "range_formatting", [did_open + range_formatting], lambda raw, _obj: '"newText":"fn main() {\\n    return 0\\n}\\n"' in raw, "formatted range text")
     case(binary, "folding", [did_open_multiline + folding], lambda _raw, obj: len(obj.get("result", [])) == 1 and obj["result"][0]["startLine"] == 0, "folding range")
     case(binary, "signature_help", [signature], lambda raw, _obj: "fmt.println(value any)" in raw, "signature help")

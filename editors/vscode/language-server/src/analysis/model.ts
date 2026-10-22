@@ -1,9 +1,5 @@
 import type { LexicalSpan } from "./lexical.js";
-import {
-  type Position,
-  type Range,
-  SymbolKind
-} from "vscode-languageserver/node";
+import { type Position, type Range, SymbolKind } from "vscode-languageserver/node";
 
 export const keywords = [
   "module",
@@ -86,7 +82,7 @@ export const semanticTokenModifiers = [
   "defaultLibrary"
 ] as const;
 
-export type SemanticKind = typeof semanticTokenTypes[number];
+export type SemanticKind = (typeof semanticTokenTypes)[number];
 export type SymbolId = string;
 export type ScopeId = string;
 

@@ -1,0 +1,14 @@
+import "std/fmt" as fmt
+
+struct Values {
+    marker *byte
+    items Vec<i64>
+}
+
+fn main() i32 {
+    values := Values{marker: none, items: Vec<i64>{}}
+    values.items.push(cast(i64, 42))
+    copy: Vec<i64> := values.items
+    fmt.println(copy[0])
+    return 0
+}

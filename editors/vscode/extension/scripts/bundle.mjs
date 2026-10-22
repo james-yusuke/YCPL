@@ -16,7 +16,7 @@ const modernUrlPlugin = {
         let contents = original
           .replace("const parsed = url.parse(uri);", "const parsed = new url.URL(uri);")
           .replace("!parsed.path", "!parsed.pathname")
-          .replace("parsed.path.split(\"/\")", "parsed.pathname.split(\"/\")");
+          .replace('parsed.path.split("/")', 'parsed.pathname.split("/")');
         if (original.includes("url.parse(uri)") && contents.includes("url.parse(uri)")) {
           throw new Error(`Could not replace deprecated url.parse() in ${sourcePath}`);
         }
@@ -34,6 +34,7 @@ await build({
   format: "cjs",
   target: "node20",
   external: ["vscode"],
+  plugins: [modernUrlPlugin],
   sourcemap: false,
   logLevel: "info"
 });
@@ -43,6 +44,21 @@ await build({
 await build({
   entryPoints: [path.join(extensionRoot, "src", "runtime.ts")],
   outfile: path.join(extensionRoot, "dist", "runtime.js"),
+  bundle: true,
+  platform: "node",
+  format: "esm",
+  target: "node20",
+  sourcemap: false,
+  logLevel: "info"
+});
+
+await build({
+  entryPoints: [path.join(extensionRoot, "src", "workflow.ts")],
+  outfile: path.join(extensionRoot, "dist", "workflow.js"),
+  plugins: [modernUrlPlugin],
+  banner: {
+    js: 'import { createRequire } from "node:module"; const require = createRequire(import.meta.url);'
+  },
   bundle: true,
   platform: "node",
   format: "esm",
@@ -62,3 +78,15 @@ await build({
   plugins: [modernUrlPlugin],
   logLevel: "info"
 });
+
+for (const name of ["process", "llvm"]) {
+  await build({
+    entryPoints: [path.join(extensionRoot, "src", `${name}.ts`)],
+    outfile: path.join(extensionRoot, "dist", `${name}.js`),
+    bundle: true,
+    platform: "node",
+    format: "esm",
+    target: "node20",
+    logLevel: "info"
+  });
+}
