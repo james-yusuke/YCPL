@@ -87,3 +87,10 @@ sh_test(
         "//:yc_runtime_src",
     ],
 )
+
+sh_test(
+    name = "llvm_setup_test",
+    srcs = ["test_llvm_setup.sh"],
+    args = ["$(rootpath //:scripts/setup-llvm.sh)"],
+    data = ["//:scripts/setup-llvm.sh"],
+)
