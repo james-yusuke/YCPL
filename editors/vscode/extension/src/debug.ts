@@ -42,7 +42,19 @@ export async function debugTest(
       if (candidate.configuration.__ycplTest !== id) return undefined;
       session = candidate;
       return {
+        onWillReceiveMessage(message) {
+          if (
+            message.type === "request" &&
+            ["launch", "configurationDone", "disconnect", "terminate"].includes(message.command)
+          )
+            record(`Debug request: ${message.command}\n`);
+        },
         onDidSendMessage(message) {
+          if (
+            message.type === "event" &&
+            ["initialized", "process", "exited", "terminated"].includes(message.event)
+          )
+            record(`Debug event: ${message.event}\n`);
           if (message.type === "event" && message.event === "exited") {
             code = message.body.exitCode;
             settle(result());
@@ -51,8 +63,13 @@ export async function debugTest(
             record(`Debugger stopped: ${message.body.reason} ${message.body.description ?? ""}\n`);
           if (message.type === "event" && message.event === "output")
             record(message.body.output ?? "", message.body.category === "stderr");
-          if (message.type === "response" && message.command === "launch" && !message.success)
-            record(message.message ?? "Debugger launch failed.\n", true);
+          if (message.type === "response" && message.command === "launch") {
+            record(`Debug launch: ${message.success ? "accepted" : "failed"}\n`);
+            if (!message.success) {
+              record(message.message ?? "Debugger launch failed.\n", true);
+              settle(result());
+            }
+          }
         },
         onError(error) {
           record(`${error.message}\n`, true);
@@ -70,10 +87,10 @@ export async function debugTest(
     if (candidate.configuration.__ycplTest === id) settle(result());
   });
   const cancel = token.onCancellationRequested(() => {
-    if (session) void vscode.debug.stopDebugging(session);
+    settle(result());
   });
   try {
-    const accepted = await vscode.debug.startDebugging(
+    const starting = vscode.debug.startDebugging(
       vscode.workspace.getWorkspaceFolder(vscode.Uri.file(cwd)),
       {
         type: "ycpl",
@@ -89,15 +106,21 @@ export async function debugTest(
       },
       { testRun }
     );
-    if (!accepted) {
+    // VS Code may still be settling launch/teardown UI after DAP has already
+    // reported an exit or launch failure. The adapter owns the test result.
+    const outcome = await Promise.race([
+      starting.then((accepted) => ({ accepted })),
+      finished.then((result) => ({ result }))
+    ]);
+    if ("result" in outcome) return outcome.result;
+    if (!outcome.accepted) {
       record("Debug session did not start.\n", true);
       return result();
     }
-    if (token.isCancellationRequested && session) await vscode.debug.stopDebugging(session);
     return await finished;
   } finally {
     if (session)
-      await vscode.debug.stopDebugging(session).then(
+      void vscode.debug.stopDebugging(session).then(
         () => undefined,
         () => undefined
       );
