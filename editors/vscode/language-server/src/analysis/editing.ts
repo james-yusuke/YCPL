@@ -128,12 +128,12 @@ export function inferredType(document: YcplDocument, symbol: YcplSymbol): string
     .match(/^\s*:=\s*([^\n;]+)/)?.[1]
     ?.trim();
   if (!rhs) return undefined;
-  if (/^(true|false)\b/.test(rhs)) return "bool";
-  if (/^["`]/.test(rhs)) return "string";
-  if (/^'/.test(rhs)) return "char";
-  if (/^-?\d+\.\d/.test(rhs)) return "double";
+  if (/^(true|false)$/.test(rhs)) return "bool";
+  if (/^"(?:[^"\\]|\\.)*"$/.test(rhs) || /^`[^`]*`$/.test(rhs)) return "string";
+  if (/^'(?:[^'\\]|\\.)'$/.test(rhs)) return "char";
+  if (/^-?\d+\.\d+(?:[eE][+-]?\d+)?$/.test(rhs)) return "double";
   if (/^-?(?:\d+|0x[\da-f]+)\s*$/i.test(rhs)) return "i32";
-  return rhs.match(/^((?:Vec|Map)<.+>|[A-Za-z_]\w*)\s*\{/)?.[1];
+  return rhs.match(/^((?:Vec|Map)<[^{}]+>|[A-Za-z_]\w*)\s*\{[^{}]*\}$/)?.[1];
 }
 
 /** Offer refactors only where moving an expression cannot reorder preceding evaluation. */
@@ -144,7 +144,17 @@ export function extractVariable(document: YcplDocument, range: Range): CodeActio
   const prefix = document.code.slice(document.lineOffsets[range.start.line], start);
   if (start === end || range.start.line !== range.end.line || !selected.trim()) return [];
   if (!/^\s*(?:return\s+|[A-Za-z_]\w*(?:\s*:\s*[^=]+)?\s*(?::=|=)\s*)$/.test(prefix)) return [];
-  if (/[{};]/.test(scanLexical(selected).code)) return [];
+  const selectedCode = scanLexical(selected).code;
+  if (/[{};]/.test(selectedCode)) return [];
+  const lineEnd = document.lineOffsets[range.start.line + 1] ?? document.text.length;
+  const suffix = document.code.slice(end, lineEnd).trim();
+  if (suffix && suffix !== ";") return [];
+  const balanced: string[] = [];
+  for (const char of selectedCode) {
+    if (char === "(" || char === "[") balanced.push(char);
+    if ((char === ")" || char === "]") && balanced.pop() !== (char === ")" ? "(" : "[")) return [];
+  }
+  if (balanced.length) return [];
   const names = new Set(document.symbols.map((symbol) => symbol.name));
   let name = "extracted";
   for (let i = 2; names.has(name); i += 1) name = `extracted${i}`;
@@ -326,7 +336,7 @@ export function fillStruct(
           ? "false"
           : /^(?:[iu]\d+|size|byte|char|float|double)$/.test(name)
             ? "0"
-            : /^(?:string|\*|\[\])/.test(name)
+            : name === "string" || name.startsWith("*")
               ? "none"
               : undefined;
       return value === undefined ? undefined : `${field.name}: ${value}`;

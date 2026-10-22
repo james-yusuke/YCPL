@@ -196,3 +196,57 @@ test("inline literal and parameter hints are actionable; type definition targets
   assert.equal(actions.length, 1);
   assert.ok(apply(text, actions[0].edit!.changes![document.uri]).includes("Point{x: (42)}"));
 });
+
+test("variable extraction rejects partial expressions that change precedence", () => {
+  const index = new WorkspaceIndex();
+  const source = "fn main() i32 {\n    return 1 + 2 * 3\n}\n";
+  const document = parser.parse("file:///precedence.yc", 0, source);
+  index.update(document);
+  const providers = new YcplProviders(index, new StandardLibraryIndex(undefined), new NullCompilerBridge());
+  assert.equal(
+    providers.codeActions({
+      textDocument: { uri: document.uri },
+      range: Range.create(1, 11, 1, 16),
+      context: { diagnostics: [], only: ["refactor.extract"] }
+    }).length,
+    0
+  );
+  assert.equal(
+    providers.codeActions({
+      textDocument: { uri: document.uri },
+      range: Range.create(1, 11, 1, 20),
+      context: { diagnostics: [], only: ["refactor.extract"] }
+    }).length,
+    1
+  );
+});
+
+test("hints do not guess comparison or method-call types from their first literal", () => {
+  const index = new WorkspaceIndex();
+  const source = 'fn main() {\n    a := "x" == "y"\n    b := 1.5 < 2.0\n    c := Vec<i32>{}.len()\n}\n';
+  const document = parser.parse("file:///hint-types.yc", 0, source);
+  index.update(document);
+  const providers = new YcplProviders(index, new StandardLibraryIndex(undefined), new NullCompilerBridge());
+  assert.deepEqual(
+    providers
+      .inlayHints({ textDocument: { uri: document.uri }, range: Range.create(0, 0, 5, 0) })
+      .filter((hint) => typeof hint.label === "string" && hint.label.startsWith(":")),
+    []
+  );
+});
+
+test("struct filling declines fields without a valid generated zero expression", () => {
+  const index = new WorkspaceIndex();
+  const source = "struct Collection { items []i32 }\nfn main() {\n    value := Collection{}\n}\n";
+  const document = parser.parse("file:///fill-slice.yc", 0, source);
+  index.update(document);
+  const providers = new YcplProviders(index, new StandardLibraryIndex(undefined), new NullCompilerBridge());
+  assert.equal(
+    providers.codeActions({
+      textDocument: { uri: document.uri },
+      range: Range.create(2, 24, 2, 24),
+      context: { diagnostics: [], only: ["refactor.rewrite"] }
+    }).length,
+    0
+  );
+});
