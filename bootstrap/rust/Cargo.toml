@@ -12,11 +12,11 @@ path = "src/main.rs"
 [dependencies]
 cxx = "=1.0.205"
 serde_json = "1"
-shlex = "1"
+shlex = "2"
 
 [build-dependencies]
 cxx-build = "=1.0.205"
-shlex = "1"
+shlex = "2"
 
 [dev-dependencies]
 tempfile = "3"
