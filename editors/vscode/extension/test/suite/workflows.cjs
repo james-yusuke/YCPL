@@ -21,7 +21,7 @@ async function runWorkflows() {
     await fs.writeFile(uri.fsPath, content);
     return uri;
   };
-  await write("math.yc", "pub fn add(a i32, b i32) i32 {\n    return a + b\n}\n");
+  const math = await write("math.yc", "pub fn add(a i32, b i32) i32 {\n    return a + b\n}\n");
   const tests = await write(
     "math_test.yc",
     'import "./math.yc" as math\npub fn test_pass() bool { return math.add(20, 22) == 42 }\npub fn test_fail() bool { return false }\npub fn benchmark_add() bool { return math.add(1, 2) == 3 }\npub fn fuzz_identity(seed i32) bool { return seed >= 0 }\n'
@@ -33,6 +33,19 @@ async function runWorkflows() {
     { passed: 3, failed: 1, errored: 0, skipped: 0 },
     "Test Explorer compiles and executes real passing/failing tests and benchmarks"
   );
+  await vscode.window.showTextDocument(await vscode.workspace.openTextDocument(math));
+  const lenses = await vscode.commands.executeCommand("vscode.executeCodeLensProvider", math);
+  const referencesLens = lenses.find((lens) => lens.command?.command === "YCPL.references");
+  assert.ok(referencesLens, "reference lens has an executable command");
+  assert.ok(
+    (await vscode.commands.executeCommand(
+      referencesLens.command.command,
+      ...referencesLens.command.arguments
+    )) > 0,
+    "reference lens opens actual reference locations"
+  );
+  await vscode.commands.executeCommand("closeReferenceSearch");
+  await vscode.window.showTextDocument(await vscode.workspace.openTextDocument(tests));
   vscode.window.activeTextEditor.selection = new vscode.Selection(1, 10, 1, 10);
   const debugged = await vscode.commands.executeCommand("YCPL.debugTestAtCursor");
   assert.deepEqual(

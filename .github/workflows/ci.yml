@@ -299,8 +299,18 @@ jobs:
           npm run check --prefix editors/vscode/extension
           tools/lsp/run_tests.sh
           tests/test_development_workflows.sh
+      - name: Check LLDB adapter installation
+        run: |
+          "$LLVM_BINDIR/lldb-dap" --version
       - name: Test packaged VSIX with both servers
         run: |
           npm run test:extension --prefix editors/vscode/extension
           npm run test:extension:native --prefix editors/vscode/extension
           npm run check-package --prefix editors/vscode/extension
+      - name: Upload editor failure logs
+        if: failure()
+        uses: actions/upload-artifact@v6
+        with:
+          name: macos-editor-logs
+          path: editors/vscode/extension/.vscode-test/user-data/logs/**/exthost/output_logging_*/*YCPL*
+          if-no-files-found: ignore

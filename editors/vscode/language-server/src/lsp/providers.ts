@@ -571,12 +571,8 @@ export class YcplProviders {
         range: symbol.selectionRange,
         command: {
           title: `${Math.max(0, this.index.findReferencesBySymbolId(symbol.id, false).length)} references`,
-          command: "editor.action.showReferences",
-          arguments: [
-            symbol.uri,
-            symbol.selectionRange.start,
-            this.index.findReferencesBySymbolId(symbol.id, false)
-          ]
+          command: "YCPL.references",
+          arguments: [symbol.uri, symbol.selectionRange.start]
         }
       }));
   }

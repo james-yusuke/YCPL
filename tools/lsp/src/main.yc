@@ -1643,7 +1643,7 @@ fn count_word(source string, word string) i32 {
     return count
 }
 
-fn send_code_lenses(id i32, source string) {
+fn send_code_lenses(id i32, uri string, source string) {
     if source == none {
         send_empty_result(id)
         return
@@ -1668,9 +1668,15 @@ fn send_code_lenses(id i32, source string) {
             ch := text.utf16_col(source, name_start)
             at = append_str(&body, at, "{\"range\":")
             at = append_range_json(&body, at, line, ch, ch + len)
-            at = append_str(&body, at, ",\"command\":{\"title\":\"")
-            at = append_i32(&body, at, count_word(source, name) - 1)
-            at = append_str(&body, at, " references\",\"command\":\"\"}}")
+            escaped_uri := json_escape_string(uri)
+            at = append_str(&body, at, ",\"command\":{\"title\":\"Find references\",\"command\":\"YCPL.references\",\"arguments\":[\"")
+            at = append_str(&body, at, escaped_uri)
+            at = append_str(&body, at, "\",{\"line\":")
+            at = append_i32(&body, at, line)
+            at = append_str(&body, at, ",\"character\":")
+            at = append_i32(&body, at, ch)
+            at = append_str(&body, at, "}]}}")
+            mem.free(escaped_uri)
             first = false
             mem.free(name)
         }
@@ -2203,7 +2209,7 @@ fn dispatch_message(message string, method string, uris []string, texts []string
     if str.eq(method, "textDocument/codeLens") {
         uri := field_string(message, "\"uri\"")
         source := map.get(uris, texts, uri)
-        send_code_lenses(id, source)
+        send_code_lenses(id, uri, source)
         if uri != none {
             mem.free(uri)
         }

@@ -289,7 +289,10 @@ export function inlineVariable(
     references.some(
       (reference) =>
         reference.uri !== document.uri ||
-        /^\s*(?:=(?!=)|[+*/%-]=|\+\+|--)/.test(
+        /&\s*$/.test(
+          document.code.slice(0, offsetAt(document.text, document.lineOffsets, reference.range.start))
+        ) ||
+        /^\s*\)*\s*(?:=(?!=)|[+*/%&|^<>-]+=|\+\+|--)/.test(
           document.code.slice(offsetAt(document.text, document.lineOffsets, reference.range.end))
         )
     )

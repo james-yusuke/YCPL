@@ -12,6 +12,7 @@ export interface TestSummary {
   failed: number;
   errored: number;
   skipped: number;
+  errors?: string[];
   coverage?: { files: number; total: number; covered: number };
 }
 
@@ -173,6 +174,8 @@ export class YcplTesting implements vscode.Disposable {
       if (finished.has(item.id)) return;
       run.errored(item, new vscode.TestMessage(message));
       summary.errored += 1;
+      summary.errors ??= [];
+      if (!summary.errors.includes(message)) summary.errors.push(message);
       finished.add(item.id);
     };
     const excluded = new Set((request.exclude ?? []).map((item) => item.id));
@@ -342,6 +345,8 @@ export class YcplTesting implements vscode.Disposable {
         }
       }
     } catch (error) {
+      summary.errors ??= [];
+      if (!summary.errors.includes(String(error))) summary.errors.push(String(error));
       this.output.appendLine(String(error));
       run.appendOutput(`${String(error)}\r\n`);
       void vscode.window.showErrorMessage(`YCPL tests: ${String(error)}`);

@@ -29,6 +29,15 @@ export function registerWorkbench(
       })
     );
   };
+  command("YCPL.references", async (source: string, position: { line: number; character: number }) => {
+    const uri = vscode.Uri.parse(source);
+    const at = new vscode.Position(position.line, position.character);
+    const references =
+      (await vscode.commands.executeCommand<vscode.Location[]>("vscode.executeReferenceProvider", uri, at)) ??
+      [];
+    await vscode.commands.executeCommand("editor.action.showReferences", uri, at, references);
+    return references.length;
+  });
   command("YCPL.testWorkspace", () => testing.runSelection());
   command("YCPL.testFile", (uri?: vscode.Uri) => testing.runSelection(uri ?? activeDocument().uri));
   command("YCPL.testAtCursor", () =>

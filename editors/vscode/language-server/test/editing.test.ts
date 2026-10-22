@@ -250,3 +250,24 @@ test("struct filling declines fields without a valid generated zero expression",
     0
   );
 });
+
+test("inlining preserves storage identity and rejects parenthesized writes", () => {
+  for (const use of ["pointer := &value", "(value) += 1"]) {
+    const index = new WorkspaceIndex();
+    const document = parser.parse(
+      "file:///inline-address.yc",
+      0,
+      `fn main() {\n    value := 42\n    ${use}\n}\n`
+    );
+    index.update(document);
+    const providers = new YcplProviders(index, new StandardLibraryIndex(undefined), new NullCompilerBridge());
+    assert.equal(
+      providers.codeActions({
+        textDocument: { uri: document.uri },
+        range: Range.create(1, 7, 1, 7),
+        context: { diagnostics: [], only: ["refactor.inline"] }
+      }).length,
+      0
+    );
+  }
+});
