@@ -7,6 +7,7 @@ import "source/source" as source
 import "c/yc_runtime" as runtime
 import "std/str" as str
 import "std/text" as text
+import "std/fs" as fs
 
 pub struct ProjectFile {
     id i32
@@ -315,6 +316,58 @@ pub fn parse_project(root string) ProjectAstResult {
     return result
 }
 
+fn local_import_file(parent string, name string) string {
+    candidate := text.concat3(parent, "/", name)
+    if fs.is_file(candidate) { return candidate }
+    file := text.concat(candidate, ".yc")
+    if fs.is_file(file) { return file }
+    index := text.concat(candidate, "/index.yc")
+    if fs.is_file(index) { return index }
+    return ""
+}
+
+// File mode follows explicit imports too. Compare file identity so aliases,
+// ../ segments and symlink cycles cannot load a second copy of an arena.
+fn load_local_imports(result ProjectAstResult, root string) ProjectAstResult {
+    relative_root := root
+    if is_yc_file(root) { relative_root = parent_dir(root) }
+    file_id := 0
+    for (; file_id < result.files; file_id++) {
+        program: ProgramAst := program_at(result, file_id)
+        decl_id := 0
+        for (; decl_id < ast.decl_count(program.arena); decl_id++) {
+            if program.arena.decl_kinds[decl_id] == ast.decl_import() {
+                name := ast.decl_link_name(program.arena, decl_id)
+                target := ast.invalid_id()
+                i := 0
+                for (; i < result.files; i++) {
+                    if str.eq(import_path_at(result, i), name) { target = i }
+                }
+                if target == ast.invalid_id() {
+                    path := local_import_file(parent_dir(path_at(result, file_id)), name)
+                    if str.len(path) > 0 {
+                        i = 0
+                        for (; i < result.files; i++) {
+                            if runtime.fs_same_file(path_at(result, i), path) != 0 { target = i }
+                        }
+                        if target == ast.invalid_id() {
+                            target = result.files
+                            result = append_path(result, relative_root, path)
+                            if !result.ok { return result }
+                        }
+                    }
+                }
+                if target != ast.invalid_id() {
+                    normalized := import_path_at(result, target)
+                    program.arena.decl_link_names[decl_id] = normalized
+                    program.arena.decls[decl_id].link_name = normalized
+                }
+            }
+        }
+    }
+    return result
+}
+
 // Load the canonical project AST plus all C/std modules made available to a
 // normal compiler invocation. Paths are retained in independently sorted
 // groups and file ids are assigned once in that stable order.
@@ -326,7 +379,7 @@ pub fn parse_compilation(root string, stl_root string) ProjectAstResult {
         result = parse_project(root)
     }
     if !result.ok { return result }
-    if str.len(stl_root) == 0 { return result }
+    if str.len(stl_root) == 0 { return load_local_imports(result, root) }
 
     std_root := stl_root
     if stl_root[str.len(stl_root) - 1] == '/' {
@@ -340,5 +393,5 @@ pub fn parse_compilation(root string, stl_root string) ProjectAstResult {
         return result
     }
     result = append_path_lines(result, stl_root, std_paths)
-    return result
+    return load_local_imports(result, root)
 }

@@ -847,7 +847,6 @@ fn resolve_expr(state ResolveState, expr_id i32) ResolveState {
         symbol: *Symbol := symbol_at(state.semantic, symbol_id)
         node.symbol_file = symbol.file_id
         node.symbol_id = symbol_id
-        state.result_type = TypeRef{file_id: symbol.file_id, type_id: symbol.node_id}
         i := 0
         for (; i < node.arg_count; i++) {
             init_id := state.program.arena.children[node.first_arg + i]
@@ -855,6 +854,7 @@ fn resolve_expr(state ResolveState, expr_id i32) ResolveState {
             state = resolve_expr(state, init.left)
             if !state.ok { return state }
         }
+        state.result_type = TypeRef{file_id: state.file_id, type_id: state.program.arena.expr_syntax_type_ids[expr_id]}
     } else if node.kind == ast.expr_cast() {
         state = resolve_expr(state, node.left)
         state.result_type = TypeRef{file_id: state.file_id, type_id: node.type_id}

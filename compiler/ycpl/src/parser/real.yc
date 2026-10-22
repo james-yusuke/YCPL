@@ -499,7 +499,9 @@ fn parse_primary(p *Parser) *Parser {
             first := ast.child_count(p.program.arena)
             i := 0
             for (; i < array.len(fields); i++) { p.program.arena = ast.add_child(p.program.arena, fields[i]) }
-            p = add_expr(p, ast.make_expr(ast.expr_struct(), at_span(at), ast.invalid_id(), left, ast.invalid_id(), first, array.len(fields), at_text, "", 0, 0.0, 0))
+            struct_type := p.program.arena.type_len
+            p.program.arena = ast.add_type(p.program.arena, ast.make_type(ast.type_named(), at_span(at), at_text, ast.invalid_id(), ast.invalid_id(), ast.invalid_id(), 0))
+            p = add_expr(p, ast.make_expr(ast.expr_struct(), at_span(at), struct_type, left, ast.invalid_id(), first, array.len(fields), at_text, "", 0, 0.0, 0))
         } else {
             break
         }

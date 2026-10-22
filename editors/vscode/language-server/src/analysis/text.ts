@@ -55,7 +55,11 @@ export function isIdentifierStart(value: string): boolean {
 }
 
 /** Finds the identifier under or directly before an LSP position. */
-export function wordAtPosition(text: string, lineOffsets: number[], position: Position): WordAtPosition | undefined {
+export function wordAtPosition(
+  text: string,
+  lineOffsets: number[],
+  position: Position
+): WordAtPosition | undefined {
   const offset = offsetAt(text, lineOffsets, position);
   let start = offset;
   let end = offset;

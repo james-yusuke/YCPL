@@ -221,6 +221,10 @@ fn run_argv(program string, args ArgList, message string) DriverResult {
 }
 
 pub fn build_native_from_ir(out_dir string) DriverResult {
+    return build_native_debug(out_dir, false)
+}
+
+pub fn build_native_debug(out_dir string, debug_info bool) DriverResult {
     llc := find_tool("LLC", "llc")
     clang := find_tool("CLANG", "clang")
     linkflags := env_or_empty("LINKFLAGS")
@@ -231,7 +235,8 @@ pub fn build_native_from_ir(out_dir string) DriverResult {
     runtime_obj := join_path(out_dir, "yc_runtime.o")
     runtime_input := find_runtime_library()
 
-    args := args_new(4)
+    args := args_new(5)
+    if debug_info { args = args_push(args, "-O0") }
     args = args_push(args, "-filetype=obj")
     args = args_push(args, ll_file)
     args = args_push(args, "-o")

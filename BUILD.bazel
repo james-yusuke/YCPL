@@ -255,3 +255,14 @@ sh_test(
     ]),
     tags = ["no-sandbox"],
 )
+
+sh_test(
+    name = "development_workflows_test",
+    srcs = ["//tools/bazel:run_development_workflows_test.sh"],
+    data = [
+        ":ycc",
+        ":yc_runtime_src",
+        "tests/test_development_workflows.sh",
+    ] + glob(["stl/**"]),
+    tags = ["exclusive"],
+)

@@ -1,9 +1,11 @@
-import { spawn } from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { spawn } from "node:child_process";
 import * as vscode from "vscode";
 import {
   LanguageClient,
+  CloseAction,
+  ErrorAction,
   TransportKind,
   type LanguageClientOptions,
   type ServerOptions
@@ -18,13 +20,18 @@ import {
   resolveConfiguredPath,
   type ServerMode
 } from "./runtime.js";
+import { registerWorkbench } from "./workbench.js";
+import { execute } from "./process.js";
 
 let client: LanguageClient | undefined;
 let output: vscode.LogOutputChannel;
 let status: vscode.StatusBarItem;
 let compilerDiagnostics: vscode.DiagnosticCollection;
-let saveTimer: NodeJS.Timeout | undefined;
+const saveTimers = new Map<string, NodeJS.Timeout>();
+const automaticChecks = new Map<string, vscode.CancellationTokenSource>();
+const diagnosticFiles = new Map<string, Set<string>>();
 let sourceWatcher: vscode.FileSystemWatcher | undefined;
+let serverOperation: Promise<void> = Promise.resolve();
 
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
   output = vscode.window.createOutputChannel("YCPL", { log: true });
@@ -35,8 +42,12 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   context.subscriptions.push(output, status, compilerDiagnostics);
 
   registerCommands(context);
+  registerWorkbench(context, output);
   context.subscriptions.push(
     vscode.workspace.onDidSaveTextDocument((document) => scheduleCheckOnSave(document)),
+    vscode.workspace.onDidChangeTextDocument((event) =>
+      automaticChecks.get(event.document.uri.toString())?.cancel()
+    ),
     vscode.workspace.onDidGrantWorkspaceTrust(async () => restartLanguageServer(context)),
     vscode.workspace.onDidChangeConfiguration(async (event) => {
       if (event.affectsConfiguration("YCPL.server") || event.affectsConfiguration("YCPL.stlRoot")) {
@@ -48,11 +59,12 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     })
   );
 
-  await startLanguageServer(context);
+  await restartLanguageServer(context);
 }
 
 export async function deactivate(): Promise<void> {
   clearSaveTimer();
+  await serverOperation.catch(() => undefined);
   await stopLanguageServer();
 }
 
@@ -71,9 +83,8 @@ function registerCommands(context: vscode.ExtensionContext): void {
 }
 
 function configuration(resource?: vscode.Uri): vscode.WorkspaceConfiguration {
-  const target = resource
-    ?? vscode.window.activeTextEditor?.document.uri
-    ?? vscode.workspace.workspaceFolders?.[0]?.uri;
+  const target =
+    resource ?? vscode.window.activeTextEditor?.document.uri ?? vscode.workspace.workspaceFolders?.[0]?.uri;
   return vscode.workspace.getConfiguration("YCPL", target);
 }
 
@@ -82,30 +93,41 @@ function workspaceRoots(): string[] {
 }
 
 async function restartLanguageServer(context: vscode.ExtensionContext): Promise<void> {
-  await stopLanguageServer();
-  await startLanguageServer(context);
+  const operation = serverOperation
+    .catch(() => undefined)
+    .then(async () => {
+      await stopLanguageServer();
+      await startLanguageServer(context);
+    });
+  serverOperation = operation;
+  return operation;
 }
 
 async function stopLanguageServer(): Promise<void> {
   const running = client;
   client = undefined;
-  if (running) {
-    await running.stop();
+  try {
+    if (running) await running.stop();
+  } catch (error) {
+    output.warn(`Language Server had already stopped: ${String(error)}`);
+    await running?.dispose();
+  } finally {
+    sourceWatcher?.dispose();
+    sourceWatcher = undefined;
+    status.hide();
   }
-  sourceWatcher?.dispose();
-  sourceWatcher = undefined;
-  status.hide();
 }
 
 async function startLanguageServer(context: vscode.ExtensionContext): Promise<void> {
   const config = configuration();
   const roots = workspaceRoots();
   const root = roots[0];
-  const mode = config.get<ServerMode>("server.mode", "auto");
+  const mode = config.get<ServerMode>("server.mode", "typescript");
   const configuredPath = resolveConfiguredPath(config.get<string>("server.path", "").trim(), root);
-  const native = mode === "typescript" || !vscode.workspace.isTrusted
-    ? undefined
-    : findNativeServer(configuredPath, roots);
+  const native =
+    mode === "typescript" || !vscode.workspace.isTrusted
+      ? undefined
+      : findNativeServer(configuredPath, roots);
   if (mode === "native" && vscode.workspace.isTrusted && !native) {
     const message = "YCPL native Language Server was requested but no executable was found.";
     output.error(message);
@@ -117,7 +139,7 @@ async function startLanguageServer(context: vscode.ExtensionContext): Promise<vo
   }
 
   const stlRoot = detectedStlRoot(config, roots);
-  const useNative = native !== undefined;
+  const useNative = native !== undefined && (mode !== "auto" || (await probeNative(native.path)));
   if (!vscode.workspace.isTrusted && mode !== "typescript") {
     output.warn("Workspace is not trusted; using the bundled TypeScript Language Server.");
   }
@@ -141,6 +163,10 @@ async function startLanguageServer(context: vscode.ExtensionContext): Promise<vo
 
   sourceWatcher = vscode.workspace.createFileSystemWatcher("**/*.yc");
   const clientOptions: LanguageClientOptions = {
+    errorHandler: {
+      error: () => ({ action: ErrorAction.Shutdown, handled: true }),
+      closed: () => ({ action: CloseAction.DoNotRestart, handled: true })
+    },
     documentSelector: [{ scheme: "file", language: "ycpl" }],
     outputChannel: output,
     traceOutputChannel: output,
@@ -179,7 +205,7 @@ async function startLanguageServer(context: vscode.ExtensionContext): Promise<vo
       try {
         await failed.stop();
       } catch {
-        failed.dispose();
+        await failed.dispose().catch(() => undefined);
       }
     }
     if (useNative && mode === "auto") {
@@ -230,23 +256,38 @@ function scheduleCheckOnSave(document: vscode.TextDocument): void {
   if (document.languageId !== "ycpl" || !configuration(document.uri).get<boolean>("checkOnSave", true)) {
     return;
   }
-  clearSaveTimer();
-  saveTimer = setTimeout(() => {
-    saveTimer = undefined;
-    void runCompilerCommand("check", document.uri);
+  const key = document.uri.toString();
+  clearTimeout(saveTimers.get(key));
+  automaticChecks.get(key)?.cancel();
+  const version = document.version;
+  const timer = setTimeout(() => {
+    saveTimers.delete(key);
+    const source = new vscode.CancellationTokenSource();
+    automaticChecks.set(key, source);
+    void runCompilerCommand("check", document.uri, source.token, version)
+      .catch((error) => {
+        output.error(`Compiler check failed: ${String(error)}`);
+      })
+      .finally(() => {
+        if (automaticChecks.get(key) === source) automaticChecks.delete(key);
+        source.dispose();
+      });
   }, 300);
+  saveTimers.set(key, timer);
 }
 
 function clearSaveTimer(): void {
-  if (saveTimer) {
-    clearTimeout(saveTimer);
-    saveTimer = undefined;
-  }
+  for (const timer of saveTimers.values()) clearTimeout(timer);
+  saveTimers.clear();
+  for (const source of automaticChecks.values()) source.cancel();
+  automaticChecks.clear();
 }
 
 async function runCompilerCommand(
   command: "check" | "build" | "build-ir" | "run",
-  documentUri?: vscode.Uri
+  documentUri?: vscode.Uri,
+  automaticToken?: vscode.CancellationToken,
+  documentVersion?: number
 ): Promise<void> {
   if (!vscode.workspace.isTrusted) {
     void vscode.window.showWarningMessage("Trust this workspace before running the YCPL compiler.");
@@ -274,51 +315,53 @@ async function runCompilerCommand(
   const cwd = target.cwd;
   const outputSetting = config.get<string>("outputDirectory", ".ycpl/build");
   const outputDirectory = path.isAbsolute(outputSetting) ? outputSetting : path.resolve(cwd, outputSetting);
-  const args = compilerArguments(command, target.input, outputDirectory, config.get<string[]>("run.arguments", []));
+  const args = compilerArguments(command === "run" ? "build" : command, target.input, outputDirectory);
 
   const stlRoot = detectedStlRoot(config, roots);
   const runtimeSource = resolveConfiguredPath(config.get<string>("runtimeSource", "").trim(), root);
-  output.show(true);
+  if (!automaticToken) await vscode.workspace.saveAll(false);
+  if (!automaticToken) output.show(true);
   output.info(`$ ${quote(compiler)} ${args.map(quote).join(" ")}`);
-  const result = await spawnCompiler(compiler, args, cwd, compilerEnvironment(process.env, stlRoot, runtimeSource));
+  const environment = compilerEnvironment(process.env, stlRoot, runtimeSource);
+  const invoke = (token: vscode.CancellationToken) =>
+    execute(compiler, args, cwd, environment, token, (text) => output.append(text));
+  const result = automaticToken
+    ? await invoke(automaticToken)
+    : await vscode.window.withProgress(
+        {
+          location: vscode.ProgressLocation.Notification,
+          title: `YCPL: ${command}`,
+          cancellable: true
+        },
+        (_progress, token) => invoke(token)
+      );
+  if (
+    result.cancelled ||
+    (documentVersion !== undefined &&
+      vscode.workspace.textDocuments.find((document) => document.uri.toString() === uri?.toString())
+        ?.version !== documentVersion)
+  )
+    return;
   publishCompilerDiagnostics(`${result.stdout}\n${result.stderr}`, cwd);
   if (result.code === 0) {
     output.info(`ycc ${command} completed successfully.`);
+    if (command === "run") {
+      const terminal = vscode.window.createTerminal({
+        name: "YCPL Run",
+        shellPath: path.join(outputDirectory, process.platform === "win32" ? "merged.exe" : "merged"),
+        shellArgs: config.get<string[]>("run.arguments", []),
+        cwd,
+        env: environment
+      });
+      terminal.show();
+    }
   } else {
     output.error(`ycc ${command} exited with code ${result.code}.`);
   }
 }
 
-function spawnCompiler(
-  executable: string,
-  args: readonly string[],
-  cwd: string,
-  env: NodeJS.ProcessEnv
-): Promise<{ code: number; stdout: string; stderr: string }> {
-  return new Promise((resolve) => {
-    const child = spawn(executable, [...args], { cwd, env, shell: false });
-    let stdout = "";
-    let stderr = "";
-    child.stdout.on("data", (chunk: Buffer) => {
-      const text = chunk.toString("utf8");
-      stdout += text;
-      output.append(text);
-    });
-    child.stderr.on("data", (chunk: Buffer) => {
-      const text = chunk.toString("utf8");
-      stderr += text;
-      output.append(text);
-    });
-    child.on("error", (error) => {
-      stderr += String(error);
-      resolve({ code: 1, stdout, stderr });
-    });
-    child.on("close", (code) => resolve({ code: code ?? 1, stdout, stderr }));
-  });
-}
-
 function publishCompilerDiagnostics(text: string, cwd: string): void {
-  compilerDiagnostics.clear();
+  for (const uri of diagnosticFiles.get(cwd) ?? []) compilerDiagnostics.delete(vscode.Uri.parse(uri));
   const grouped = new Map<string, vscode.Diagnostic[]>();
   for (const item of parseCompilerDiagnostics(text)) {
     const file = path.isAbsolute(item.file) ? item.file : path.resolve(cwd, item.file);
@@ -331,6 +374,7 @@ function publishCompilerDiagnostics(text: string, cwd: string): void {
   for (const [uri, diagnostics] of grouped) {
     compilerDiagnostics.set(vscode.Uri.parse(uri), diagnostics);
   }
+  diagnosticFiles.set(cwd, new Set(grouped.keys()));
 }
 
 function quote(value: string): string {
@@ -342,4 +386,41 @@ function workspaceRootFor(uri: vscode.Uri | undefined): string | undefined {
     return undefined;
   }
   return vscode.workspace.getWorkspaceFolder(uri)?.uri.fsPath;
+}
+
+/** Check the protocol before giving a crashing auto-discovered process to the client. */
+async function probeNative(program: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    const child = spawn(program, [], { shell: false, stdio: ["pipe", "pipe", "pipe"] });
+    let response = "";
+    const timer = setTimeout(() => {
+      child.kill("SIGKILL");
+    }, 5000);
+    child.stdout.on("data", (data: Buffer) => {
+      response = (response + data.toString()).slice(0, 1048576);
+    });
+    child.stderr.resume();
+    child.stdin.on("error", () => undefined);
+    child.on("error", () => {
+      clearTimeout(timer);
+      resolve(false);
+    });
+    child.on("close", (code) => {
+      clearTimeout(timer);
+      resolve(code === 0 && response.includes('"capabilities"'));
+    });
+    const messages = [
+      { jsonrpc: "2.0", id: 1, method: "initialize", params: { capabilities: {} } },
+      { jsonrpc: "2.0", id: 2, method: "shutdown", params: null },
+      { jsonrpc: "2.0", method: "exit" }
+    ];
+    child.stdin.end(
+      messages
+        .map((message) => {
+          const body = JSON.stringify(message);
+          return `Content-Length: ${Buffer.byteLength(body)}\r\n\r\n${body}`;
+        })
+        .join("")
+    );
+  });
 }

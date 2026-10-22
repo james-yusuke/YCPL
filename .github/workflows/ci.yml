@@ -219,6 +219,9 @@ jobs:
           npm run check --prefix editors/vscode/extension
           npm run check --prefix editors/vscode/language-server
 
+      - name: Check editor compiler workflows
+        run: YCC="$GITHUB_WORKSPACE/bazel-bin/ycc" tests/test_development_workflows.sh
+
       - name: Test VSCode Extension Host
         run: xvfb-run -a npm run test:extension --prefix editors/vscode/extension
 
@@ -229,6 +232,15 @@ jobs:
 
       - name: Test native LSP in VSCode Extension Host
         run: xvfb-run -a npm run test:extension:native --prefix editors/vscode/extension
+
+      - name: Upload Linux editor failure logs
+        if: failure()
+        uses: actions/upload-artifact@v6
+        with:
+          name: linux-editor-logs
+          include-hidden-files: true
+          path: editors/vscode/extension/.vscode-test/user-data/logs/**/*YCPL*.log
+          if-no-files-found: ignore
 
       - name: Package VSCode extension
         run: |
@@ -259,3 +271,96 @@ jobs:
             echo "| VSIX package | \`npm run package && npm run check-package\` |"
             echo "| Native and TypeScript LSP protocol | \`tools/lsp/run_tests.sh\` |"
           } >> "$GITHUB_STEP_SUMMARY"
+
+  editor:
+    name: Packaged editor workflows (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-15, ubuntu-24.04]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+      - name: Install LLVM 22
+        run: |
+          if [ "$RUNNER_OS" = Linux ]; then
+            sudo apt-get update
+            sudo apt-get install -y build-essential cmake libffi-dev libedit-dev libxml2-dev libzstd-dev zlib1g-dev xvfb
+          fi
+          scripts/setup-llvm.sh 22
+          if [ "$RUNNER_OS" = macOS ]; then
+            brew install lldb
+          fi
+      - name: Build self-hosted compiler for editor tests
+        run: |
+          eval "$(scripts/setup-llvm.sh 22 --print-env)"
+          if [ "$RUNNER_OS" = Linux ]; then
+            editor_clang="$RUNNER_TEMP/ycpl-editor-clang"
+            {
+              echo '#!/usr/bin/env bash'
+              printf 'exec %q -D_POSIX_C_SOURCE=200809L -no-pie -fuse-ld=lld "$@"\n' "$LLVM_BINDIR/clang"
+            } > "$editor_clang"
+            chmod +x "$editor_clang"
+            export CLANG="$editor_clang"
+            export LINKFLAGS='-no-pie -fuse-ld=lld'
+          fi
+          cmake -S . -B build/editor-ci-bootstrap -DCMAKE_BUILD_TYPE=Release
+          cmake --build build/editor-ci-bootstrap --parallel 4
+          (cd compiler/ycpl && ../../build/editor-ci-bootstrap/ycc build -o ../../build/editor-ci-compiler)
+          {
+            echo "LLVM_CONFIG=$LLVM_CONFIG"
+            echo "LLVM_BINDIR=$LLVM_BINDIR"
+            echo "LLVM_DIR=$LLVM_DIR"
+            echo "LLC=$LLC"
+            echo "CLANG=$CLANG"
+            echo "LINKFLAGS=$LINKFLAGS"
+            echo "YCC=$GITHUB_WORKSPACE/build/editor-ci-compiler/ycc"
+            echo "YCPL_TEST_COMPILER=$GITHUB_WORKSPACE/build/editor-ci-compiler/ycc"
+            echo "YCPL_RUNTIME_SRC=$GITHUB_WORKSPACE/bootstrap/cpp/runtime/yc_runtime.c"
+            echo "YCPL_STL_ROOT=$GITHUB_WORKSPACE/stl"
+          } >> "$GITHUB_ENV"
+          echo "$LLVM_BINDIR" >> "$GITHUB_PATH"
+      - name: Install editor dependencies
+        run: |
+          npm ci --prefix editors/vscode/language-server
+          npm ci --prefix editors/vscode/extension
+      - name: Check editor and protocol
+        run: |
+          npm run check --prefix editors/vscode/language-server
+          npm run check --prefix editors/vscode/extension
+          tools/lsp/run_tests.sh
+          tests/test_development_workflows.sh
+      - name: Check LLDB adapter installation
+        timeout-minutes: 1
+        run: |
+          editor_debugger_bin="$LLVM_BINDIR"
+          if [ "$RUNNER_OS" = macOS ]; then
+            editor_debugger_bin="$(brew --prefix lldb)/bin"
+          fi
+          "$editor_debugger_bin/lldb-dap" --version
+          "$YCC" build examples/basics/hello.yc -g -o "$RUNNER_TEMP/ycpl-debug-smoke"
+          "$editor_debugger_bin/lldb" --batch -O 'settings set symbols.enable-external-lookup false' -o run -- "$RUNNER_TEMP/ycpl-debug-smoke/merged"
+      - name: Test packaged VSIX with both servers
+        timeout-minutes: 5
+        run: |
+          run_editor_test() {
+            if [ "$RUNNER_OS" = Linux ]; then
+              xvfb-run -a "$@"
+            else
+              "$@"
+            fi
+          }
+          run_editor_test npm run test:extension --prefix editors/vscode/extension
+          run_editor_test npm run test:extension:native --prefix editors/vscode/extension
+          npm run check-package --prefix editors/vscode/extension
+      - name: Upload editor failure logs
+        if: failure()
+        uses: actions/upload-artifact@v6
+        with:
+          name: editor-logs-${{ matrix.os }}
+          include-hidden-files: true
+          path: editors/vscode/extension/.vscode-test/user-data/logs/**/*YCPL*.log
+          if-no-files-found: ignore

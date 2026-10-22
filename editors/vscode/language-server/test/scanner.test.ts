@@ -26,7 +26,10 @@ test("scans source once, skips generated directories, and preserves unsaved buff
     index.remove(uri);
     assert.equal(await scanner.scan(root), 1);
     assert.equal(await scanner.scan(root), 0);
-    assert.deepEqual(index.workspaceSymbols("").map((symbol) => symbol.name), ["disk"]);
+    assert.deepEqual(
+      index.workspaceSymbols("").map((symbol) => symbol.name),
+      ["disk"]
+    );
   } finally {
     await fs.rm(root, { recursive: true, force: true });
   }

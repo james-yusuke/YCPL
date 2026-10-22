@@ -73,7 +73,8 @@ export class StandardLibraryIndex {
   }
 
   private async scan(): Promise<StandardLibrarySymbol[]> {
-    const stlRoot = this.configuredStlRoot ?? (this.workspaceRoot ? path.join(this.workspaceRoot, "stl") : undefined);
+    const stlRoot =
+      this.configuredStlRoot ?? (this.workspaceRoot ? path.join(this.workspaceRoot, "stl") : undefined);
     if (!stlRoot) {
       return fallbackStdlib();
     }
@@ -98,7 +99,9 @@ export class StandardLibraryIndex {
           kind: CompletionItemKind.Module
         });
         const uri = pathToFileURL(file).toString();
-        for (const match of text.matchAll(/\bpub\s+fn\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(([^)]*)\)\s*([^{\n]*)/g)) {
+        for (const match of text.matchAll(
+          /\bpub\s+fn\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(([^)]*)\)\s*([^{\n]*)/g
+        )) {
           if (hiddenCompatibilitySymbols.has(`${modulePath}:${match[1]}`)) {
             continue;
           }
@@ -161,7 +164,7 @@ async function collectYcFiles(root: string): Promise<string[]> {
   for (const entry of entries) {
     const fullPath = path.join(root, entry.name);
     if (entry.isDirectory()) {
-      files.push(...await collectYcFiles(fullPath));
+      files.push(...(await collectYcFiles(fullPath)));
     } else if (entry.isFile() && entry.name.endsWith(".yc")) {
       files.push(fullPath);
     }
@@ -193,18 +196,42 @@ function parseParameters(params: string): StandardLibraryParameter[] {
 }
 
 function formatParameters(parameters: StandardLibraryParameter[]): string {
-  return parameters.map((param) => param.typeName ? `${param.name} ${param.typeName}` : param.name).join(", ");
+  return parameters
+    .map((param) => (param.typeName ? `${param.name} ${param.typeName}` : param.name))
+    .join(", ");
 }
 
 function normalizeTypeName(typeName: string): string {
-  return typeName.trim().replace(/\s+/g, " ").replace(/\s*(\[\]|\*)\s*/g, "$1");
+  return typeName
+    .trim()
+    .replace(/\s+/g, " ")
+    .replace(/\s*(\[\]|\*)\s*/g, "$1");
 }
 
 function fallbackStdlib(): StandardLibrarySymbol[] {
   const modules = [
-    "fmt", "array", "io", "bytes", "text", "str", "math", "map", "fs", "os",
-    "json", "jsonrpc", "hex", "base32", "base64", "hash", "utf8", "strconv",
-    "path", "sort", "time", "random"
+    "fmt",
+    "array",
+    "io",
+    "bytes",
+    "text",
+    "str",
+    "math",
+    "map",
+    "fs",
+    "os",
+    "json",
+    "jsonrpc",
+    "hex",
+    "base32",
+    "base64",
+    "hash",
+    "utf8",
+    "strconv",
+    "path",
+    "sort",
+    "time",
+    "random"
   ].map((name) => ({
     label: `std/${name}`,
     modulePath: `std/${name}`,
@@ -214,32 +241,327 @@ function fallbackStdlib(): StandardLibrarySymbol[] {
   }));
   return [
     ...modules,
-    { label: "fmt.println", modulePath: "std/fmt", moduleAlias: "fmt", symbolName: "println", detail: "println(value string)", signature: "println(value string)", parameters: [{ name: "value", typeName: "string" }], kind: CompletionItemKind.Function },
-    { label: "array.make", modulePath: "std/array", moduleAlias: "array", symbolName: "make", detail: "make(typ Type) []T", signature: "make(typ Type) []T", returnType: "[]T", parameters: [{ name: "typ", typeName: "Type" }], kind: CompletionItemKind.Function },
-    { label: "array.push", modulePath: "std/array", moduleAlias: "array", symbolName: "push", detail: "push(xs []T, value T) []T", signature: "push(xs []T, value T) []T", returnType: "[]T", parameters: [{ name: "xs", typeName: "[]T" }, { name: "value", typeName: "T" }], kind: CompletionItemKind.Function },
-    { label: "text.concat", modulePath: "std/text", moduleAlias: "text", symbolName: "concat", detail: "concat(left string, right string) string", signature: "concat(left string, right string) string", returnType: "string", parameters: [{ name: "left", typeName: "string" }, { name: "right", typeName: "string" }], kind: CompletionItemKind.Function },
-    { label: "text.join", modulePath: "std/text", moduleAlias: "text", symbolName: "join", detail: "join(left string, sep string, right string) string", signature: "join(left string, sep string, right string) string", returnType: "string", parameters: [{ name: "left", typeName: "string" }, { name: "sep", typeName: "string" }, { name: "right", typeName: "string" }], kind: CompletionItemKind.Function },
-    { label: "map.make_i32", modulePath: "std/map", moduleAlias: "map", symbolName: "make_i32", detail: "make_i32(capacity i32) Map<string, i32>", signature: "make_i32(capacity i32) Map<string, i32>", returnType: "Map<string, i32>", parameters: [{ name: "capacity", typeName: "i32" }], kind: CompletionItemKind.Function },
-    { label: "map.set_i32", modulePath: "std/map", moduleAlias: "map", symbolName: "set_i32", detail: "set_i32(handle Map<string, i32>, key string, value i32) i32", signature: "set_i32(handle Map<string, i32>, key string, value i32) i32", returnType: "i32", parameters: [{ name: "handle", typeName: "Map<string, i32>" }, { name: "key", typeName: "string" }, { name: "value", typeName: "i32" }], kind: CompletionItemKind.Function },
-    { label: "map.get_i32_or", modulePath: "std/map", moduleAlias: "map", symbolName: "get_i32_or", detail: "get_i32_or(handle Map<string, i32>, key string, missing i32) i32", signature: "get_i32_or(handle Map<string, i32>, key string, missing i32) i32", returnType: "i32", parameters: [{ name: "handle", typeName: "Map<string, i32>" }, { name: "key", typeName: "string" }, { name: "missing", typeName: "i32" }], kind: CompletionItemKind.Function },
-    { label: "bytes.from_string", modulePath: "std/bytes", moduleAlias: "bytes", symbolName: "from_string", detail: "from_string(text string) Bytes", signature: "from_string(text string) Bytes", returnType: "Bytes", parameters: [{ name: "text", typeName: "string" }], kind: CompletionItemKind.Function },
-    { label: "bytes.make", modulePath: "std/bytes", moduleAlias: "bytes", symbolName: "make", detail: "make(cap i32) Bytes", signature: "make(cap i32) Bytes", returnType: "Bytes", parameters: [{ name: "cap", typeName: "i32" }], kind: CompletionItemKind.Function },
-    { label: "bytes.push", modulePath: "std/bytes", moduleAlias: "bytes", symbolName: "push", detail: "push(b Bytes, value i32) Bytes", signature: "push(b Bytes, value i32) Bytes", returnType: "Bytes", parameters: [{ name: "b", typeName: "Bytes" }, { name: "value", typeName: "i32" }], kind: CompletionItemKind.Function },
-    { label: "bytes.to_string", modulePath: "std/bytes", moduleAlias: "bytes", symbolName: "to_string", detail: "to_string(b Bytes) string", signature: "to_string(b Bytes) string", returnType: "string", parameters: [{ name: "b", typeName: "Bytes" }], kind: CompletionItemKind.Function },
-    { label: "hex.encode", modulePath: "std/hex", moduleAlias: "hex", symbolName: "encode", detail: "encode(b Bytes) string", signature: "encode(b Bytes) string", returnType: "string", parameters: [{ name: "b", typeName: "Bytes" }], kind: CompletionItemKind.Function },
-    { label: "hex.decode", modulePath: "std/hex", moduleAlias: "hex", symbolName: "decode", detail: "decode(text string) Bytes", signature: "decode(text string) Bytes", returnType: "Bytes", parameters: [{ name: "text", typeName: "string" }], kind: CompletionItemKind.Function },
-    { label: "base64.encode", modulePath: "std/base64", moduleAlias: "base64", symbolName: "encode", detail: "encode(b Bytes) string", signature: "encode(b Bytes) string", returnType: "string", parameters: [{ name: "b", typeName: "Bytes" }], kind: CompletionItemKind.Function },
-    { label: "base64.decode", modulePath: "std/base64", moduleAlias: "base64", symbolName: "decode", detail: "decode(text string) Bytes", signature: "decode(text string) Bytes", returnType: "Bytes", parameters: [{ name: "text", typeName: "string" }], kind: CompletionItemKind.Function },
-    { label: "hash.fnv1a32", modulePath: "std/hash", moduleAlias: "hash", symbolName: "fnv1a32", detail: "fnv1a32(b Bytes) i64", signature: "fnv1a32(b Bytes) i64", returnType: "i64", parameters: [{ name: "b", typeName: "Bytes" }], kind: CompletionItemKind.Function },
-    { label: "hash.crc32", modulePath: "std/hash", moduleAlias: "hash", symbolName: "crc32", detail: "crc32(b Bytes) i64", signature: "crc32(b Bytes) i64", returnType: "i64", parameters: [{ name: "b", typeName: "Bytes" }], kind: CompletionItemKind.Function },
-    { label: "bytes.eq", modulePath: "std/bytes", moduleAlias: "bytes", symbolName: "eq", detail: "eq(a Bytes, b Bytes) bool", signature: "eq(a Bytes, b Bytes) bool", returnType: "bool", parameters: [{ name: "a", typeName: "Bytes" }, { name: "b", typeName: "Bytes" }], kind: CompletionItemKind.Function },
-    { label: "base32.encode", modulePath: "std/base32", moduleAlias: "base32", symbolName: "encode", detail: "encode(b Bytes) string", signature: "encode(b Bytes) string", returnType: "string", parameters: [{ name: "b", typeName: "Bytes" }], kind: CompletionItemKind.Function },
-    { label: "base32.decode", modulePath: "std/base32", moduleAlias: "base32", symbolName: "decode", detail: "decode(text string) Bytes", signature: "decode(text string) Bytes", returnType: "Bytes", parameters: [{ name: "text", typeName: "string" }], kind: CompletionItemKind.Function },
-    { label: "utf8.valid", modulePath: "std/utf8", moduleAlias: "utf8", symbolName: "valid", detail: "valid(value string) bool", signature: "valid(value string) bool", returnType: "bool", parameters: [{ name: "value", typeName: "string" }], kind: CompletionItemKind.Function },
-    { label: "strconv.parse_i32", modulePath: "std/strconv", moduleAlias: "strconv", symbolName: "parse_i32", detail: "parse_i32(value string) ParseI32Result", signature: "parse_i32(value string) ParseI32Result", returnType: "ParseI32Result", parameters: [{ name: "value", typeName: "string" }], kind: CompletionItemKind.Function },
-    { label: "path.join", modulePath: "std/path", moduleAlias: "path", symbolName: "join", detail: "join(left string, right string) string", signature: "join(left string, right string) string", returnType: "string", parameters: [{ name: "left", typeName: "string" }, { name: "right", typeName: "string" }], kind: CompletionItemKind.Function },
-    { label: "sort.sort_i32", modulePath: "std/sort", moduleAlias: "sort", symbolName: "sort_i32", detail: "sort_i32(values Vec<i32>)", signature: "sort_i32(values Vec<i32>)", parameters: [{ name: "values", typeName: "Vec<i32>" }], kind: CompletionItemKind.Function },
-    { label: "time.monotonic_now", modulePath: "std/time", moduleAlias: "time", symbolName: "monotonic_now", detail: "monotonic_now() Instant", signature: "monotonic_now() Instant", returnType: "Instant", parameters: [], kind: CompletionItemKind.Function },
-    { label: "random.seeded", modulePath: "std/random", moduleAlias: "random", symbolName: "seeded", detail: "seeded(seed i64) Rng", signature: "seeded(seed i64) Rng", returnType: "Rng", parameters: [{ name: "seed", typeName: "i64" }], kind: CompletionItemKind.Function }
+    {
+      label: "fmt.println",
+      modulePath: "std/fmt",
+      moduleAlias: "fmt",
+      symbolName: "println",
+      detail: "println(value string)",
+      signature: "println(value string)",
+      parameters: [{ name: "value", typeName: "string" }],
+      kind: CompletionItemKind.Function
+    },
+    {
+      label: "array.make",
+      modulePath: "std/array",
+      moduleAlias: "array",
+      symbolName: "make",
+      detail: "make(typ Type) []T",
+      signature: "make(typ Type) []T",
+      returnType: "[]T",
+      parameters: [{ name: "typ", typeName: "Type" }],
+      kind: CompletionItemKind.Function
+    },
+    {
+      label: "array.push",
+      modulePath: "std/array",
+      moduleAlias: "array",
+      symbolName: "push",
+      detail: "push(xs []T, value T) []T",
+      signature: "push(xs []T, value T) []T",
+      returnType: "[]T",
+      parameters: [
+        { name: "xs", typeName: "[]T" },
+        { name: "value", typeName: "T" }
+      ],
+      kind: CompletionItemKind.Function
+    },
+    {
+      label: "text.concat",
+      modulePath: "std/text",
+      moduleAlias: "text",
+      symbolName: "concat",
+      detail: "concat(left string, right string) string",
+      signature: "concat(left string, right string) string",
+      returnType: "string",
+      parameters: [
+        { name: "left", typeName: "string" },
+        { name: "right", typeName: "string" }
+      ],
+      kind: CompletionItemKind.Function
+    },
+    {
+      label: "text.join",
+      modulePath: "std/text",
+      moduleAlias: "text",
+      symbolName: "join",
+      detail: "join(left string, sep string, right string) string",
+      signature: "join(left string, sep string, right string) string",
+      returnType: "string",
+      parameters: [
+        { name: "left", typeName: "string" },
+        { name: "sep", typeName: "string" },
+        { name: "right", typeName: "string" }
+      ],
+      kind: CompletionItemKind.Function
+    },
+    {
+      label: "map.make_i32",
+      modulePath: "std/map",
+      moduleAlias: "map",
+      symbolName: "make_i32",
+      detail: "make_i32(capacity i32) Map<string, i32>",
+      signature: "make_i32(capacity i32) Map<string, i32>",
+      returnType: "Map<string, i32>",
+      parameters: [{ name: "capacity", typeName: "i32" }],
+      kind: CompletionItemKind.Function
+    },
+    {
+      label: "map.set_i32",
+      modulePath: "std/map",
+      moduleAlias: "map",
+      symbolName: "set_i32",
+      detail: "set_i32(handle Map<string, i32>, key string, value i32) i32",
+      signature: "set_i32(handle Map<string, i32>, key string, value i32) i32",
+      returnType: "i32",
+      parameters: [
+        { name: "handle", typeName: "Map<string, i32>" },
+        { name: "key", typeName: "string" },
+        { name: "value", typeName: "i32" }
+      ],
+      kind: CompletionItemKind.Function
+    },
+    {
+      label: "map.get_i32_or",
+      modulePath: "std/map",
+      moduleAlias: "map",
+      symbolName: "get_i32_or",
+      detail: "get_i32_or(handle Map<string, i32>, key string, missing i32) i32",
+      signature: "get_i32_or(handle Map<string, i32>, key string, missing i32) i32",
+      returnType: "i32",
+      parameters: [
+        { name: "handle", typeName: "Map<string, i32>" },
+        { name: "key", typeName: "string" },
+        { name: "missing", typeName: "i32" }
+      ],
+      kind: CompletionItemKind.Function
+    },
+    {
+      label: "bytes.from_string",
+      modulePath: "std/bytes",
+      moduleAlias: "bytes",
+      symbolName: "from_string",
+      detail: "from_string(text string) Bytes",
+      signature: "from_string(text string) Bytes",
+      returnType: "Bytes",
+      parameters: [{ name: "text", typeName: "string" }],
+      kind: CompletionItemKind.Function
+    },
+    {
+      label: "bytes.make",
+      modulePath: "std/bytes",
+      moduleAlias: "bytes",
+      symbolName: "make",
+      detail: "make(cap i32) Bytes",
+      signature: "make(cap i32) Bytes",
+      returnType: "Bytes",
+      parameters: [{ name: "cap", typeName: "i32" }],
+      kind: CompletionItemKind.Function
+    },
+    {
+      label: "bytes.push",
+      modulePath: "std/bytes",
+      moduleAlias: "bytes",
+      symbolName: "push",
+      detail: "push(b Bytes, value i32) Bytes",
+      signature: "push(b Bytes, value i32) Bytes",
+      returnType: "Bytes",
+      parameters: [
+        { name: "b", typeName: "Bytes" },
+        { name: "value", typeName: "i32" }
+      ],
+      kind: CompletionItemKind.Function
+    },
+    {
+      label: "bytes.to_string",
+      modulePath: "std/bytes",
+      moduleAlias: "bytes",
+      symbolName: "to_string",
+      detail: "to_string(b Bytes) string",
+      signature: "to_string(b Bytes) string",
+      returnType: "string",
+      parameters: [{ name: "b", typeName: "Bytes" }],
+      kind: CompletionItemKind.Function
+    },
+    {
+      label: "hex.encode",
+      modulePath: "std/hex",
+      moduleAlias: "hex",
+      symbolName: "encode",
+      detail: "encode(b Bytes) string",
+      signature: "encode(b Bytes) string",
+      returnType: "string",
+      parameters: [{ name: "b", typeName: "Bytes" }],
+      kind: CompletionItemKind.Function
+    },
+    {
+      label: "hex.decode",
+      modulePath: "std/hex",
+      moduleAlias: "hex",
+      symbolName: "decode",
+      detail: "decode(text string) Bytes",
+      signature: "decode(text string) Bytes",
+      returnType: "Bytes",
+      parameters: [{ name: "text", typeName: "string" }],
+      kind: CompletionItemKind.Function
+    },
+    {
+      label: "base64.encode",
+      modulePath: "std/base64",
+      moduleAlias: "base64",
+      symbolName: "encode",
+      detail: "encode(b Bytes) string",
+      signature: "encode(b Bytes) string",
+      returnType: "string",
+      parameters: [{ name: "b", typeName: "Bytes" }],
+      kind: CompletionItemKind.Function
+    },
+    {
+      label: "base64.decode",
+      modulePath: "std/base64",
+      moduleAlias: "base64",
+      symbolName: "decode",
+      detail: "decode(text string) Bytes",
+      signature: "decode(text string) Bytes",
+      returnType: "Bytes",
+      parameters: [{ name: "text", typeName: "string" }],
+      kind: CompletionItemKind.Function
+    },
+    {
+      label: "hash.fnv1a32",
+      modulePath: "std/hash",
+      moduleAlias: "hash",
+      symbolName: "fnv1a32",
+      detail: "fnv1a32(b Bytes) i64",
+      signature: "fnv1a32(b Bytes) i64",
+      returnType: "i64",
+      parameters: [{ name: "b", typeName: "Bytes" }],
+      kind: CompletionItemKind.Function
+    },
+    {
+      label: "hash.crc32",
+      modulePath: "std/hash",
+      moduleAlias: "hash",
+      symbolName: "crc32",
+      detail: "crc32(b Bytes) i64",
+      signature: "crc32(b Bytes) i64",
+      returnType: "i64",
+      parameters: [{ name: "b", typeName: "Bytes" }],
+      kind: CompletionItemKind.Function
+    },
+    {
+      label: "bytes.eq",
+      modulePath: "std/bytes",
+      moduleAlias: "bytes",
+      symbolName: "eq",
+      detail: "eq(a Bytes, b Bytes) bool",
+      signature: "eq(a Bytes, b Bytes) bool",
+      returnType: "bool",
+      parameters: [
+        { name: "a", typeName: "Bytes" },
+        { name: "b", typeName: "Bytes" }
+      ],
+      kind: CompletionItemKind.Function
+    },
+    {
+      label: "base32.encode",
+      modulePath: "std/base32",
+      moduleAlias: "base32",
+      symbolName: "encode",
+      detail: "encode(b Bytes) string",
+      signature: "encode(b Bytes) string",
+      returnType: "string",
+      parameters: [{ name: "b", typeName: "Bytes" }],
+      kind: CompletionItemKind.Function
+    },
+    {
+      label: "base32.decode",
+      modulePath: "std/base32",
+      moduleAlias: "base32",
+      symbolName: "decode",
+      detail: "decode(text string) Bytes",
+      signature: "decode(text string) Bytes",
+      returnType: "Bytes",
+      parameters: [{ name: "text", typeName: "string" }],
+      kind: CompletionItemKind.Function
+    },
+    {
+      label: "utf8.valid",
+      modulePath: "std/utf8",
+      moduleAlias: "utf8",
+      symbolName: "valid",
+      detail: "valid(value string) bool",
+      signature: "valid(value string) bool",
+      returnType: "bool",
+      parameters: [{ name: "value", typeName: "string" }],
+      kind: CompletionItemKind.Function
+    },
+    {
+      label: "strconv.parse_i32",
+      modulePath: "std/strconv",
+      moduleAlias: "strconv",
+      symbolName: "parse_i32",
+      detail: "parse_i32(value string) ParseI32Result",
+      signature: "parse_i32(value string) ParseI32Result",
+      returnType: "ParseI32Result",
+      parameters: [{ name: "value", typeName: "string" }],
+      kind: CompletionItemKind.Function
+    },
+    {
+      label: "path.join",
+      modulePath: "std/path",
+      moduleAlias: "path",
+      symbolName: "join",
+      detail: "join(left string, right string) string",
+      signature: "join(left string, right string) string",
+      returnType: "string",
+      parameters: [
+        { name: "left", typeName: "string" },
+        { name: "right", typeName: "string" }
+      ],
+      kind: CompletionItemKind.Function
+    },
+    {
+      label: "sort.sort_i32",
+      modulePath: "std/sort",
+      moduleAlias: "sort",
+      symbolName: "sort_i32",
+      detail: "sort_i32(values Vec<i32>)",
+      signature: "sort_i32(values Vec<i32>)",
+      parameters: [{ name: "values", typeName: "Vec<i32>" }],
+      kind: CompletionItemKind.Function
+    },
+    {
+      label: "time.monotonic_now",
+      modulePath: "std/time",
+      moduleAlias: "time",
+      symbolName: "monotonic_now",
+      detail: "monotonic_now() Instant",
+      signature: "monotonic_now() Instant",
+      returnType: "Instant",
+      parameters: [],
+      kind: CompletionItemKind.Function
+    },
+    {
+      label: "random.seeded",
+      modulePath: "std/random",
+      moduleAlias: "random",
+      symbolName: "seeded",
+      detail: "seeded(seed i64) Rng",
+      signature: "seeded(seed i64) Rng",
+      returnType: "Rng",
+      parameters: [{ name: "seed", typeName: "i64" }],
+      kind: CompletionItemKind.Function
+    }
   ];
 }

@@ -15,7 +15,7 @@ import "std/text" as text
 
 fn usage() {
     fmt.println("usage: ycc <build|build-ir|run|debug|lex|parse|check|resolve|help> [options] <file.yc | dir>")
-    fmt.println("options: -o <directory>  --keep-obj  --link-llvm  -- <program arguments>")
+    fmt.println("options: -o <directory>  -g  --keep-obj  --link-llvm  -- <program arguments>")
 }
 
 fn standard_library_root() string {
@@ -34,6 +34,7 @@ fn standard_library_root() string {
 fn output_dir(argc i32, argv *string) string {
     i := 2
     for (; i < argc; i++) {
+        if str.eq(argv[i], "--") { break }
         if str.eq(argv[i], "-o") || str.eq(argv[i], "--output") {
             if i + 1 < argc { return argv[i + 1] }
         }
@@ -47,7 +48,7 @@ fn input_path(argc i32, argv *string) string {
         value := argv[i]
         if str.eq(value, "-o") || str.eq(value, "--output") {
             i += 1
-        } else if str.eq(value, "--keep-obj") || str.eq(value, "--link-llvm") {
+        } else if str.eq(value, "--keep-obj") || str.eq(value, "--link-llvm") || str.eq(value, "-g") {
         } else if str.eq(value, "--") {
             return ""
         } else {
@@ -114,7 +115,13 @@ fn emit_ir(argc i32, argv *string) i32 {
     out := output_dir(argc, argv)
     fs.mkdir(out)
     out_file := text.concat3(out, "/", "merged.ll")
-    result := backend.emit(path, standard_library_root(), out_file)
+    enabled := false
+    option := 2
+    for (; option < argc; option++) {
+        if str.eq(argv[option], "--") { break }
+        if str.eq(argv[option], "-g") { enabled = true }
+    }
+    result := backend.emit_with_debug(path, standard_library_root(), out_file, enabled)
     if !result.ok {
         fmt.printf("%s:%d:%d: %s\n", result.file, result.line, result.col, result.message)
         return 1
@@ -133,7 +140,13 @@ fn build_native(argc i32, argv *string) i32 {
     code := emit_ir(argc, argv)
     if code != 0 { return code }
     out := output_dir(argc, argv)
-    result := driver.build_native_from_ir(out)
+    debug_info := false
+    i := 2
+    for (; i < argc; i++) {
+        if str.eq(argv[i], "--") { break }
+        if str.eq(argv[i], "-g") { debug_info = true }
+    }
+    result := driver.build_native_debug(out, debug_info)
     if !result.ok {
         fmt.printf("%s\n", result.message)
         return result.code
@@ -157,7 +170,14 @@ fn main(argc i32, argv *string) i32 {
     if str.eq(mode, "run") {
         code := build_native(argc, argv)
         if code != 0 { return code }
-        return os.system(text.concat3(output_dir(argc, argv), "/", "merged"))
+        arguments := Vec<string>{}
+        forward := false
+        i := 2
+        for (; i < argc; i++) {
+            if forward { arguments.push(argv[i])
+            } else if str.eq(argv[i], "--") { forward = true }
+        }
+        return os.run_args(text.concat3(output_dir(argc, argv), "/", "merged"), arguments)
     }
     if argc < 3 {
         usage()

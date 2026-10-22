@@ -2,7 +2,7 @@
   "name": "ycpl-vscode",
   "displayName": "YCPL",
   "description": "YCPL language support powered by the YCPL Language Server.",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "publisher": "ycpl",
   "license": "MIT",
   "icon": "images/icon.png",
@@ -43,7 +43,11 @@
     "onCommand:YCPL.check",
     "onCommand:YCPL.build",
     "onCommand:YCPL.buildIR",
-    "onCommand:YCPL.run"
+    "onCommand:YCPL.run",
+    "workspaceContains:YCPL.json",
+    "workspaceContains:**/*_test.yc",
+    "onTaskType:ycpl",
+    "onDebug:ycpl"
   ],
   "main": "./dist/extension.cjs",
   "scripts": {
@@ -56,7 +60,9 @@
     "check-package": "node scripts/check-package.mjs artifacts/ycpl-vscode.vsix",
     "test:extension": "npm run package && node test/run-extension-tests.mjs",
     "test:extension:native": "npm run package && node test/run-native-extension-tests.mjs",
-    "check": "npm run build && npm test"
+    "check": "npm run format:check && npm run build && npm test",
+    "format": "prettier --config .prettierrc.json --write src scripts test ../language-server/src ../language-server/test",
+    "format:check": "prettier --config .prettierrc.json --check src scripts test ../language-server/src ../language-server/test"
   },
   "contributes": {
     "languages": [
@@ -115,6 +121,96 @@
         "command": "YCPL.showOutput",
         "title": "Show Output",
         "category": "YCPL"
+      },
+      {
+        "command": "YCPL.testWorkspace",
+        "title": "Test Workspace",
+        "category": "YCPL"
+      },
+      {
+        "command": "YCPL.testFile",
+        "title": "Test File",
+        "category": "YCPL"
+      },
+      {
+        "command": "YCPL.testAtCursor",
+        "title": "Test Function at Cursor",
+        "category": "YCPL"
+      },
+      {
+        "command": "YCPL.refreshTests",
+        "title": "Refresh Tests",
+        "category": "YCPL"
+      },
+      {
+        "command": "YCPL.toggleTestFile",
+        "title": "Toggle Test File",
+        "category": "YCPL"
+      },
+      {
+        "command": "YCPL.generateTests",
+        "title": "Generate Tests",
+        "category": "YCPL"
+      },
+      {
+        "command": "YCPL.organizeImports",
+        "title": "Organize Imports",
+        "category": "YCPL"
+      },
+      {
+        "command": "YCPL.newProject",
+        "title": "New Project",
+        "category": "YCPL"
+      },
+      {
+        "command": "YCPL.showEnvironment",
+        "title": "Show Environment",
+        "category": "YCPL"
+      },
+      {
+        "command": "YCPL.configureCompiler",
+        "title": "Configure Compiler",
+        "category": "YCPL"
+      },
+      {
+        "command": "YCPL.debug",
+        "title": "Debug Current File or Project",
+        "category": "YCPL"
+      },
+      {
+        "command": "YCPL.coverage",
+        "title": "Test Workspace with Coverage",
+        "category": "YCPL"
+      },
+      {
+        "command": "YCPL.debugTestAtCursor",
+        "title": "Debug Test at Cursor",
+        "category": "YCPL"
+      },
+      {
+        "command": "YCPL.profile",
+        "title": "Collect Execution Profile",
+        "category": "YCPL"
+      },
+      {
+        "command": "YCPL.playground",
+        "title": "Open Local Playground",
+        "category": "YCPL"
+      },
+      {
+        "command": "YCPL.addImport",
+        "title": "Add Import",
+        "category": "YCPL"
+      },
+      {
+        "command": "YCPL.profileCPU",
+        "title": "Collect CPU Samples",
+        "category": "YCPL"
+      },
+      {
+        "command": "YCPL.profileMemory",
+        "title": "Collect Memory Profile",
+        "category": "YCPL"
       }
     ],
     "configuration": {
@@ -133,8 +229,8 @@
             "native",
             "typescript"
           ],
-          "default": "auto",
-          "description": "Select the native YCPL server automatically, require it, or use the bundled TypeScript fallback."
+          "default": "typescript",
+          "description": "Use the full bundled TypeScript server (default), automatically prefer a native server, or require the native server."
         },
         "YCPL.compiler.path": {
           "type": "string",
@@ -188,6 +284,53 @@
           "type": "boolean",
           "default": true,
           "description": "Enable YCPL inlay hints."
+        },
+        "YCPL.organizeImportsOnSave": {
+          "type": "boolean",
+          "default": true,
+          "scope": "resource",
+          "description": "Sort imports and remove unused aliases on save, preserving comments and side-effect imports."
+        },
+        "YCPL.debug.adapterPath": {
+          "type": "string",
+          "default": "",
+          "scope": "resource",
+          "description": "Path to lldb-dap (LLVM 22 or newer). Discovered from LLVM_BINDIR, Homebrew lldb, PATH, or standard LLVM paths when empty."
+        },
+        "YCPL.debug.externalSymbols": {
+          "type": "boolean",
+          "default": false,
+          "scope": "resource",
+          "description": "Allow LLDB external symbol lookup, including network symbol servers. Local YCPL debug information remains available when disabled."
+        },
+        "YCPL.testing.benchmarkIterations": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1000000,
+          "default": 1000,
+          "scope": "resource",
+          "description": "Iterations per benchmark_*() bool function. Timings include process startup."
+        },
+        "YCPL.profiling.duration": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 300,
+          "default": 5,
+          "description": "macOS CPU sampling duration in seconds. The sampled program is stopped when collection ends."
+        },
+        "YCPL.testing.fuzzIterations": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1000000,
+          "default": 1000,
+          "description": "Consecutive deterministic seeds passed to fuzz_*(seed i32) bool property tests."
+        },
+        "YCPL.testing.fuzzStartSeed": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 2146483647,
+          "default": 0,
+          "description": "First property-test seed. Set this to a reported failing seed to reproduce it."
         }
       }
     },
@@ -196,16 +339,189 @@
         "editor.tabSize": 4,
         "editor.insertSpaces": true,
         "editor.semanticHighlighting.enabled": true,
-        "editor.formatOnSave": false,
+        "editor.formatOnSave": true,
         "editor.quickSuggestions": {
           "other": "on",
           "comments": "off",
           "strings": "off"
         },
         "editor.suggest.snippetsPreventQuickSuggestions": false,
-        "editor.wordBasedSuggestions": "off"
+        "editor.wordBasedSuggestions": "off",
+        "editor.defaultFormatter": "ycpl.ycpl-vscode"
       }
-    }
+    },
+    "taskDefinitions": [
+      {
+        "type": "ycpl",
+        "required": [
+          "command"
+        ],
+        "properties": {
+          "command": {
+            "type": "string",
+            "enum": [
+              "check",
+              "build",
+              "build-ir",
+              "run"
+            ]
+          },
+          "input": {
+            "type": "string",
+            "default": "."
+          }
+        }
+      }
+    ],
+    "problemMatchers": [
+      {
+        "name": "ycpl",
+        "owner": "ycpl",
+        "source": "ycc",
+        "fileLocation": [
+          "autoDetect",
+          "${workspaceFolder}"
+        ],
+        "pattern": {
+          "regexp": "^(.+?):(\\d+):(\\d+):\\s*(.*)$",
+          "file": 1,
+          "line": 2,
+          "column": 3,
+          "message": 4
+        }
+      }
+    ],
+    "menus": {
+      "editor/title": [
+        {
+          "command": "YCPL.run",
+          "when": "resourceLangId == ycpl",
+          "group": "navigation"
+        },
+        {
+          "command": "YCPL.testFile",
+          "when": "resourceFilename =~ /_test\\.yc$/",
+          "group": "navigation"
+        }
+      ],
+      "editor/context": [
+        {
+          "command": "YCPL.generateTests",
+          "when": "resourceLangId == ycpl",
+          "group": "ycpl"
+        },
+        {
+          "command": "YCPL.toggleTestFile",
+          "when": "resourceLangId == ycpl",
+          "group": "ycpl"
+        }
+      ]
+    },
+    "breakpoints": [
+      {
+        "language": "ycpl"
+      }
+    ],
+    "debuggers": [
+      {
+        "type": "ycpl",
+        "label": "YCPL (LLDB)",
+        "languages": [
+          "ycpl"
+        ],
+        "configurationAttributes": {
+          "launch": {
+            "required": [
+              "program"
+            ],
+            "properties": {
+              "program": {
+                "type": "string",
+                "description": "YCPL source file, project directory, or existing native executable."
+              },
+              "args": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "default": []
+              },
+              "cwd": {
+                "type": "string"
+              },
+              "stopOnEntry": {
+                "type": "boolean",
+                "default": false
+              },
+              "initCommands": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "LLDB startup commands, applied after the YCPL external-symbol policy."
+              },
+              "console": {
+                "type": "string",
+                "enum": [
+                  "integratedTerminal",
+                  "internalConsole",
+                  "externalTerminal"
+                ],
+                "default": "integratedTerminal"
+              },
+              "env": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "attach": {
+            "properties": {
+              "pid": {
+                "type": [
+                  "number",
+                  "string"
+                ]
+              },
+              "program": {
+                "type": "string"
+              },
+              "coreFile": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "initialConfigurations": [
+          {
+            "type": "ycpl",
+            "request": "launch",
+            "name": "YCPL: Debug File",
+            "program": "${file}",
+            "stopOnEntry": false
+          }
+        ],
+        "configurationSnippets": [
+          {
+            "label": "YCPL: Debug Current File",
+            "body": {
+              "type": "ycpl",
+              "request": "launch",
+              "name": "YCPL: Debug File",
+              "program": "${file}"
+            }
+          }
+        ]
+      }
+    ],
+    "jsonValidation": [
+      {
+        "fileMatch": "YCPL.json",
+        "url": "./schemas/ycpl-project.schema.json"
+      }
+    ]
   },
   "dependencies": {
     "vscode-languageclient": "^10.1.2"
@@ -216,6 +532,7 @@
     "@vscode/test-electron": "^3.1.0",
     "@vscode/vsce": "^4.0.0",
     "esbuild": "^0.28.2",
+    "prettier": "3.9.10",
     "typescript": "^7.0.2"
   }
 }

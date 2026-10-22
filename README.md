@@ -174,10 +174,10 @@ from the stage2/stage3 execution environment.
 
 ## VS Code
 
-The VS Code extension prefers a configured or workspace-built `YCPL-lsp`, then
-`YCPL-lsp` on `PATH`, and falls back to the TypeScript server bundled in its
-VSIX. It discovers the self-hosted `ycc` and provides check, build, build-ir,
-and run commands with editor diagnostics.
+The VS Code extension uses its bundled TypeScript LSP by default and supports an
+optional native YCPL server. It provides completion, safe refactoring, project
+tasks, Test Explorer, LLVM coverage, LLDB debugging, benchmarks and profiling.
+Configure the self-hosted `ycc` to run compiler and test commands.
 
 ```sh
 npm ci --prefix editors/vscode/language-server

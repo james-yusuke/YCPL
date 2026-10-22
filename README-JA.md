@@ -168,10 +168,10 @@ fixed-point testはstage2/stage3実行環境からseed/fallback変数とbootstra
 
 ## VS Code
 
-VS Code拡張は、設定された`YCPL-lsp`、workspaceでbuildされたnative LSP、
-PATH上の`YCPL-lsp`の順にYCPL製serverを探し、見つからない場合はVSIX同梱の
-TypeScript LSPへfallbackします。セルフホスト版`ycc`も自動検出し、check、
-build、build-ir、runとeditor diagnosticsを提供します。
+VS Code 拡張は同梱の TypeScript LSP を既定とし、YCPL 製 native LSP も選択できます。
+補完・リファクタリング・プロジェクトタスク・Test Explorer・LLVM カバレッジ・
+LLDB デバッグ・ベンチマーク・プロファイルに対応します。実行にはセルフホスト版
+`ycc` を設定してください。
 
 ```sh
 npm ci --prefix editors/vscode/language-server
@@ -181,7 +181,7 @@ npm run check --prefix editors/vscode/extension
 npm run package --prefix editors/vscode/extension
 ```
 
-詳細は[VS Code拡張ガイド](editors/vscode/extension/README.md)を参照してください。
+詳細は[日本語の VS Code 拡張ガイド](docs/editor.ja.md)を参照してください。
 
 ## ドキュメント
 

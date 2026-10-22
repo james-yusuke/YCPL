@@ -166,6 +166,12 @@ static void test_portable_compiler_support(void) {
     fputs("fn a() {}\n", file);
     fclose(file);
     assert(symlink(src, cycle) == 0);
+    char alias[368];
+    snprintf(alias, sizeof(alias), "%s/a.yc", cycle);
+    assert(yc_fs_same_file(first, alias));
+    assert(yc_fs_same_file(first, first));
+    assert(!yc_fs_same_file(first, second));
+    assert(!yc_fs_same_file(NULL, first));
 
     yc_runtime_init();
     yc_frame_push();

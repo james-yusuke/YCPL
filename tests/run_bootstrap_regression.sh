@@ -537,6 +537,8 @@ echo "========================================"
 echo ""
 
 echo "--- Single File Tests ---"
+compile_run_and_verify "$ROOT_DIR/tests/fixtures/compiler/124_loop_stack.yc" $'-1\n500000'
+compile_run_and_verify "$ROOT_DIR/tests/fixtures/compiler/123_struct_vec_inference.yc" "42"
 compile_run_and_verify "$ROOT_DIR/examples/basics/hello.yc" "Hello World"
 compile_run_and_verify "$ROOT_DIR/examples/basics/for_loop.yc" $'0\n1\n2\n3\n4\n5\n6\n7\n8\n9\n10'
 compile_run_and_verify "$ROOT_DIR/examples/basics/fizzbuzz.yc" "$(fizzbuzz_expected)"

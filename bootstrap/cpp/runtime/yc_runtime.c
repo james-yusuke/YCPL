@@ -956,6 +956,12 @@ int yc_fs_create_dirs(const char *path) {
     return ok;
 }
 
+int yc_fs_same_file(const char *left, const char *right) {
+    struct stat a, b;
+    return left && right && stat(left, &a) == 0 && stat(right, &b) == 0 &&
+           a.st_dev == b.st_dev && a.st_ino == b.st_ino;
+}
+
 int yc_fs_stat(const char *path, int *kind_out, size_t *size_out) {
     if (kind_out) {
         *kind_out = 0;
