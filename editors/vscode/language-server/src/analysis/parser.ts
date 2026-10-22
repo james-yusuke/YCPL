@@ -1,3 +1,4 @@
+import { scanLexical } from "./lexical.js";
 import { DiagnosticSeverity, SymbolKind } from "vscode-languageserver/node";
 import {
   keywords,
@@ -68,25 +69,26 @@ export class YcplParser {
   /** Parses a YCPL source document into an indexable summary. */
   parse(uri: string, version: number, text: string): YcplDocument {
     const lineOffsets = computeLineOffsets(text);
-    const withoutComments = maskCommentsAndStrings(text, false);
-    const tokens = tokenize(withoutComments);
-    const commentsAndStringsMasked = maskCommentsAndStrings(text, false);
+    const { code, spans: lexicalSpans } = scanLexical(text);
+    const tokens = tokenize(code);
 
-    const functionRanges = findFunctionBodies(uri, text);
-    const structBodies = parseStructBodies(uri, text, lineOffsets);
-    const enumBodies = parseEnumBodies(text, lineOffsets);
-    const scopes = buildScopes(uri, text, lineOffsets, functionRanges, structBodies);
-    const imports = this.parseImports(text, lineOffsets);
-    const symbols = this.parseSymbols(uri, text, lineOffsets, tokens, imports, scopes, functionRanges, structBodies, enumBodies);
-    const references = this.parseReferences(uri, commentsAndStringsMasked, lineOffsets, tokens, scopes, symbols);
-    const calls = this.parseCalls(uri, commentsAndStringsMasked, lineOffsets, scopes, symbols, functionRanges);
-    const diagnostics = this.parseDiagnostics(text, lineOffsets, symbols, imports);
+    const functionRanges = findFunctionBodies(uri, code);
+    const structBodies = parseStructBodies(uri, code, lineOffsets);
+    const enumBodies = parseEnumBodies(code, lineOffsets);
+    const scopes = buildScopes(uri, code, lineOffsets, functionRanges, structBodies);
+    const imports = this.parseImports(text, code, lineOffsets);
+    const symbols = this.parseSymbols(uri, code, lineOffsets, tokens, imports, scopes, functionRanges, structBodies, enumBodies);
+    const references = this.parseReferences(uri, code, lineOffsets, tokens, scopes, symbols);
+    const calls = this.parseCalls(uri, code, lineOffsets, scopes, symbols, functionRanges);
+    const diagnostics = this.parseDiagnostics(code, lineOffsets, symbols, imports);
     const moduleName = symbols.find((symbol) => symbol.category === "module" || symbol.category === "package")?.name;
 
     return {
       uri,
       version,
       text,
+      code,
+      lexicalSpans,
       lineOffsets,
       moduleName,
       scopes,
@@ -98,11 +100,12 @@ export class YcplParser {
     };
   }
 
-  private parseImports(text: string, lineOffsets: number[]): ImportInfo[] {
+  private parseImports(text: string, code: string, lineOffsets: number[]): ImportInfo[] {
     const imports: ImportInfo[] = [];
     const pattern = /\bimport\s+"([^"]+)"(?:\s+as\s+([A-Za-z_][A-Za-z0-9_]*))?/g;
     for (const match of text.matchAll(pattern)) {
       const start = match.index ?? 0;
+      if (code.slice(start, start + 6) !== "import") continue;
       const end = start + match[0].length;
       const aliasStart = match[2] ? start + match[0].lastIndexOf(match[2]) : undefined;
       imports.push({
@@ -282,15 +285,17 @@ export class YcplParser {
 
   private parseReferences(uri: string, text: string, lineOffsets: number[], tokens: Token[], scopes: YcplScope[], symbols: YcplSymbol[]): SymbolReference[] {
     const references: SymbolReference[] = [];
+    const declarations = new Set(symbols.map((symbol) => rangeStartOffset(text, lineOffsets, symbol.selectionRange)));
+    const lookup = createSymbolLookup(scopes, symbols);
     for (const token of tokens) {
       if (keywordSet.has(token.text) || primitiveSet.has(token.text)) {
         continue;
       }
-      if (symbols.some((symbol) => sameRangeOffset(text, lineOffsets, symbol.selectionRange, token.start, token.end))) {
+      if (declarations.has(token.start)) {
         continue;
       }
       const scope = scopeForOffset(scopes, token.start);
-      const resolved = resolveTokenSymbol(text, token, scopes, symbols);
+      const resolved = resolveTokenSymbol(text, token, scopes, lookup);
       references.push({
         name: token.text,
         uri,
@@ -304,17 +309,19 @@ export class YcplParser {
 
   private parseCalls(uri: string, text: string, lineOffsets: number[], scopes: YcplScope[], symbols: YcplSymbol[], functionRanges: FunctionBody[]): CallInfo[] {
     const calls: CallInfo[] = [];
+    const declarations = new Set(symbols.filter((symbol) => symbol.category === "function").map((symbol) => rangeStartOffset(text, lineOffsets, symbol.selectionRange)));
+    const lookup = createSymbolLookup(scopes, symbols);
     const callPattern = /\b([A-Za-z_][A-Za-z0-9_]*)(?:\s*\.\s*([A-Za-z_][A-Za-z0-9_]*))?\s*\(/g;
     for (const match of text.matchAll(callPattern)) {
       const start = match.index ?? 0;
       const callee = match[2] ?? match[1];
-      if (callee === "if" || callee === "for") {
+      const calleeStart = start + match[0].lastIndexOf(callee);
+      if (keywordSet.has(callee) || declarations.has(calleeStart)) {
         continue;
       }
       const callerRange = functionRanges.find((range) => start >= range.start && start <= range.end);
       const caller = callerRange?.name ?? "<top-level>";
-      const calleeStart = start + match[0].lastIndexOf(callee);
-      const calleeSymbol = resolveTokenSymbol(text, { text: callee, start: calleeStart, end: calleeStart + callee.length }, scopes, symbols);
+      const calleeSymbol = resolveTokenSymbol(text, { text: callee, start: calleeStart, end: calleeStart + callee.length }, scopes, lookup);
       calls.push({
         caller,
         callee,
@@ -382,49 +389,6 @@ function tokenize(text: string): Token[] {
     i -= 1;
   }
   return tokens;
-}
-
-function maskCommentsAndStrings(text: string, preserveImportStrings: boolean): string {
-  let result = "";
-  let i = 0;
-  while (i < text.length) {
-    if (text.startsWith("//", i)) {
-      const end = text.indexOf("\n", i);
-      const stop = end < 0 ? text.length : end;
-      result += " ".repeat(stop - i);
-      i = stop;
-      continue;
-    }
-    if (text.startsWith("/*", i)) {
-      const end = text.indexOf("*/", i + 2);
-      const stop = end < 0 ? text.length : end + 2;
-      result += text.slice(i, stop).replace(/[^\n]/g, " ");
-      i = stop;
-      continue;
-    }
-    const quote = text[i];
-    if (quote === "\"" || quote === "'" || quote === "`") {
-      const start = i;
-      i += 1;
-      while (i < text.length) {
-        if (text[i] === "\\" && quote !== "`") {
-          i += 2;
-          continue;
-        }
-        if (text[i] === quote) {
-          i += 1;
-          break;
-        }
-        i += 1;
-      }
-      const literal = text.slice(start, i);
-      result += preserveImportStrings ? literal : literal.replace(/[^\n]/g, " ");
-      continue;
-    }
-    result += text[i];
-    i += 1;
-  }
-  return result;
 }
 
 function kindForCategory(category: SymbolCategory): SymbolKind {
@@ -587,7 +551,7 @@ function dedupeSymbols(symbols: YcplSymbol[]): YcplSymbol[] {
 
 function findFunctionBodies(uri: string, text: string): FunctionBody[] {
   const ranges: FunctionBody[] = [];
-  const pattern = /\bfn\s+([A-Za-z_][A-Za-z0-9_]*)[^{]*\{/g;
+  const pattern = new RegExp(`\\bfn\\s+([A-Za-z_][A-Za-z0-9_]*)\\s*\\([^)]*\\)\\s*(?:${typePatternSource}\\s*)?\\{`, "g");
   for (const match of text.matchAll(pattern)) {
     const start = match.index ?? 0;
     const nameStart = start + match[0].indexOf(match[1]);
@@ -631,7 +595,7 @@ function parseStructBodies(uri: string, text: string, lineOffsets: number[]): St
 
 function parseEnumBodies(text: string, lineOffsets: number[]): EnumBody[] {
   const bodies: EnumBody[] = [];
-  const masked = maskCommentsAndStrings(text, false);
+  const masked = text;
   const pattern = /\benum\s+([A-Za-z_][A-Za-z0-9_]*)[^{]*\{/g;
   for (const match of masked.matchAll(pattern)) {
     const start = match.index ?? 0;
@@ -681,7 +645,7 @@ function parseEnumMembers(uri: string, text: string, lineOffsets: number[], body
 }
 
 function buildScopes(uri: string, text: string, lineOffsets: number[], functionRanges: FunctionBody[], structBodies: StructBody[]): YcplScope[] {
-  const masked = maskCommentsAndStrings(text, false);
+  const masked = text;
   const root: YcplScope = {
     id: scopeId(uri, "global", "global", 0),
     kind: "global",
@@ -773,17 +737,37 @@ function rootScope(scopes: YcplScope[]): YcplScope {
 }
 
 function scopeForOffset(scopes: YcplScope[], offset: number): YcplScope {
-  return scopes
-    .filter((scope) => offset >= scope.startOffset && offset <= scope.endOffset)
-    .sort((left, right) => (left.endOffset - left.startOffset) - (right.endOffset - right.startOffset))[0] ?? rootScope(scopes);
+  let best = scopes[0];
+  for (const scope of scopes) {
+    if (offset >= scope.startOffset && offset <= scope.endOffset
+      && scope.endOffset - scope.startOffset <= best.endOffset - best.startOffset) {
+      best = scope;
+    }
+  }
+  return best;
 }
 
 function fnScopeForSymbol(scopes: YcplScope[], symbol: YcplSymbol): YcplScope {
   return scopes.find((scope) => scope.kind === "function" && scope.name === symbol.name) ?? rootScope(scopes);
 }
 
-function resolveTokenSymbol(text: string, token: Token, scopes: YcplScope[], symbols: YcplSymbol[]): YcplSymbol | undefined {
-  const field = resolveFieldAccess(text, token, scopes, symbols) ?? resolveStructLiteralField(text, token, symbols);
+interface SymbolLookup {
+  byName: Map<string, YcplSymbol[]>;
+  scopesById: Map<ScopeId, YcplScope>;
+}
+
+function createSymbolLookup(scopes: YcplScope[], symbols: YcplSymbol[]): SymbolLookup {
+  const byName = new Map<string, YcplSymbol[]>();
+  for (const symbol of symbols) {
+    const entries = byName.get(symbol.name) ?? [];
+    entries.push(symbol);
+    byName.set(symbol.name, entries);
+  }
+  return { byName, scopesById: new Map(scopes.map((scope) => [scope.id, scope])) };
+}
+
+function resolveTokenSymbol(text: string, token: Token, scopes: YcplScope[], lookup: SymbolLookup): YcplSymbol | undefined {
+  const field = resolveFieldAccess(text, token, scopes, lookup) ?? resolveStructLiteralField(text, token, lookup);
   if (field) {
     return field;
   }
@@ -792,44 +776,44 @@ function resolveTokenSymbol(text: string, token: Token, scopes: YcplScope[], sym
     : isTypeTokenContext(text, token)
       ? typeCategories
       : undefined;
-  return resolveLexical(token.text, scopeForOffset(scopes, token.start), scopes, symbols, wantedKind);
+  return resolveLexical(token.text, scopeForOffset(scopes, token.start), scopes, lookup, wantedKind);
 }
 
-function resolveLexical(name: string, startScope: YcplScope, scopes: YcplScope[], symbols: YcplSymbol[], wantedKinds?: readonly SymbolCategory[]): YcplSymbol | undefined {
+function resolveLexical(name: string, startScope: YcplScope, scopes: YcplScope[], lookup: SymbolLookup, wantedKinds?: readonly SymbolCategory[]): YcplSymbol | undefined {
   let scope: YcplScope | undefined = startScope;
   while (scope) {
-    const found = symbols
+    const found = (lookup.byName.get(name) ?? [])
       .filter((symbol) => symbol.name === name && symbol.scopeId === scope?.id && (!wantedKinds || wantedKinds.includes(symbol.category)))
       .sort((left, right) => symbolPriority(left) - symbolPriority(right))[0];
     if (found) {
       return found;
     }
-    scope = scope.parentId ? scopes.find((candidate) => candidate.id === scope?.parentId) : undefined;
+    scope = scope.parentId ? lookup.scopesById.get(scope.parentId) : undefined;
   }
-  return symbols
+  return (lookup.byName.get(name) ?? [])
     .filter((symbol) => symbol.name === name && symbol.scopeId === rootScope(scopes).id && (!wantedKinds || wantedKinds.includes(symbol.category)))
     .sort((left, right) => symbolPriority(left) - symbolPriority(right))[0];
 }
 
-function resolveFieldAccess(text: string, token: Token, scopes: YcplScope[], symbols: YcplSymbol[]): YcplSymbol | undefined {
+function resolveFieldAccess(text: string, token: Token, scopes: YcplScope[], lookup: SymbolLookup): YcplSymbol | undefined {
   const before = text.slice(Math.max(0, token.start - 80), token.start);
   const receiver = before.match(/([A-Za-z_][A-Za-z0-9_]*)\s*\.\s*$/)?.[1];
   if (!receiver) {
     return undefined;
   }
   const receiverOffset = token.start - before.length + before.lastIndexOf(receiver);
-  const receiverSymbol = resolveLexical(receiver, scopeForOffset(scopes, receiverOffset), scopes, symbols);
+  const receiverSymbol = resolveLexical(receiver, scopeForOffset(scopes, receiverOffset), scopes, lookup);
   if (receiverSymbol?.category === "enum") {
-    return symbols.find((symbol) => symbol.category === "enumMember" && symbol.containerName === receiverSymbol.name && symbol.name === token.text);
+    return (lookup.byName.get(token.text) ?? []).find((symbol) => symbol.category === "enumMember" && symbol.containerName === receiverSymbol.name && symbol.name === token.text);
   }
   const receiverType = canonicalTypeName(receiverSymbol?.typeName);
   if (!receiverType) {
     return undefined;
   }
-  return symbols.find((symbol) => symbol.category === "field" && symbol.containerName === receiverType && symbol.name === token.text);
+  return (lookup.byName.get(token.text) ?? []).find((symbol) => symbol.category === "field" && symbol.containerName === receiverType && symbol.name === token.text);
 }
 
-function resolveStructLiteralField(text: string, token: Token, symbols: YcplSymbol[]): YcplSymbol | undefined {
+function resolveStructLiteralField(text: string, token: Token, lookup: SymbolLookup): YcplSymbol | undefined {
   if (!/^\s*:/.test(text.slice(token.end, Math.min(text.length, token.end + 16)))) {
     return undefined;
   }
@@ -838,21 +822,21 @@ function resolveStructLiteralField(text: string, token: Token, symbols: YcplSymb
     return undefined;
   }
   const typeName = text.slice(0, open).match(/([A-Za-z_][A-Za-z0-9_]*)\s*$/)?.[1];
-  return typeName ? symbols.find((symbol) => symbol.category === "field" && symbol.containerName === typeName && symbol.name === token.text) : undefined;
+  return typeName ? (lookup.byName.get(token.text) ?? []).find((symbol) => symbol.category === "field" && symbol.containerName === typeName && symbol.name === token.text) : undefined;
 }
 
 function parseStructFields(uri: string, text: string, lineOffsets: number[], body: StructBody): YcplSymbol[] {
   const fields: YcplSymbol[] = [];
-  const fieldPattern = /^\s*([A-Za-z_][A-Za-z0-9_]*)\s+(\*?\s*(?:\[\]\s*)?[A-Za-z_][A-Za-z0-9_]*)\s*$/gm;
+  const fieldPattern = new RegExp(`^[ \t]*(?:pub[ \t]+)?([A-Za-z_][A-Za-z0-9_]*)[ \t]+(${typePatternSource})[ \t]*$`, "gm");
   const bodyText = text.slice(body.bodyStart, body.bodyEnd);
   for (const match of bodyText.matchAll(fieldPattern)) {
-    if (keywordSet.has(match[1]) || primitiveSet.has(match[1]) || keywordSet.has(match[2]) || !isFieldTypeName(match[2])) {
+    if (keywordSet.has(match[1]) || primitiveSet.has(match[1]) || keywordSet.has(match[2])) {
       continue;
     }
     const lineStart = body.bodyStart + (match.index ?? 0);
     const nameStart = lineStart + match[0].indexOf(match[1]);
     const nameEnd = nameStart + match[1].length;
-    const typeName = match[2].replace(/\s+/g, "");
+    const typeName = normalizeTypeName(match[2]);
     fields.push({
       id: symbolId(uri, "field", match[1], nameStart),
       name: match[1],
@@ -904,11 +888,6 @@ function duplicateKey(symbol: YcplSymbol): string {
   return `${symbol.category}:${symbol.name}`;
 }
 
-function isFieldTypeName(typeName: string): boolean {
-  const normalized = typeName.replace(/\s+/g, "").replace(/^\*+/, "").replace(/^(\[\])+/, "");
-  return primitiveSet.has(normalized) || /^[A-Z][A-Za-z0-9_]*$/.test(normalized);
-}
-
 function symbolId(uri: string, category: SymbolCategory, name: string, offset: number): string {
   return `${uri}#symbol:${category}:${name}:${offset}`;
 }
@@ -920,11 +899,6 @@ function scopeId(uri: string, kind: string, name: string, offset: number): Scope
 function rangeStartOffset(text: string, lineOffsets: number[], range: { start: { line: number; character: number } }): number {
   void text;
   return (lineOffsets[range.start.line] ?? 0) + range.start.character;
-}
-
-function sameRangeOffset(text: string, lineOffsets: number[], range: { start: { line: number; character: number }; end: { line: number; character: number } }, start: number, end: number): boolean {
-  void text;
-  return rangeStartOffset("", lineOffsets, range) === start && ((lineOffsets[range.end.line] ?? 0) + range.end.character) === end;
 }
 
 function isFunctionCallToken(text: string, token: Token): boolean {
@@ -990,7 +964,7 @@ function pushDelimiterDiagnostics(text: string, lineOffsets: number[], diagnosti
   const stack: Array<{ char: string; offset: number }> = [];
   const pairs = new Map([["}", "{"], [")", "("], ["]", "["]]);
   const openers = new Set(["{", "(", "["]);
-  const masked = maskCommentsAndStrings(text, false);
+  const masked = text;
   for (let i = 0; i < masked.length; i += 1) {
     const char = masked[i];
     if (openers.has(char)) {

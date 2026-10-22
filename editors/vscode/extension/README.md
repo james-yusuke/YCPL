@@ -21,6 +21,10 @@ definition/implementation, references, rename, symbols, signature help,
 semantic tokens, formatting, folding, selection ranges, highlights, inlay
 hints, code actions, code lenses, and call hierarchy.
 
+Version 0.3 improves LSP indexing and current-language highlighting, including
+nested comments, multiline raw strings, `cast` and nested `Vec`/`Map` types.
+The client watches YCPL source files and releases its watcher on restart.
+
 ## Compiler commands
 
 The Command Palette contains check, build, build-ir, run, Language Server
@@ -59,3 +63,7 @@ platform-specific native executable.
 
 For interactive development, run `YCPL: Debug VSCode Extension` from the
 repository workspace.
+
+Set `VSCODE_EXECUTABLE_PATH` to a local VS Code executable to run the packaged
+extension tests without downloading another editor. Both test modes exercise
+completion, document symbols and a server restart from the extracted VSIX.

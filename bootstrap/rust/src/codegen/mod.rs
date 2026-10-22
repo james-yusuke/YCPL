@@ -89,7 +89,7 @@ pub fn emit(project: &Project) -> Result<String> {
 }
 impl<'a> Generator<'a> {
     fn new(project: &'a Project) -> R<Self> {
-        let l = Llvm::new();
+        let l = Llvm::new()?;
         let header = l.typ(5, 0, &[], "YCPLArrayHeader")?;
         let ptr = l.typ(4, 0, &[], "")?;
         let int = l.typ(1, 64, &[], "")?;

@@ -1,6 +1,6 @@
 {
   "name": "@ycpl/language-server",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
   "description": "YCPL Language Server Protocol implementation.",
@@ -11,7 +11,8 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "check": "npm run build && npm test",
-    "test": "node --test dist/test/*.test.js"
+    "test": "node --test dist/test/*.test.js",
+    "benchmark": "npm run build && node test/benchmark.mjs"
   },
   "dependencies": {
     "vscode-languageserver": "^10.1.2",

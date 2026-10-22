@@ -4,6 +4,8 @@ load("//bootstrap/rust:stages.bzl", "rust_seed_stages")
 
 package(default_visibility = ["//visibility:public"])
 
+exports_files(["scripts/setup-llvm.sh"])
+
 filegroup(
     name = "stl_sources",
     srcs = glob(["stl/**"]),

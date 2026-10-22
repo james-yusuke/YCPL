@@ -6,7 +6,11 @@
 #include <llvm/IR/IRBuilder.h>
 #include <llvm/IR/Module.h>
 #include <llvm/IR/Verifier.h>
+#include <llvm/MC/TargetRegistry.h>
+#include <llvm/Support/TargetSelect.h>
 #include <llvm/Support/raw_ostream.h>
+#include <llvm/Target/TargetMachine.h>
+#include <llvm/TargetParser/Host.h>
 #include <stdexcept>
 #include <type_traits>
 #include <vector>
@@ -31,6 +35,24 @@ struct Session::Impl
     {
         if (id > UINT32_MAX)
             throw std::runtime_error("LLVM session id exhausted");
+        static const bool initialized = []
+        {
+            if (InitializeNativeTarget() || InitializeNativeTargetAsmPrinter())
+                throw std::runtime_error("LLVM native target initialization failed");
+            return true;
+        }();
+        (void)initialized;
+        const Triple triple(sys::getProcessTriple());
+        std::string error;
+        const auto *target = TargetRegistry::lookupTarget(triple, error);
+        if (!target)
+            throw std::runtime_error("LLVM native target unavailable: " + error);
+        std::unique_ptr<TargetMachine> machine(
+            target->createTargetMachine(triple, "generic", "", TargetOptions(), Reloc::PIC_));
+        if (!machine)
+            throw std::runtime_error("LLVM native target machine unavailable");
+        module.setTargetTriple(machine->getTargetTriple());
+        module.setDataLayout(machine->createDataLayout());
     }
     template <class T> std::uint64_t add(std::vector<T *> &v, T *x)
     {

@@ -2,10 +2,31 @@ import "std/fmt" as fmt
 import "std/array" as array
 import "std/io" as io
 import "std/jsonrpc" as jsonrpc
+import "std/json" as json
+import "std/json/scanner" as scanner
 import "std/map" as map
 import "std/mem" as mem
 import "std/text" as text
+import "std/str" as str
 import "std/ycpl/syntax" as syntax
+
+// Most clients send UTF-8 directly; decode JSON Unicode escapes when present.
+fn field_string(message string, key string) string {
+    start := jsonrpc.field_value_start(message, key)
+    if start < 0 || message[start] != '"' { return none }
+    end_pos := scanner.string_end(message, start)
+    if end_pos < 0 { return none }
+    unicode := text.find_from(message, "\\u", start)
+    if unicode < 0 || unicode >= end_pos {
+        return jsonrpc.field_string(message, key)
+    }
+    literal := text.slice(message, start, end_pos - start)
+    value := json.parse(literal)
+    decoded := json.as_string(value)
+    json.free(value)
+    mem.free(literal)
+    return decoded
+}
 
 fn append_str(out string, at i32, value string) i32 {
     if value == none {
@@ -22,36 +43,21 @@ fn append_str(out string, at i32, value string) i32 {
     return at
 }
 
+// Keep the magnitude negative so the full i32 range needs no allocation.
+fn append_i32_digits(out string, at i32, value i32) i32 {
+    if value <= -10 {
+        at = append_i32_digits(out, at, value / 10)
+    }
+    out[at] = '0' - value % 10
+    return at + 1
+}
+
 fn append_i32(out string, at i32, value i32) i32 {
-    if value == 0 {
-        out[at] = '0'
-        return at + 1
-    }
-
-    n := value
-    if n < 0 {
+    if value < 0 {
         out[at] = '-'
-        at += 1
-        n = -n
+        return append_i32_digits(out, at + 1, value)
     }
-
-    tmp: string := mem.calloc(16, 1)
-    count: i32 := 0
-    for (; n > 0; ) {
-        digit := n % 10
-        tmp[count] = '0' + digit
-        count += 1
-        n = n / 10
-    }
-
-    i := count - 1
-    for (; i >= 0; i--) {
-        out[at] = tmp[i]
-        at += 1
-    }
-
-    mem.free(tmp)
-    return at
+    return append_i32_digits(out, at, -value)
 }
 
 fn send_json_body(body string) {
@@ -140,7 +146,7 @@ fn send_completion(id i32) {
     at: i32 := 0
     at = append_str(body, at, "{\"jsonrpc\":\"2.0\",\"id\":")
     at = append_i32(body, at, id)
-    at = append_str(body, at, ",\"result\":{\"isIncomplete\":false,\"items\":[{\"label\":\"fn\",\"kind\":14},{\"label\":\"main\",\"kind\":15,\"insertTextFormat\":2,\"insertText\":\"fn main() i32 {\\n    $1\\n    return 0\\n}\"},{\"label\":\"Vec\",\"kind\":15,\"insertTextFormat\":2,\"insertText\":\"Vec<${1:i32}>{capacity: ${2:16}}\"},{\"label\":\"struct\",\"kind\":14},{\"label\":\"import\",\"kind\":14},{\"label\":\"const\",\"kind\":14},{\"label\":\"i32\",\"kind\":7},{\"label\":\"string\",\"kind\":7},{\"label\":\"bool\",\"kind\":7},{\"label\":\"std/fmt\",\"kind\":9},{\"label\":\"std/json\",\"kind\":9},{\"label\":\"std/utf8\",\"kind\":9},{\"label\":\"std/strconv\",\"kind\":9},{\"label\":\"std/path\",\"kind\":9},{\"label\":\"std/sort\",\"kind\":9},{\"label\":\"std/time\",\"kind\":9},{\"label\":\"std/random\",\"kind\":9},{\"label\":\"fmt.println\",\"kind\":3},{\"label\":\"utf8.valid\",\"kind\":3},{\"label\":\"path.join\",\"kind\":3}]}}")
+    at = append_str(body, at, ",\"result\":{\"isIncomplete\":false,\"items\":[{\"label\":\"fn\",\"kind\":14},{\"label\":\"main\",\"kind\":15,\"insertTextFormat\":2,\"insertText\":\"fn main() i32 {\\n    $1\\n    return 0\\n}\"},{\"label\":\"Vec\",\"kind\":15,\"insertTextFormat\":2,\"insertText\":\"Vec<${1:i32}>{capacity: ${2:16}}\"},{\"label\":\"struct\",\"kind\":14},{\"label\":\"import\",\"kind\":14},{\"label\":\"const\",\"kind\":14},{\"label\":\"i32\",\"kind\":7},{\"label\":\"string\",\"kind\":7},{\"label\":\"bool\",\"kind\":7},{\"label\":\"std/fmt\",\"kind\":9},{\"label\":\"std/json\",\"kind\":9},{\"label\":\"std/utf8\",\"kind\":9},{\"label\":\"std/strconv\",\"kind\":9},{\"label\":\"std/path\",\"kind\":9},{\"label\":\"std/sort\",\"kind\":9},{\"label\":\"std/time\",\"kind\":9},{\"label\":\"std/random\",\"kind\":9},{\"label\":\"fmt.println\",\"kind\":3},{\"label\":\"utf8.valid\",\"kind\":3},{\"label\":\"path.join\",\"kind\":3},{\"label\":\"module\",\"kind\":14},{\"label\":\"package\",\"kind\":14},{\"label\":\"pub\",\"kind\":14},{\"label\":\"extern\",\"kind\":14},{\"label\":\"intrinsic\",\"kind\":14},{\"label\":\"enum\",\"kind\":14},{\"label\":\"type\",\"kind\":14},{\"label\":\"owned\",\"kind\":14},{\"label\":\"if\",\"kind\":14},{\"label\":\"else\",\"kind\":14},{\"label\":\"for\",\"kind\":14},{\"label\":\"in\",\"kind\":14},{\"label\":\"switch\",\"kind\":14},{\"label\":\"case\",\"kind\":14},{\"label\":\"default\",\"kind\":14},{\"label\":\"return\",\"kind\":14},{\"label\":\"break\",\"kind\":14},{\"label\":\"continue\",\"kind\":14},{\"label\":\"defer\",\"kind\":14},{\"label\":\"as\",\"kind\":14},{\"label\":\"cast\",\"kind\":14},{\"label\":\"true\",\"kind\":14},{\"label\":\"false\",\"kind\":14},{\"label\":\"none\",\"kind\":14},{\"label\":\"i64\",\"kind\":7},{\"label\":\"char\",\"kind\":7},{\"label\":\"byte\",\"kind\":7},{\"label\":\"float\",\"kind\":7},{\"label\":\"double\",\"kind\":7},{\"label\":\"void\",\"kind\":7},{\"label\":\"size_t\",\"kind\":7},{\"label\":\"Type\",\"kind\":7},{\"label\":\"T\",\"kind\":7},{\"label\":\"any\",\"kind\":7},{\"label\":\"Bytes\",\"kind\":7},{\"label\":\"Map\",\"kind\":7}]}}")
     send_json_body(body)
     mem.free(body)
 }
@@ -214,7 +220,7 @@ fn slice_eq(source string, start i32, len i32, value string) bool {
 }
 
 fn is_keyword_token(source string, start i32, len i32) bool {
-    return slice_eq(source, start, len, "module") || slice_eq(source, start, len, "package") || slice_eq(source, start, len, "import") || slice_eq(source, start, len, "pub") || slice_eq(source, start, len, "extern") || slice_eq(source, start, len, "intrinsic") || slice_eq(source, start, len, "fn") || slice_eq(source, start, len, "struct") || slice_eq(source, start, len, "const") || slice_eq(source, start, len, "owned") || slice_eq(source, start, len, "if") || slice_eq(source, start, len, "else") || slice_eq(source, start, len, "for") || slice_eq(source, start, len, "in") || slice_eq(source, start, len, "return") || slice_eq(source, start, len, "break") || slice_eq(source, start, len, "continue") || slice_eq(source, start, len, "defer") || slice_eq(source, start, len, "as") || slice_eq(source, start, len, "none") || slice_eq(source, start, len, "true") || slice_eq(source, start, len, "false") || slice_eq(source, start, len, "enum") || slice_eq(source, start, len, "type") || slice_eq(source, start, len, "switch") || slice_eq(source, start, len, "case") || slice_eq(source, start, len, "default")
+    return slice_eq(source, start, len, "module") || slice_eq(source, start, len, "package") || slice_eq(source, start, len, "import") || slice_eq(source, start, len, "pub") || slice_eq(source, start, len, "extern") || slice_eq(source, start, len, "intrinsic") || slice_eq(source, start, len, "fn") || slice_eq(source, start, len, "struct") || slice_eq(source, start, len, "const") || slice_eq(source, start, len, "owned") || slice_eq(source, start, len, "if") || slice_eq(source, start, len, "else") || slice_eq(source, start, len, "for") || slice_eq(source, start, len, "in") || slice_eq(source, start, len, "return") || slice_eq(source, start, len, "break") || slice_eq(source, start, len, "continue") || slice_eq(source, start, len, "defer") || slice_eq(source, start, len, "as") || slice_eq(source, start, len, "none") || slice_eq(source, start, len, "true") || slice_eq(source, start, len, "false") || slice_eq(source, start, len, "enum") || slice_eq(source, start, len, "type") || slice_eq(source, start, len, "switch") || slice_eq(source, start, len, "case") || slice_eq(source, start, len, "default") || slice_eq(source, start, len, "cast")
 }
 
 fn is_type_token(source string, start i32, len i32) bool {
@@ -256,6 +262,14 @@ fn send_empty_result(id i32) {
     io.flush()
 }
 
+// Count a UTF-8 byte's contribution without rescanning the line.
+fn utf16_byte_width(value i32) i32 {
+    b := value & 255
+    if b >= 128 && b < 192 { return 0 }
+    if b >= 240 { return 2 }
+    return 1
+}
+
 fn send_semantic_tokens(id i32, source string) {
     if source == none {
         body: string := mem.calloc(128, 1)
@@ -294,83 +308,73 @@ fn send_semantic_tokens(id i32, source string) {
         } else if ch == ' ' || ch == 9 || ch == 13 {
             col += 1
             i += 1
-        } else if ch == '/' && i + 1 < n && source[i + 1] == '/' {
+        } else if (ch == '/' && i + 1 < n && (source[i + 1] == '/' || source[i + 1] == '*')) || ch == '"' || ch == '\'' || ch == '`' {
             start_col := col
-            start := i
-            for (; i < n && source[i] != 10; i++) {
+            token_type := 9
+            quote := 0
+            depth := 0
+            line_comment := false
+            if ch == '/' {
+                line_comment = source[i + 1] == '/'
+                if !line_comment { depth = 1 }
+                i += 2
+                col += 2
+            } else {
+                token_type = 6
+                quote = ch
+                i += 1
                 col += 1
             }
-            len := i - start
-            delta_line := line - last_line
-            delta_col := start_col
-            if delta_line == 0 {
-                delta_col = start_col - last_col
-            }
-            at = append_semantic_token(body, at, token_count == 0, delta_line, delta_col, len, 9, 0)
-            token_count += 1
-            last_line = line
-            last_col = start_col
-        } else if ch == '/' && i + 1 < n && source[i + 1] == '*' {
-            start_col := col
-            start := i
-            for (; i < n; ) {
-                if source[i] == 10 {
-                    line += 1
-                    col = 0
-                    i += 1
-                } else if source[i] == '*' && i + 1 < n && source[i + 1] == '/' {
-                    i += 2
-                    col += 2
-                    break
-                } else {
-                    col += 1
-                    i += 1
-                }
-            }
-            if line == last_line {
-                len := i - start
-                delta_line := line - last_line
-                delta_col := start_col
-                if delta_line == 0 {
-                    delta_col = start_col - last_col
-                }
-                at = append_semantic_token(body, at, token_count == 0, delta_line, delta_col, len, 9, 0)
-                token_count += 1
-                last_line = line
-                last_col = start_col
-            }
-        } else if ch == '"' || ch == '\'' || ch == '`' {
-            quote := ch
-            start_col := col
-            start := i
-            i += 1
-            col += 1
             escape := false
             for (; i < n; ) {
                 c := source[i]
                 if c == 10 {
-                    break
-                }
-                i += 1
-                col += 1
-                if quote != '`' && escape {
-                    escape = false
-                } else if quote != '`' && c == '\\' {
-                    escape = true
-                } else if c == quote {
-                    break
+                    if line_comment || (quote != 0 && quote != '`') { break }
+                    if col > start_col {
+                        delta_line := line - last_line
+                        delta_col := start_col
+                        if delta_line == 0 { delta_col = start_col - last_col }
+                        at = append_semantic_token(body, at, token_count == 0, delta_line, delta_col, col - start_col, token_type, 0)
+                        token_count += 1
+                        last_line = line
+                        last_col = start_col
+                    }
+                    line += 1
+                    col = 0
+                    start_col = 0
+                    i += 1
+                } else if depth > 0 && c == '/' && i + 1 < n && source[i + 1] == '*' {
+                    depth += 1
+                    i += 2
+                    col += 2
+                } else if depth > 0 && c == '*' && i + 1 < n && source[i + 1] == '/' {
+                    depth -= 1
+                    i += 2
+                    col += 2
+                    if depth == 0 { break }
+                } else {
+                    i += 1
+                    if c != 13 { col += utf16_byte_width(c) }
+                    if quote != 0 {
+                        if quote != '`' && escape {
+                            escape = false
+                        } else if quote != '`' && c == '\\' {
+                            escape = true
+                        } else if c == quote {
+                            break
+                        }
+                    }
                 }
             }
-            len := i - start
-            delta_line := line - last_line
-            delta_col := start_col
-            if delta_line == 0 {
-                delta_col = start_col - last_col
+            if col > start_col {
+                delta_line := line - last_line
+                delta_col := start_col
+                if delta_line == 0 { delta_col = start_col - last_col }
+                at = append_semantic_token(body, at, token_count == 0, delta_line, delta_col, col - start_col, token_type, 0)
+                token_count += 1
+                last_line = line
+                last_col = start_col
             }
-            at = append_semantic_token(body, at, token_count == 0, delta_line, delta_col, len, 6, 0)
-            token_count += 1
-            last_line = line
-            last_col = start_col
         } else if ch >= '0' && ch <= '9' {
             start_col := col
             start := i
@@ -400,7 +404,7 @@ fn send_semantic_tokens(id i32, source string) {
                 token_type = 5
                 if slice_eq(source, start, len, "fn") {
                     expect_fn_name = true
-                } else if slice_eq(source, start, len, "struct") {
+                } else if slice_eq(source, start, len, "struct") || slice_eq(source, start, len, "enum") || slice_eq(source, start, len, "type") {
                     expect_struct_name = true
                 } else if slice_eq(source, start, len, "module") || slice_eq(source, start, len, "package") || slice_eq(source, start, len, "import") || slice_eq(source, start, len, "as") {
                     expect_namespace = true
@@ -1959,13 +1963,13 @@ fn store_document(uris []string, texts []string, uri string, source string) {
 }
 
 fn handle_document_change(message string, uris []string, texts []string) {
-    uri := jsonrpc.field_string(message, "\"uri\"")
-    source := jsonrpc.field_string(message, "\"text\"")
+    uri := field_string(message, "\"uri\"")
+    source := field_string(message, "\"text\"")
     store_document(uris, texts, uri, source)
 }
 
 fn handle_document_close(message string, uris []string, texts []string) {
-    uri := jsonrpc.field_string(message, "\"uri\"")
+    uri := field_string(message, "\"uri\"")
     if uri != none {
         index := map.find(uris, uri)
         if index >= 0 {
@@ -1977,19 +1981,29 @@ fn handle_document_close(message string, uris []string, texts []string) {
 }
 
 fn handle_message(message string, uris []string, texts []string) i32 {
+    method := field_string(message, "\"method\"")
+    if method == none {
+        return 1
+    }
+    running := dispatch_message(message, method, uris, texts)
+    mem.free(method)
+    return running
+}
+
+fn dispatch_message(message string, method string, uris []string, texts []string) i32 {
     id := jsonrpc.id_i32(message)
 
-    if jsonrpc.method_name_is(message, "initialize") {
+    if str.eq(method, "initialize") {
         send_initialize(id)
     }
 
-    if jsonrpc.method_name_is(message, "shutdown") {
+    if str.eq(method, "shutdown") {
         send_shutdown(id)
         return 0
     }
 
-    if jsonrpc.method_name_is(message, "textDocument/hover") {
-        uri := jsonrpc.field_string(message, "\"uri\"")
+    if str.eq(method, "textDocument/hover") {
+        uri := field_string(message, "\"uri\"")
         source := map.get(uris, texts, uri)
         line := jsonrpc.field_i32(message, "\"line\"")
         ch := jsonrpc.field_i32(message, "\"character\"")
@@ -2003,16 +2017,16 @@ fn handle_message(message string, uris []string, texts []string) i32 {
         }
     }
 
-    if jsonrpc.method_name_is(message, "textDocument/completion") {
+    if str.eq(method, "textDocument/completion") {
         send_completion(id)
     }
 
-    if jsonrpc.method_name_is(message, "textDocument/signatureHelp") {
+    if str.eq(method, "textDocument/signatureHelp") {
         send_signature_help(id)
     }
 
-    if jsonrpc.method_name_is(message, "textDocument/semanticTokens/full") {
-        uri := jsonrpc.field_string(message, "\"uri\"")
+    if str.eq(method, "textDocument/semanticTokens/full") {
+        uri := field_string(message, "\"uri\"")
         source := map.get(uris, texts, uri)
         send_semantic_tokens(id, source)
         if uri != none {
@@ -2020,8 +2034,8 @@ fn handle_message(message string, uris []string, texts []string) i32 {
         }
     }
 
-    if jsonrpc.method_name_is(message, "textDocument/formatting") || jsonrpc.method_name_is(message, "textDocument/rangeFormatting") {
-        uri := jsonrpc.field_string(message, "\"uri\"")
+    if str.eq(method, "textDocument/formatting") || str.eq(method, "textDocument/rangeFormatting") {
+        uri := field_string(message, "\"uri\"")
         source := map.get(uris, texts, uri)
         send_formatting(id, source)
         if uri != none {
@@ -2029,8 +2043,8 @@ fn handle_message(message string, uris []string, texts []string) i32 {
         }
     }
 
-    if jsonrpc.method_name_is(message, "textDocument/foldingRange") {
-        uri := jsonrpc.field_string(message, "\"uri\"")
+    if str.eq(method, "textDocument/foldingRange") {
+        uri := field_string(message, "\"uri\"")
         source := map.get(uris, texts, uri)
         send_folding_ranges(id, source)
         if uri != none {
@@ -2038,8 +2052,8 @@ fn handle_message(message string, uris []string, texts []string) i32 {
         }
     }
 
-    if jsonrpc.method_name_is(message, "textDocument/documentSymbol") {
-        uri := jsonrpc.field_string(message, "\"uri\"")
+    if str.eq(method, "textDocument/documentSymbol") {
+        uri := field_string(message, "\"uri\"")
         source := map.get(uris, texts, uri)
         send_document_symbols(id, source)
         if uri != none {
@@ -2047,8 +2061,8 @@ fn handle_message(message string, uris []string, texts []string) i32 {
         }
     }
 
-    if jsonrpc.method_name_is(message, "textDocument/definition") || jsonrpc.method_name_is(message, "textDocument/declaration") || jsonrpc.method_name_is(message, "textDocument/implementation") {
-        uri := jsonrpc.field_string(message, "\"uri\"")
+    if str.eq(method, "textDocument/definition") || str.eq(method, "textDocument/declaration") || str.eq(method, "textDocument/implementation") {
+        uri := field_string(message, "\"uri\"")
         source := map.get(uris, texts, uri)
         line := jsonrpc.field_i32(message, "\"line\"")
         ch := jsonrpc.field_i32(message, "\"character\"")
@@ -2062,8 +2076,8 @@ fn handle_message(message string, uris []string, texts []string) i32 {
         }
     }
 
-    if jsonrpc.method_name_is(message, "textDocument/typeDefinition") {
-        uri := jsonrpc.field_string(message, "\"uri\"")
+    if str.eq(method, "textDocument/typeDefinition") {
+        uri := field_string(message, "\"uri\"")
         source := map.get(uris, texts, uri)
         line := jsonrpc.field_i32(message, "\"line\"")
         ch := jsonrpc.field_i32(message, "\"character\"")
@@ -2077,8 +2091,8 @@ fn handle_message(message string, uris []string, texts []string) i32 {
         }
     }
 
-    if jsonrpc.method_name_is(message, "textDocument/references") {
-        uri := jsonrpc.field_string(message, "\"uri\"")
+    if str.eq(method, "textDocument/references") {
+        uri := field_string(message, "\"uri\"")
         source := map.get(uris, texts, uri)
         line := jsonrpc.field_i32(message, "\"line\"")
         ch := jsonrpc.field_i32(message, "\"character\"")
@@ -2092,8 +2106,8 @@ fn handle_message(message string, uris []string, texts []string) i32 {
         }
     }
 
-    if jsonrpc.method_name_is(message, "textDocument/documentHighlight") {
-        uri := jsonrpc.field_string(message, "\"uri\"")
+    if str.eq(method, "textDocument/documentHighlight") {
+        uri := field_string(message, "\"uri\"")
         source := map.get(uris, texts, uri)
         line := jsonrpc.field_i32(message, "\"line\"")
         ch := jsonrpc.field_i32(message, "\"character\"")
@@ -2107,8 +2121,8 @@ fn handle_message(message string, uris []string, texts []string) i32 {
         }
     }
 
-    if jsonrpc.method_name_is(message, "textDocument/prepareRename") {
-        uri := jsonrpc.field_string(message, "\"uri\"")
+    if str.eq(method, "textDocument/prepareRename") {
+        uri := field_string(message, "\"uri\"")
         source := map.get(uris, texts, uri)
         line := jsonrpc.field_i32(message, "\"line\"")
         ch := jsonrpc.field_i32(message, "\"character\"")
@@ -2122,13 +2136,13 @@ fn handle_message(message string, uris []string, texts []string) i32 {
         }
     }
 
-    if jsonrpc.method_name_is(message, "textDocument/rename") {
-        uri := jsonrpc.field_string(message, "\"uri\"")
+    if str.eq(method, "textDocument/rename") {
+        uri := field_string(message, "\"uri\"")
         source := map.get(uris, texts, uri)
         line := jsonrpc.field_i32(message, "\"line\"")
         ch := jsonrpc.field_i32(message, "\"character\"")
         word := word_at_position(source, line, ch)
-        new_name := jsonrpc.field_string(message, "\"newName\"")
+        new_name := field_string(message, "\"newName\"")
         send_rename_all(id, word, new_name, uris, texts)
         if new_name != none {
             mem.free(new_name)
@@ -2141,8 +2155,8 @@ fn handle_message(message string, uris []string, texts []string) i32 {
         }
     }
 
-    if jsonrpc.method_name_is(message, "textDocument/selectionRange") {
-        uri := jsonrpc.field_string(message, "\"uri\"")
+    if str.eq(method, "textDocument/selectionRange") {
+        uri := field_string(message, "\"uri\"")
         source := map.get(uris, texts, uri)
         line := jsonrpc.field_i32(message, "\"line\"")
         ch := jsonrpc.field_i32(message, "\"character\"")
@@ -2152,8 +2166,8 @@ fn handle_message(message string, uris []string, texts []string) i32 {
         }
     }
 
-    if jsonrpc.method_name_is(message, "textDocument/inlayHint") {
-        uri := jsonrpc.field_string(message, "\"uri\"")
+    if str.eq(method, "textDocument/inlayHint") {
+        uri := field_string(message, "\"uri\"")
         source := map.get(uris, texts, uri)
         send_inlay_hints(id, source)
         if uri != none {
@@ -2161,12 +2175,12 @@ fn handle_message(message string, uris []string, texts []string) i32 {
         }
     }
 
-    if jsonrpc.method_name_is(message, "textDocument/codeAction") {
+    if str.eq(method, "textDocument/codeAction") {
         send_code_actions(id)
     }
 
-    if jsonrpc.method_name_is(message, "textDocument/codeLens") {
-        uri := jsonrpc.field_string(message, "\"uri\"")
+    if str.eq(method, "textDocument/codeLens") {
+        uri := field_string(message, "\"uri\"")
         source := map.get(uris, texts, uri)
         send_code_lenses(id, source)
         if uri != none {
@@ -2174,8 +2188,8 @@ fn handle_message(message string, uris []string, texts []string) i32 {
         }
     }
 
-    if jsonrpc.method_name_is(message, "textDocument/prepareCallHierarchy") {
-        uri := jsonrpc.field_string(message, "\"uri\"")
+    if str.eq(method, "textDocument/prepareCallHierarchy") {
+        uri := field_string(message, "\"uri\"")
         source := map.get(uris, texts, uri)
         line := jsonrpc.field_i32(message, "\"line\"")
         ch := jsonrpc.field_i32(message, "\"character\"")
@@ -2189,17 +2203,17 @@ fn handle_message(message string, uris []string, texts []string) i32 {
         }
     }
 
-    if jsonrpc.method_name_is(message, "callHierarchy/incomingCalls") {
-        target := jsonrpc.field_string(message, "\"name\"")
+    if str.eq(method, "callHierarchy/incomingCalls") {
+        target := field_string(message, "\"name\"")
         send_call_hierarchy_incoming(id, target, uris, texts)
         if target != none {
             mem.free(target)
         }
     }
 
-    if jsonrpc.method_name_is(message, "callHierarchy/outgoingCalls") {
-        caller := jsonrpc.field_string(message, "\"name\"")
-        uri := jsonrpc.field_string(message, "\"uri\"")
+    if str.eq(method, "callHierarchy/outgoingCalls") {
+        caller := field_string(message, "\"name\"")
+        uri := field_string(message, "\"uri\"")
         source := map.get(uris, texts, uri)
         send_call_hierarchy_outgoing(id, caller, uri, source, uris, texts)
         if caller != none {
@@ -2210,19 +2224,19 @@ fn handle_message(message string, uris []string, texts []string) i32 {
         }
     }
 
-    if jsonrpc.method_name_is(message, "workspace/symbol") {
-        query := jsonrpc.field_string(message, "\"query\"")
+    if str.eq(method, "workspace/symbol") {
+        query := field_string(message, "\"query\"")
         send_workspace_symbols(id, query, uris, texts)
         if query != none {
             mem.free(query)
         }
     }
 
-    if jsonrpc.method_name_is(message, "textDocument/didOpen") || jsonrpc.method_name_is(message, "textDocument/didChange") {
+    if str.eq(method, "textDocument/didOpen") || str.eq(method, "textDocument/didChange") {
         handle_document_change(message, uris, texts)
     }
 
-    if jsonrpc.method_name_is(message, "textDocument/didClose") {
+    if str.eq(method, "textDocument/didClose") {
         handle_document_close(message, uris, texts)
     }
 

@@ -12,8 +12,8 @@ fn project(source: &str) -> (tempfile::TempDir, Project) {
 
 #[test]
 fn llvm_rejects_foreign_stale_and_wrong_kind_handles() {
-    let first = Llvm::new();
-    let second = Llvm::new();
+    let first = Llvm::new().unwrap();
+    let second = Llvm::new().unwrap();
     let t = first.typ(1, 32, &[], "").unwrap();
     assert!(second.constant(0, t, 1, 0.0, "").is_err());
     let v = first.constant(0, t, 1, 0.0, "").unwrap();
@@ -32,7 +32,7 @@ fn llvm_rejects_foreign_stale_and_wrong_kind_handles() {
 
 #[test]
 fn llvm_checks_function_and_aggregate_boundaries() {
-    let l = Llvm::new();
+    let l = Llvm::new().unwrap();
     let int = l.typ(1, 32, &[], "").unwrap();
     let ft = l.typ(7, 0, &[int], "").unwrap();
     let a = l.func("a", ft).unwrap();
@@ -47,6 +47,17 @@ fn llvm_checks_function_and_aggregate_boundaries() {
     assert!(l.op("extract", None, &[zero.0], "", 2).is_err());
     // Incomplete functions must never be serialized as usable LLVM IR.
     assert!(l.ir().unwrap_err().contains("verification failed"));
+}
+
+#[test]
+fn llvm_layout_matches_native_aggregate_alignment() {
+    let l = Llvm::new().unwrap();
+    let i32 = l.typ(1, 32, &[], "").unwrap();
+    let i64 = l.typ(1, 64, &[], "").unwrap();
+    let pair = l.typ(5, 0, &[], "AlignedPair").unwrap();
+    l.body(pair, &[i32, i64]).unwrap();
+    assert_eq!(l.size(pair).unwrap(), 16);
+    assert!(l.ir().unwrap().contains("target datalayout ="));
 }
 
 #[test]
@@ -164,6 +175,7 @@ fn native_ownership_variadic_abi_and_paths_with_spaces() {
         r#"
 import "std/text" as text
 struct Row { value string }
+struct AlignedPair { small i32 wide i64 }
 extern fn c_printf(format string, args... any) i32 as "printf"
 fn make_rows() Vec<Row> {
     rows := Vec<Row>{capacity: 1}
@@ -178,6 +190,14 @@ fn source() string {
     return "new"
 }
 fn main() {
+    pairs := Vec<AlignedPair>{capacity: 1}
+    pairs.push(AlignedPair{small: 1, wide: 10000000000})
+    pairs.push(AlignedPair{small: 2, wide: 20000000000})
+    println(sizeof(AlignedPair), pairs[0].wide, pairs[1].wide)
+    allocated := new(AlignedPair)
+    allocated.small = 3
+    allocated.wide = 30000000000
+    println(allocated.small, allocated.wide)
     rows := make_rows()
     i := 0
     println(rows[i++].value)
@@ -198,6 +218,6 @@ fn main() {
     assert!(result.status.success(), "{:?}", result);
     assert_eq!(
         String::from_utf8(result.stdout).unwrap(),
-        "new value\n1\n1 7 1.5\nonce\nnew value\n"
+        "16 10000000000 20000000000\n3 30000000000\nnew value\n1\n1 7 1.5\nonce\nnew value\n"
     );
 }

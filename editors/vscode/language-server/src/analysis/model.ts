@@ -1,3 +1,4 @@
+import type { LexicalSpan } from "./lexical.js";
 import {
   type Position,
   type Range,
@@ -29,6 +30,7 @@ export const keywords = [
   "continue",
   "defer",
   "as",
+  "cast",
   "true",
   "false",
   "none"
@@ -118,6 +120,8 @@ export type SymbolCategory =
   | "package";
 
 export interface YcplDocument {
+  code: string;
+  lexicalSpans: LexicalSpan[];
   uri: string;
   version: number;
   text: string;

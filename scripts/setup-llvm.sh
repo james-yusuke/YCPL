@@ -52,8 +52,9 @@ if [ "$PRINT_ENV" -eq 1 ]; then
   case "$(uname -s)" in
     Darwin)
       if command -v brew >/dev/null 2>&1; then
-        if brew --prefix "llvm@$LLVM_VERSION" >/dev/null 2>&1; then
-          print_env "$(brew --prefix "llvm@$LLVM_VERSION")"
+        versioned_prefix="$(brew --prefix "llvm@$LLVM_VERSION" 2>/dev/null || true)"
+        if [ -n "$versioned_prefix" ] && [ -x "$versioned_prefix/bin/llvm-config" ]; then
+          print_env "$versioned_prefix"
         else
           print_env "$(brew --prefix llvm)"
         fi
@@ -85,7 +86,8 @@ case "$(uname -s)" in
       printf 'Homebrew is required to install LLVM on macOS.\n' >&2
       exit 1
     fi
-    if ! brew --prefix "llvm@$LLVM_VERSION" >/dev/null 2>&1; then
+    versioned_prefix="$(brew --prefix "llvm@$LLVM_VERSION" 2>/dev/null || true)"
+    if [ -z "$versioned_prefix" ] || [ ! -x "$versioned_prefix/bin/llvm-config" ]; then
       brew install "llvm@$LLVM_VERSION"
     fi
     "$SCRIPT_DIR/setup-llvm.sh" "$LLVM_VERSION" --print-env
@@ -104,6 +106,7 @@ case "$(uname -s)" in
     $SUDO ./llvm.sh "$LLVM_VERSION"
     $SUDO apt-get install -y \
       "clang-$LLVM_VERSION" \
+      "clang-format-$LLVM_VERSION" \
       "llvm-$LLVM_VERSION-dev" \
       "llvm-$LLVM_VERSION-runtime" \
       "llvm-$LLVM_VERSION-tools"

@@ -11,6 +11,7 @@ export PATH="$LLVM_BINDIR:$PATH"
 
 case "${1:-cargo}" in
   cargo)
+    bootstrap/rust/test_llvm_setup.sh
     cargo fmt --manifest-path bootstrap/rust/Cargo.toml --check
     "$LLVM_BINDIR/clang-format" --dry-run --Werror bootstrap/rust/include/llvm_bridge.h bootstrap/rust/src/llvm_bridge.cc
     cargo test --manifest-path bootstrap/rust/Cargo.toml --locked
@@ -30,10 +31,13 @@ case "${1:-cargo}" in
     "${BAZEL:-bazel}" test \
       --action_env=PATH --action_env=LLVM_CONFIG --action_env=LLVM_BINDIR \
       --action_env=LLC --action_env=CLANG --action_env=LINKFLAGS \
+      --host_action_env=PATH --host_action_env=LLVM_CONFIG --host_action_env=LLVM_BINDIR \
+      --host_action_env=LLC --host_action_env=CLANG --host_action_env=LINKFLAGS \
       --test_env=PATH --test_env=LLVM_CONFIG --test_env=LLVM_BINDIR \
       --test_env=LLC --test_env=CLANG --test_env=LINKFLAGS \
       --test_output=errors --test_timeout=1800 \
-      //bootstrap/rust:unit_tests //bootstrap/rust:cli_test //:rust_conformance_test //:rust_self_host_test
+      //bootstrap/rust:unit_tests //bootstrap/rust:cli_test //bootstrap/rust:llvm_setup_test \
+      //:rust_conformance_test //:rust_self_host_test
     ;;
   *) printf 'usage: %s [cargo|bazel]\n' "$0" >&2; exit 2 ;;
 esac

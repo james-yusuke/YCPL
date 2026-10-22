@@ -270,25 +270,26 @@ export class YcplProviders {
       }
     }
 
-    const pattern = /\b(module|package|import|pub|extern|intrinsic|fn|struct|enum|type|const|owned|if|else|for|in|switch|case|default|return|break|continue|defer|as|true|false|none|i32|i64|bool|char|byte|string|float|double|void|size_t|Type|T|any)\b|\/\/.*$|\/\*[\s\S]*?\*\/|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])'|`[^`]*`|0x[0-9A-Fa-f]+|0b[01]+|[0-9]+(?:\.[0-9]+)?|(:=|==|!=|<=|>=|&&|\|\||[=+\-*/%<>!&|.])/gm;
-    for (const match of document.text.matchAll(pattern)) {
+    for (const span of document.lexicalSpans) {
+      const range = rangeFromOffsets(document.lineOffsets, span.start, span.end);
+      for (let line = range.start.line; line <= range.end.line; line += 1) {
+        const start = line === range.start.line ? range.start.character : 0;
+        const end = line === range.end.line ? range.end.character : lineText(document.text, document.lineOffsets, line).length;
+        if (end > start) addToken(Range.create(line, start, line, end), span.kind);
+      }
+    }
+    const pattern = /\b[A-Za-z_][A-Za-z0-9_]*\b|0x[0-9A-Fa-f]+|0b[01]+|[0-9]+(?:\.[0-9]+)?|(:=|==|!=|<=|>=|&&|\|\||[=+\-*/%<>!&|.])/g;
+    for (const match of document.code.matchAll(pattern)) {
       const start = match.index ?? 0;
       const value = match[0];
       const range = rangeFromOffsets(document.lineOffsets, start, start + value.length);
-      if (pushed.has(rangeKey(range))) {
-        continue;
-      }
       if (keywords.includes(value as never)) {
         addToken(range, "keyword");
       } else if (primitiveTypes.includes(value as never)) {
         addToken(range, "type");
-      } else if (value.startsWith("//") || value.startsWith("/*")) {
-        addToken(range, "comment");
-      } else if (value.startsWith("\"") || value.startsWith("'") || value.startsWith("`")) {
-        addToken(range, "string");
       } else if (/^[0-9]/.test(value)) {
         addToken(range, "number");
-      } else {
+      } else if (!/^[A-Za-z_]/.test(value)) {
         addToken(range, "operator");
       }
     }
@@ -322,10 +323,10 @@ export class YcplProviders {
     const document = this.requireDocument(params.textDocument.uri);
     const ranges: FoldingRange[] = [];
     const stack: Position[] = [];
-    for (let i = 0; i < document.text.length; i += 1) {
-      if (document.text[i] === "{") {
+    for (let i = 0; i < document.code.length; i += 1) {
+      if (document.code[i] === "{") {
         stack.push(document.lineOffsets ? positionAtIndex(document, i) : Position.create(0, 0));
-      } else if (document.text[i] === "}") {
+      } else if (document.code[i] === "}") {
         const start = stack.pop();
         const end = positionAtIndex(document, i);
         if (start && end.line > start.line) {

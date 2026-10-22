@@ -24,6 +24,7 @@ let output: vscode.LogOutputChannel;
 let status: vscode.StatusBarItem;
 let compilerDiagnostics: vscode.DiagnosticCollection;
 let saveTimer: NodeJS.Timeout | undefined;
+let sourceWatcher: vscode.FileSystemWatcher | undefined;
 
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
   output = vscode.window.createOutputChannel("YCPL", { log: true });
@@ -91,6 +92,8 @@ async function stopLanguageServer(): Promise<void> {
   if (running) {
     await running.stop();
   }
+  sourceWatcher?.dispose();
+  sourceWatcher = undefined;
   status.hide();
 }
 
@@ -136,13 +139,14 @@ async function startLanguageServer(context: vscode.ExtensionContext): Promise<vo
         }
       };
 
+  sourceWatcher = vscode.workspace.createFileSystemWatcher("**/*.yc");
   const clientOptions: LanguageClientOptions = {
     documentSelector: [{ scheme: "file", language: "ycpl" }],
     outputChannel: output,
     traceOutputChannel: output,
     diagnosticCollectionName: "ycpl",
     synchronize: {
-      fileEvents: vscode.workspace.createFileSystemWatcher("**/*.{yc,json}")
+      fileEvents: sourceWatcher
     },
     initializationOptions: {
       inlayHints: { enabled: config.get<boolean>("inlayHints.enabled", true) },

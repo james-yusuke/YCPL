@@ -181,3 +181,60 @@ test("parser preserves Vec and Map generic types", () => {
   assert.equal(fn?.returnType, "Vec<i32>");
   assert.equal(document.symbols.find((symbol) => symbol.name === "result")?.typeName, "Vec<i32>");
 });
+
+test("nested comments and raw strings cannot create declarations, imports, or scopes", () => {
+  const document = parser.parse("file:///lexical.yc", 1, [
+    "/* outer /* inner */ struct Hidden { fake i32 } */",
+    "fn main() {",
+    "    message := `import \"fake\" as fake",
+    "fn hidden() { }`",
+    "    actual := 1 // fn commented() {",
+    "    actual = actual + 1",
+    "}"
+  ].join("\n"));
+  assert.deepEqual(document.symbols.map((symbol) => symbol.name), ["main", "message", "actual"]);
+  assert.equal(document.imports.length, 0);
+  assert.equal(document.scopes.length, 2);
+  assert.deepEqual(document.diagnostics, []);
+  assert.deepEqual(document.calls, []);
+});
+
+test("fields retain managed, qualified and nested container types", () => {
+  const document = parser.parse("file:///fields.yc", 1, [
+    "struct Data {",
+    "    pub values Vec<i32> // managed",
+    "    lookup Map<string, Vec<i32>>",
+    "    payload owned bytes.Bytes",
+    "}",
+  ].join("\n"));
+  assert.deepEqual(document.symbols.filter((symbol) => symbol.category === "field").map((symbol) => symbol.typeName),
+    ["Vec<i32>", "Map<string,Vec<i32>>", "owned bytes.Bytes"]);
+});
+
+test("extern declarations do not consume the following function's scope", () => {
+  const document = parser.parse("file:///extern.yc", 1, [
+    'extern fn puts(message string) i32 as "puts"',
+    "fn main() {",
+    "    value := 1",
+    "    puts(value)",
+    "}"
+  ].join("\n"));
+  assert.equal(document.scopes.find((scope) => scope.kind === "function")?.name, "main");
+  assert.equal(document.symbols.find((symbol) => symbol.name === "value")?.containerName, "main");
+  assert.deepEqual(document.calls.map((call) => [call.caller, call.callee]), [["main", "puts"]]);
+});
+
+test("replacing and removing documents preserve external references and discard stale ones", () => {
+  const index = new WorkspaceIndex();
+  const original = parser.parse("file:///definition.yc", 1, "fn target() {}\nfn main() { target() }\n");
+  const target = original.symbols.find((symbol) => symbol.name === "target")!;
+  const external = parser.parse("file:///caller.yc", 1, "fn caller() { target() }\n");
+  external.references.find((reference) => reference.name === "target")!.symbolId = target.id;
+  index.update(original);
+  index.update(external);
+  assert.equal(index.findReferencesBySymbolId(target.id, false).length, 2);
+  index.update(parser.parse(original.uri, 2, "fn target() {}\n"));
+  assert.deepEqual(index.findReferencesBySymbolId(target.id, false).map((reference) => reference.uri), [external.uri]);
+  index.remove(external.uri);
+  assert.deepEqual(index.findReferencesBySymbolId(target.id, false), []);
+});

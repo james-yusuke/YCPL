@@ -1,0 +1,31 @@
+module tests.aggregate_abi_layout
+
+import "std/array" as array
+import "std/fmt" as fmt
+import "std/mem" as mem
+
+struct Pair {
+    small i32
+    wide i64
+}
+
+fn main() {
+    fmt.println(mem.sizeof(Pair))
+    values := Vec<Pair>{capacity: 1}
+    values.push(Pair{small: 1, wide: 100})
+    values.push(Pair{small: 2, wide: 200})
+    values.reserve(8)
+    fmt.printf("%d %lld\n", values[0].small, values[0].wide)
+    fmt.printf("%d %lld\n", values[1].small, values[1].wide)
+
+    legacy := array.new([]Pair, 1)
+    legacy = array.append(legacy, Pair{small: 3, wide: 300})
+    legacy = array.append(legacy, Pair{small: 4, wide: 400})
+    fmt.printf("%d %lld\n", legacy[0].small, legacy[0].wide)
+    fmt.printf("%d %lld\n", legacy[1].small, legacy[1].wide)
+
+    value := cast(*Pair, mem.calloc(1, mem.sizeof(Pair)))
+    value.small = 5
+    value.wide = 500
+    fmt.printf("%d %lld\n", value.small, value.wide)
+}

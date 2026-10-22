@@ -25,6 +25,7 @@ fs.writeFileSync(path.join(workspace, "main.yc"), "fn main() i32 {\n    return 0
 
 try {
   await runTests({
+    vscodeExecutablePath: process.env.VSCODE_EXECUTABLE_PATH,
     extensionDevelopmentPath,
     extensionTestsPath,
     launchArgs: [workspace, "--disable-extensions"]

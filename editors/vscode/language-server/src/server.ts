@@ -9,7 +9,6 @@ import {
   DidChangeConfigurationNotification,
   FileChangeType,
   ProposedFeatures,
-  SemanticTokensBuilder,
   TextDocuments,
   TextDocumentSyncKind,
   type InitializeParams,
@@ -98,16 +97,13 @@ connection.onInitialized(() => {
   void scanWorkspaces();
 });
 
-documents.onDidOpen((event) => {
-  void indexAndPublish(event.document);
-});
-
 documents.onDidChangeContent((event) => {
   void indexAndPublish(event.document);
 });
 
 documents.onDidClose((event) => {
   index.remove(event.document.uri);
+  void indexFile(event.document.uri);
   connection.sendDiagnostics({ uri: event.document.uri, diagnostics: [] });
 });
 
@@ -117,6 +113,7 @@ connection.onDidChangeWatchedFiles((event) => {
       continue;
     }
     if (change.type === FileChangeType.Deleted) {
+      if (documents.get(change.uri)) continue;
       index.remove(change.uri);
       connection.sendDiagnostics({ uri: change.uri, diagnostics: [] });
     } else {
@@ -157,7 +154,9 @@ async function indexAndPublish(document: TextDocument): Promise<void> {
   const parsed = parser.parse(document.uri, document.version, document.getText());
   index.update(parsed);
   const diagnostics = await providers.diagnostics(parsed);
-  connection.sendDiagnostics({ uri: document.uri, diagnostics });
+  if (index.getDocument(document.uri) === parsed && documents.get(document.uri)?.version === parsed.version) {
+    connection.sendDiagnostics({ uri: document.uri, version: parsed.version, diagnostics });
+  }
 }
 
 async function indexFile(uri: string): Promise<void> {
@@ -168,6 +167,8 @@ async function indexFile(uri: string): Promise<void> {
   }
   try {
     const text = await fs.readFile(fileURLToPath(uri), "utf8");
+    if (documents.get(uri)) return;
+    if (index.getDocument(uri)?.text === text) return;
     index.update(parser.parse(uri, 0, text));
   } catch (error) {
     connection.console.warn(`Failed to index ${uri}: ${String(error)}`);
@@ -193,5 +194,3 @@ function workspaceRootPaths(params: InitializeParams): string[] {
   }
   return params.rootUri ? [URI.parse(params.rootUri).fsPath] : [];
 }
-
-void SemanticTokensBuilder;

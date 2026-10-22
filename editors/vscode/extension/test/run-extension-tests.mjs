@@ -24,6 +24,7 @@ fs.chmodSync(failingNative, 0o755);
 
 try {
   await runTests({
+    vscodeExecutablePath: process.env.VSCODE_EXECUTABLE_PATH,
     extensionDevelopmentPath,
     extensionTestsPath,
     launchArgs: [workspace, "--disable-extensions"]

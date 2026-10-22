@@ -11,6 +11,10 @@ user-facing examples.
 - `fixtures/projects`: project resolver fixtures
 - `runtime`: C-level managed runtime unit tests
 
+`fixtures/compiler/122_aggregate_abi_layout.yc` covers native struct alignment
+across `sizeof`, Vec growth, legacy slice growth and heap allocation. It is shared by the
+C++ seed, Rust seed and self-hosted stages.
+
 Run the bootstrap regression suite with:
 
 ```sh

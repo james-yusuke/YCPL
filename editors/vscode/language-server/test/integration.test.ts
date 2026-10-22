@@ -32,6 +32,21 @@ test("language server initializes and answers completion over stdio", async () =
     });
     const items = Array.isArray(completion) ? completion : completion.items;
     assert.ok(items.some((item: { label: string }) => item.label === "return"));
+    client.notify("textDocument/didChange", {
+      textDocument: { uri: "file:///tmp/ycpl-test/main.yc", version: 2 },
+      contentChanges: [{
+        range: { start: { line: 0, character: 3 }, end: { line: 0, character: 7 } },
+        text: "edited"
+      }]
+    });
+    client.notify("workspace/didChangeWatchedFiles", {
+      changes: [{ uri: "file:///tmp/ycpl-test/main.yc", type: 3 }]
+    });
+    const symbols = await client.request("textDocument/documentSymbol", {
+      textDocument: { uri: "file:///tmp/ycpl-test/main.yc" }
+    });
+    assert.ok(symbols.some((symbol: { name: string }) => symbol.name === "edited"));
+    assert.equal(symbols.some((symbol: { name: string }) => symbol.name === "main"), false);
     await client.request("shutdown", null);
     client.notify("exit", null);
   } finally {

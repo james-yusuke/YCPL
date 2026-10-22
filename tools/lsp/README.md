@@ -51,3 +51,14 @@ YCPL editing:
 Full semantic project analysis, unopened-file indexing, import graph indexing,
 formatting through a full AST, and type-aware rename are reserved for the next
 LSP phase.
+
+Request dispatch decodes the method once per message. Numeric JSON output uses
+allocation-free decimal serialization. Semantic tokens handle nested block
+comments, multiline raw strings and UTF-16 columns; document text also decodes
+JSON Unicode escapes and surrogate pairs.
+
+Measure a batch of 20 semantic-token requests (including process startup):
+
+```sh
+python3 tools/lsp/benchmark.py tools/lsp/build/YCPL-lsp
+```
