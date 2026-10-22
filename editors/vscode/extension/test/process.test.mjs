@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { setTimeout as delay } from "node:timers/promises";
 import { execute } from "../dist/process.js";
 import { flagArguments, parseCoverage } from "../dist/llvm.js";
 
@@ -42,6 +43,46 @@ test("process errors resolve and a signal-ignoring child is forcibly cancelled",
   );
   assert.equal((await result).cancelled, true);
 });
+
+test(
+  "an exited tool cannot leave a stopped descendant holding its report pipe",
+  {
+    skip: process.platform === "win32"
+  },
+  async () => {
+    let descendant;
+    const code = `
+    const { spawn } = require('node:child_process');
+    const child = spawn(process.execPath, ['-e', ${JSON.stringify("console.log('report complete'); process.send(process.pid); process.kill(process.pid, 'SIGSTOP');")}], {
+      stdio: ['ignore', 'inherit', 'inherit', 'ipc']
+    });
+    child.on('message', pid => { console.log('descendant:' + pid); setTimeout(() => process.exit(0), 30); });
+  `;
+    try {
+      const result = await Promise.race([
+        execute(process.execPath, ["-e", code], process.cwd(), process.env, undefined, (text) => {
+          const match = /descendant:(\d+)/.exec(text);
+          if (match) descendant = Number(match[1]);
+        }),
+        delay(5000, undefined, { ref: false }).then(() => {
+          throw new Error("orphan kept the output pipe open");
+        })
+      ]);
+      assert.ok(descendant);
+      assert.equal(result.code, 0);
+      assert.equal(result.cancelled, false);
+      assert.match(result.stdout, /report complete/);
+    } finally {
+      if (descendant) {
+        try {
+          process.kill(descendant, "SIGKILL");
+        } catch {
+          /* Already reaped. */
+        }
+      }
+    }
+  }
+);
 
 test("quoted link flags and LLVM line counts preserve paths and zero-hit lines", () => {
   assert.deepEqual(flagArguments("-L\"a directory\" -Wl,$(touch) 'literal`value`'"), [

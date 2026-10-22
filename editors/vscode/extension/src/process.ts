@@ -44,11 +44,14 @@ export function execute(
         /* The owned process may already have exited. */
       }
     };
-    const terminate = (): void => {
-      cancelled = true;
+    const stopGroup = (): void => {
       signal("SIGTERM");
       force ??= setTimeout(() => signal("SIGKILL"), 1500);
       force.unref();
+    };
+    const terminate = (): void => {
+      cancelled = true;
+      stopGroup();
     };
     const cancel = token?.onCancellationRequested(terminate);
     if (token?.isCancellationRequested) terminate();
@@ -65,6 +68,10 @@ export function execute(
     child.on("error", (error) => {
       stderr += error.message;
     });
+    // A tool can exit while a stopped descendant still holds its output pipes
+    // (notably macOS leaks --atExit). Reap our group so close can deliver the
+    // complete report, preserving the tool's exit status and cancellation state.
+    child.once("exit", stopGroup);
     child.on("close", (code) => {
       if (force) clearTimeout(force);
       cancel?.dispose();
