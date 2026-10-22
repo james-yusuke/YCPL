@@ -1999,6 +1999,10 @@ fn dispatch_message(message string, method string, uris []string, texts []string
 
     if str.eq(method, "shutdown") {
         send_shutdown(id)
+        return 1
+    }
+
+    if str.eq(method, "exit") {
         return 0
     }
 

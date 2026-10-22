@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 import json
+import os
+import select
 import subprocess
 import sys
 import time
@@ -64,6 +66,46 @@ def assert_any(frames, predicate, label):
         if predicate(raw, obj):
             return
     raise AssertionError(f"missing expected frame: {label}\nframes={frames!r}")
+
+
+def read_response(process):
+    data = b""
+    deadline = time.monotonic() + 5
+    while time.monotonic() < deadline:
+        ready, _, _ = select.select([process.stdout], [], [], max(0, deadline - time.monotonic()))
+        if not ready:
+            break
+        chunk = os.read(process.stdout.fileno(), 4096)
+        if not chunk:
+            raise AssertionError("server closed stdout before responding")
+        data += chunk
+        header, separator, body = data.partition(b"\r\n\r\n")
+        if separator:
+            length = int(header.split(b":", 1)[1])
+            if len(body) >= length:
+                return parse_frames(data)[0][1]
+    raise AssertionError("server did not respond within 5 seconds")
+
+
+def check_shutdown_lifecycle(binary, initialize, shutdown):
+    with subprocess.Popen(
+        [binary], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        bufsize=0,
+    ) as process:
+        try:
+            process.stdin.write(initialize)
+            assert read_response(process)["id"] == 1
+            process.stdin.write(shutdown)
+            assert read_response(process) == {"jsonrpc": "2.0", "id": 5, "result": None}
+            time.sleep(0.1)
+            assert process.poll() is None, "shutdown must wait for the client's exit notification"
+            process.stdin.write(make_msg('{"jsonrpc":"2.0","method":"exit"}'))
+            assert process.wait(timeout=5) == 0
+        finally:
+            if process.poll() is None:
+                process.kill()
+                process.wait()
+    print("  shutdown_waits_for_exit... PASS")
 
 
 TOKEN_TYPES = [
@@ -245,6 +287,7 @@ def main():
     changes.append(document_symbol)
     case(binary, "did_change_stress", [b"".join(changes)], lambda raw, _obj: '"name":"main"' in raw, "documentSymbol after repeated didChange")
     case(binary, "shutdown", [shutdown], lambda raw, _obj: '"result":null' in raw, "shutdown result")
+    check_shutdown_lifecycle(binary, initialize, shutdown)
     return 0
 
 
