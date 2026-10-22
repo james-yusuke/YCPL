@@ -6,7 +6,8 @@ namespace codegen
 {
     bool CodeGen::generate(const ast::Program &prog)
     {
-        failed = false;
+        if (failed)
+            return false;
 
         prepare_named_decls(prog);
         prepare_struct_types(prog);

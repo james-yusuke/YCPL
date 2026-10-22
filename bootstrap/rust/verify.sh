@@ -31,6 +31,8 @@ case "${1:-cargo}" in
     "${BAZEL:-bazel}" test \
       --action_env=PATH --action_env=LLVM_CONFIG --action_env=LLVM_BINDIR \
       --action_env=LLC --action_env=CLANG --action_env=LINKFLAGS \
+      --host_action_env=PATH --host_action_env=LLVM_CONFIG --host_action_env=LLVM_BINDIR \
+      --host_action_env=LLC --host_action_env=CLANG --host_action_env=LINKFLAGS \
       --test_env=PATH --test_env=LLVM_CONFIG --test_env=LLVM_BINDIR \
       --test_env=LLC --test_env=CLANG --test_env=LINKFLAGS \
       --test_output=errors --test_timeout=1800 \

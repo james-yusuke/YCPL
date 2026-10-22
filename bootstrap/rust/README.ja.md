@@ -68,4 +68,5 @@ CI は macOS・Ubuntu 24.04 の両方で Cargo／Bazel を検証します。
 ownership の lowering、LLVM ブリッジに分割しています。AST は動的 arena と ID、
 LLVM ハンドルは session ID・種類・index で管理し、別 module・破棄済み session・
 種類の異なるハンドルを `Result` のエラーとして扱います。
+構造体のサイズ計算には native target の data layout を使います。
 成果物・生成された FFI ファイルはコミット対象外です。

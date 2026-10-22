@@ -5,7 +5,10 @@
 #include <llvm/IR/Function.h>
 #include <llvm/IR/GlobalVariable.h>
 #include <llvm/IR/Type.h>
+#include <llvm/MC/TargetRegistry.h>
 #include <llvm/Support/FileSystem.h>
+#include <llvm/Target/TargetMachine.h>
+#include <llvm/TargetParser/Host.h>
 
 #include <iostream>
 
@@ -14,9 +17,29 @@ namespace codegen
     CodeGen::CodeGen(const std::string &module_name)
         : module(std::make_unique<Module>(module_name, context)), builder(context)
     {
-        llvm::InitializeNativeTarget();
-        llvm::InitializeNativeTargetAsmPrinter();
-        llvm::InitializeNativeTargetAsmParser();
+        if (llvm::InitializeNativeTarget() || llvm::InitializeNativeTargetAsmPrinter() ||
+            llvm::InitializeNativeTargetAsmParser())
+        {
+            error("LLVM native target initialization failed");
+            return;
+        }
+        const llvm::Triple triple(llvm::sys::getProcessTriple());
+        std::string message;
+        const auto *target = llvm::TargetRegistry::lookupTarget(triple, message);
+        if (!target)
+        {
+            error("LLVM native target unavailable: " + message);
+            return;
+        }
+        std::unique_ptr<llvm::TargetMachine> machine(target->createTargetMachine(
+            triple, "generic", "", llvm::TargetOptions(), llvm::Reloc::PIC_));
+        if (!machine)
+        {
+            error("LLVM native target machine unavailable");
+            return;
+        }
+        module->setTargetTriple(machine->getTargetTriple());
+        module->setDataLayout(machine->createDataLayout());
     }
 
     CodeGen::~CodeGen() = default;

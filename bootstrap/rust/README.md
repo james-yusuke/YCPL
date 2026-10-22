@@ -77,5 +77,6 @@ paths on macOS and Ubuntu 24.04.
 | `src/tests.rs`, `test_cli.sh` | Isolation, malformed input, lifetime, ABI and CLI regressions |
 
 Handles carry a session ID, kind and index. Foreign, stale or mistyped handles
-return `Result` errors. Module verification precedes serialization. Cargo,
+return `Result` errors. The native target's data layout governs aggregate sizes;
+module verification precedes serialization. Cargo,
 Bazel and generated FFI outputs are ignored and must not be committed.

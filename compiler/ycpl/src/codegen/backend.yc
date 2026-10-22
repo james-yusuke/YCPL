@@ -6,6 +6,7 @@ import "resolver/semantic" as semantic
 import "c/llvm" as llvm
 import "c/stdlib" as cstdlib
 import "std/str" as str
+import "std/mem" as layout
 
 pub struct BackendResult {
     ok bool
@@ -50,15 +51,15 @@ fn ref_set(slots *i64, index i32, value *byte) {
 }
 
 fn local_slots(count i32) *LocalSlot {
-    return cast(*LocalSlot, llvm.storage(count, 56))
+    return cast(*LocalSlot, llvm.storage(count, cast(i32, layout.sizeof(LocalSlot))))
 }
 
 fn field_slots(count i32) *FieldSlot {
-    return cast(*FieldSlot, llvm.storage(count, 24))
+    return cast(*FieldSlot, llvm.storage(count, cast(i32, layout.sizeof(FieldSlot))))
 }
 
 fn defer_slots(count i32) *DeferSlot {
-    return cast(*DeferSlot, llvm.storage(count, 4))
+    return cast(*DeferSlot, llvm.storage(count, cast(i32, layout.sizeof(DeferSlot))))
 }
 
 fn reachable_slots(count i32) *byte {
@@ -676,6 +677,12 @@ fn lower_lvalue(backend *Backend, program ProgramAst, expr_id i32) {
         symbol_id := ast.invalid_id()
         if left.kind == ast.expr_ident() { symbol_id = backend_local_aggregate_symbol(backend, program.arena.expr_name_ids[node.left]) }
         if symbol_id == ast.invalid_id() { symbol_id = aggregate_symbol_for_type(backend, left.type_file, left.type_id) }
+        if symbol_id == ast.invalid_id() && left.kind == ast.expr_index() {
+            collection: *ExprNode := &program.arena.exprs[left.left]
+            if collection.kind == ast.expr_ident() {
+                symbol_id = backend_local_aggregate_symbol(backend, program.arena.expr_name_ids[left.left])
+            }
+        }
         index := program.arena.expr_int_values[expr_id]
         if index < 0 || index > 10000 {
             index = field_index_hash(backend, symbol_id, program.arena.expr_int_values[expr_id])
@@ -751,7 +758,7 @@ fn array_element_type(backend *Backend, program ProgramAst, node *ExprNode) *byt
     if node.arg_count > 0 {
         first: *ExprNode := &program.arena.exprs[program.arena.children[node.first_arg]]
         if first.kind == ast.expr_ident() {
-            typ := backend_local_element_type(backend, first.flags)
+            typ := backend_local_element_type(backend, program.arena.expr_name_ids[program.arena.children[node.first_arg]])
             if typ != none { return typ }
         }
         first_type_id := program.arena.expr_syntax_type_ids[program.arena.children[node.first_arg]]
@@ -817,12 +824,13 @@ fn lower_array_intrinsic(backend *Backend, program ProgramAst, node *ExprNode, s
     if (str.eq(symbol.name, "len") || str.eq(symbol.name, "cap")) && node.arg_count == 1 {
         first: *ExprNode := &program.arena.exprs[program.arena.children[node.first_arg]]
         if first.kind == ast.expr_ident() {
-            fixed_count := backend_local_array_length(backend, first.flags)
+            first_name_id := program.arena.expr_name_ids[program.arena.children[node.first_arg]]
+            fixed_count := backend_local_array_length(backend, first_name_id)
             if fixed_count > 0 {
                 backend.value = llvm.const_int(llvm.i32_type(backend.ctx), fixed_count, 0)
                 return
             }
-            if fixed_count == 0 && backend_local_type(backend, first.flags) == backend.ptr_type && slice_element_type(backend, first.type_file, first.type_id) == none {
+            if fixed_count == 0 && backend_local_type(backend, first_name_id) == backend.ptr_type && slice_element_type(backend, first.type_file, first.type_id) == none {
                 lower_string_intrinsic(backend, program, node, symbol)
                 return
             }

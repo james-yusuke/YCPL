@@ -4,7 +4,7 @@ pub mod ffi {
     unsafe extern "C++" {
         include!("llvm_bridge.h");
         type Session;
-        fn new_session(name: &str) -> UniquePtr<Session>;
+        fn new_session(name: &str) -> Result<UniquePtr<Session>>;
         fn type_create(
             self: Pin<&mut Session>,
             kind: u8,

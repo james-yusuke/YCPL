@@ -13,11 +13,11 @@ pub struct Llvm {
 }
 pub type R<T> = std::result::Result<T, String>;
 impl Llvm {
-    pub fn new() -> Self {
-        Self {
-            session: RefCell::new(ffi::new_session("yc")),
+    pub fn new() -> R<Self> {
+        Ok(Self {
+            session: RefCell::new(ffi::new_session("yc").map_err(|e| e.to_string())?),
             types: RefCell::new(BTreeMap::new()),
-        }
+        })
     }
     pub fn typ(&self, kind: u8, n: u64, args: &[Type], name: &str) -> R<Type> {
         let key = format!("{kind}:{n}:{args:?}:{name}");
