@@ -125,5 +125,28 @@
     "prefix": "import-utf8",
     "body": "import \"std/utf8\" as utf8",
     "description": "Import UTF-8 helpers"
+  },
+  "For each": {
+    "prefix": "for-in",
+    "body": [
+      "for ${1:value} in ${2:values} {",
+      "    $0",
+      "}"
+    ],
+    "description": "Iterate a YCPL slice or Vec"
+  },
+  "Cast": {
+    "prefix": "cast",
+    "body": "cast(${1:i32}, ${2:value})",
+    "description": "Explicitly convert a value"
+  },
+  "Defer block": {
+    "prefix": "defer-block",
+    "body": [
+      "defer {",
+      "    $0",
+      "}"
+    ],
+    "description": "Run a block on scope exit"
   }
 }

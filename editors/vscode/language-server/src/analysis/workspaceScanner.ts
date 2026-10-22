@@ -22,16 +22,24 @@ export class WorkspaceScanner {
       if (count >= this.maxFiles) {
         break;
       }
-      const text = await fs.readFile(file, "utf8");
-      this.index.update(this.parser.parse(pathToFileURL(file).toString(), 0, text));
-      count += 1;
+      const uri = pathToFileURL(file).toString();
+      // Open buffers and overlapping workspace roots already have newer data.
+      if (this.index.getDocument(uri)) continue;
+      try {
+        const text = await fs.readFile(file, "utf8");
+        if (this.index.getDocument(uri)) continue;
+        this.index.update(this.parser.parse(uri, 0, text));
+        count += 1;
+      } catch {
+        // A concurrently deleted or unreadable file must not abort the scan.
+      }
     }
     return count;
   }
 }
 
 async function* walk(root: string): AsyncGenerator<string> {
-  const ignored = new Set([".git", "node_modules", "build", "dist", ".vscode"]);
+  const ignored = new Set([".git", "node_modules", "build", "dist", ".vscode", ".vscode-test", ".ycpl", "artifacts", "out", "target"]);
   let entries;
   try {
     entries = await fs.readdir(root, { withFileTypes: true });
@@ -39,7 +47,7 @@ async function* walk(root: string): AsyncGenerator<string> {
     return;
   }
   for (const entry of entries) {
-    if (ignored.has(entry.name)) {
+    if (ignored.has(entry.name) || entry.name.startsWith("bazel-")) {
       continue;
     }
     const full = path.join(root, entry.name);

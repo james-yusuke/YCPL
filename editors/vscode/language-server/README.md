@@ -9,10 +9,14 @@ when the native YCPL-written server cannot be discovered.
 
 - `analysis/parser.ts` extracts editor-facing scopes, declarations, references,
   imports, calls, and lightweight diagnostics from YCPL source.
+- `analysis/lexical.ts` masks nested comments and literals in one pass, preserving
+  UTF-16 offsets. Parsing, semantic tokens and folding reuse this scan, so text
+  inside raw strings and comments cannot create declarations or block scopes.
 - `analysis/workspaceIndex.ts` stores the incremental workspace symbol and
   reference index keyed by `SymbolID`, not by identifier text.
 - `analysis/workspaceScanner.ts` lazily scans `.yc` files, skipping build and
-  dependency directories.
+  dependency directories, editor test downloads, Bazel outputs and Rust targets.
+  Scans preserve indexed open buffers and skip overlapping workspace roots.
 - `analysis/stdlib.ts` recursively discovers YCPL standard-library modules,
   exported functions, and exported structs from `stl/std`. A bundled manifest
   covers the managed foundation modules when no source tree exists.
@@ -36,12 +40,15 @@ root before LSP providers see them. Go to Definition, Find References, Rename,
 Hover, semantic highlighting, code lens, signature help, and call hierarchy use
 the resolved `SymbolID` instead of global name matching, so shadowed locals and
 same-named symbols in different files remain independent.
+Name lookup uses per-document buckets; reference updates replace each document's
+bucket once, avoiding repeated filtering for heavily referenced symbols.
 
 ## Build And Test
 
 ```sh
 npm ci
 npm run check
+npm run benchmark
 ```
 
 From the repository root:
@@ -58,4 +65,5 @@ editor API. Today the VS Code extension runs self-hosted `ycc check` separately
 and publishes its diagnostics alongside the incremental editor parser.
 
 `tools/lsp/check_common_protocol.py` applies the shared capability fixture to
-this server and the native YCPL-written server.
+this server and the native YCPL-written server, including nested comments,
+multiline raw strings and UTF-16 semantic-token lengths.

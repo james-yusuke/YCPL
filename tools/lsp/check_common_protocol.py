@@ -88,6 +88,12 @@ def main():
         request(7, "textDocument/prepareCallHierarchy", {"textDocument": text_document, "position": {"line": 0, "character": 5}}),
         request(8, "callHierarchy/incomingCalls", {"item": call_item}),
         request(9, "callHierarchy/outgoingCalls", {"item": main_item}),
+        notify("textDocument/didOpen", {"textDocument": {
+            "uri": "file:///lexical.yc", "languageId": "ycpl", "version": 1,
+            "text": "/* outer 😀\n/* inner */ fn hidden() {}\n*/\nfn main() {\n    msg := `raw 😀\nfn literal() { }\n`\n}"
+        }}),
+        request(11, "textDocument/semanticTokens/full", {"textDocument": {"uri": "file:///lexical.yc"}}),
+        request(2147483647, "textDocument/hover", {"textDocument": text_document, "position": {"line": 0, "character": 4}}),
         request(10, "shutdown", None),
         notify("exit", None),
     ]
@@ -118,7 +124,10 @@ def main():
         "codeActionProvider", "codeLensProvider", "callHierarchyProvider",
     ]:
         assert capabilities.get(capability), capability
-    assert responses[2]["result"] is not None
+    completion = responses[2]["result"]
+    items = completion if isinstance(completion, list) else completion["items"]
+    labels = {item["label"] for item in items}
+    assert {"type", "enum", "switch", "case", "default", "cast", "Vec", "Map"} <= labels, labels
     assert responses[3]["result"] is not None
     assert len(responses[4]["result"]) >= 1
     assert len(responses[5]["result"]) >= 1
@@ -126,6 +135,20 @@ def main():
     assert len(responses[7]["result"]) >= 1
     assert len(responses[8]["result"]) >= 1
     assert len(responses[9]["result"]) >= 1
+    assert responses[2147483647]["result"] is not None
+    legend = capabilities["semanticTokensProvider"]["legend"]["tokenTypes"]
+    tokens = responses[11]["result"]["data"]
+    decoded = []
+    line = column = 0
+    for i in range(0, len(tokens), 5):
+        delta_line, delta_column, length, kind, _ = tokens[i:i + 5]
+        line += delta_line
+        column = delta_column if delta_line else column + delta_column
+        decoded.append((line, column, length, legend[kind]))
+    assert (0, 0, 11, "comment") in decoded, decoded
+    assert (1, 0, 26, "comment") in decoded, decoded
+    assert (5, 0, 16, "string") in decoded, decoded
+    assert not any(kind == "keyword" and line in (0, 1, 2, 4, 5, 6) for line, _, _, kind in decoded), decoded
     print(f"common LSP capabilities verified: {os.path.basename(server)}")
     return 0
 

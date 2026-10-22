@@ -5,27 +5,29 @@ endif
 syn case match
 
 syn keyword ycplKeyword module package import as pub extern intrinsic fn
-syn keyword ycplKeyword struct enum const owned
-syn keyword ycplConditional if else switch
+syn keyword ycplKeyword struct enum type const owned
+syn keyword ycplConditional if else switch case default
 syn keyword ycplRepeat for in break continue
 syn keyword ycplStatement return defer
-syn keyword ycplOperator is or
+syn keyword ycplOperator cast
 syn keyword ycplConstant true false none
 syn keyword ycplTodo TODO FIXME NOTE contained
 
-syn keyword ycplType i32 i64 bool char byte string float double void size_t Type any
+syn keyword ycplType i32 i64 bool char byte string float double void size_t Type T any Vec Map Bytes
 
 syn match ycplModuleName /\v<(module|package)\s+\zs[A-Za-z_][A-Za-z0-9_.]*/
 syn match ycplImportPath /\vimport\s+\zs"[^"]+"/ contains=ycplString
 syn match ycplFunction /\v<(pub\s+|extern\s+|intrinsic\s+)?fn\s+\zs[A-Za-z_][A-Za-z0-9_]*/
 syn match ycplStruct /\v<(pub\s+)?struct\s+\zs[A-Z_][A-Za-z0-9_]*/
+syn match ycplStruct /\v<(pub\s+)?(enum|type)\s+\zs[A-Za-z_][A-Za-z0-9_]*/
 syn match ycplCall /\v<[A-Za-z_][A-Za-z0-9_]*\ze\s*\(/
 syn match ycplQualifiedCall /\v<[A-Za-z_][A-Za-z0-9_]*\.[A-Za-z_][A-Za-z0-9_]*\ze\s*\(/
 syn match ycplNumber /\v<\d+(\.\d+)?([eE][+-]?\d+)?>/
 syn match ycplNumber /\v<0x[0-9A-Fa-f]+>/
+syn match ycplNumber /\v<0b[01]+>/
 syn match ycplOperator /[-+*\/%=&|!<>:]\+/
 
-syn region ycplString start=/"/ skip=/\\"/ end=/"/ contains=ycplEscape
+syn region ycplString start=/"/ skip=/\\./ end=/"/ contains=ycplEscape
 syn region ycplRawString start=/`/ end=/`/
 syn match ycplChar /'\([^'\\]\|\\.\)'/
 syn match ycplEscape /\\\(n\|r\|t\|\\\|"\|'\|x[0-9A-Fa-f]\{2}\|u[0-9A-Fa-f]\{4}\|.\)/ contained
