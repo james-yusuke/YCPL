@@ -19,18 +19,30 @@ The native server provides the common protocol features; advanced extraction and
 import actions use the TypeScript server. The status bar shows the active server.
 Settings changes and **Restart Language Server** restart it safely.
 
+```mermaid
+flowchart TD
+    editor["VS Code / YCPL"] --> ts["TypeScript LSP (default)"]
+    editor --> native["Native LSP (configured)"]
+    ts --> editing["Editing and navigation"]
+    ts --> refactoring["Extraction and import actions"]
+    native --> editing
+    editor --> commands["Build / Test / Debug / Profile"]
+    commands --> compiler["Self-hosted ycc + LLVM 22"]
+    compiler --> binary["Native executable"]
+```
+
 ## Editing and projects
 
-| Area | YCPL support |
-|---|---|
-| IntelliSense | Completion, stdlib auto imports, signatures, hover, snippets, semantic highlighting |
-| Navigation | Definition, declaration, type definition, references, rename, workspace/document symbols, call hierarchy, highlights, reference lenses |
-| Formatting | Document and range formatting; preserves multiline raw strings, nested comments and character literals; format on save |
-| Imports | Add Import, Organize Imports, remove unused aliases, organize on save; preserves attached comments and side-effect imports |
-| Refactoring | Extract expression to variable, extract whole statements to function with pointer captures, inline a constant literal, fill an empty struct with primitive fields |
-| Diagnostics | Parser diagnostics while editing; real compiler diagnostics on save and Check; task problem matcher |
-| Projects | New Project, local playground, `YCPL.json` completion/validation, multi-root indexing, check/build/build-ir/run tasks |
-| Code generation | Generate Tests creates visible TODOs that return false; Toggle Test File switches implementation and test |
+| Area            | YCPL support                                                                                                                                                      |
+| --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| IntelliSense    | Completion, stdlib auto imports, signatures, hover, snippets, semantic highlighting                                                                               |
+| Navigation      | Definition, declaration, type definition, references, rename, workspace/document symbols, call hierarchy, highlights, reference lenses                            |
+| Formatting      | Document and range formatting; preserves multiline raw strings, nested comments and character literals; format on save                                            |
+| Imports         | Add Import, Organize Imports, remove unused aliases, organize on save; preserves attached comments and side-effect imports                                        |
+| Refactoring     | Extract expression to variable, extract whole statements to function with pointer captures, inline a constant literal, fill an empty struct with primitive fields |
+| Diagnostics     | Parser diagnostics while editing; real compiler diagnostics on save and Check; task problem matcher                                                               |
+| Projects        | New Project, local playground, `YCPL.json` completion/validation, multi-root indexing, check/build/build-ir/run tasks                                             |
+| Code generation | Generate Tests creates visible TODOs that return false; Toggle Test File switches implementation and test                                                         |
 
 Refactorings are offered only where the current resolver can preserve semantics.
 Extraction rejects control-flow exits and escaping locals; inlining rejects mutable
@@ -61,6 +73,20 @@ profiles. Commands run the workspace, current file or function at the cursor;
 Run Test lenses are clickable. True passes, false fails, build errors are reported
 as errors, and cancelled tests are skipped. Generated runners use relative imports
 and temporary per-run directories, which are removed afterwards.
+
+```mermaid
+flowchart TD
+    discover["Discover tests"] --> mode{"Profile"}
+    mode -->|Run| run["Build test runner"]
+    mode -->|Debug| debug["ycc -g + lldb-dap"]
+    mode -->|Coverage| coverage["LLVM GCOV build"]
+    run --> execute["Execute runner"]
+    debug --> execute
+    coverage --> execute
+    execute --> results["Report test status"]
+    execute --> counts["Coverage: line counts"]
+    results --> cleanup["Remove temporary files"]
+```
 
 `YCPL.testing.benchmarkIterations` controls benchmark repetitions. Timings report
 real elapsed time and ns/op **including process startup**, without claiming

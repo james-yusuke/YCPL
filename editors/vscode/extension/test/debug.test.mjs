@@ -1,5 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import * as fs from "node:fs/promises";
+import * as os from "node:os";
+import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import { build } from "esbuild";
 
@@ -145,5 +148,111 @@ test("debug startup uses local symbols by default and preserves explicit LLDB co
     } finally {
       delete globalThis.__ycplDebugFixture;
     }
+  }
+});
+
+test("missing adapters remove owned build output and preserve unrelated directories", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "ycpl-debug-cleanup-"));
+  const source = path.join(root, "hello.yc");
+  const unrelated = path.join(root, "unrelated");
+  let provider, factory;
+  const folder = { uri: { fsPath: root } };
+  const disposable = () => ({ dispose() {} });
+  globalThis.__ycplDebugFixture = {
+    Uri: { file: (fsPath) => ({ fsPath }) },
+    ProgressLocation: { Notification: 15 },
+    workspace: {
+      isTrusted: true,
+      workspaceFolders: [folder],
+      getConfiguration: () => ({ get: (_key, fallback) => fallback }),
+      getWorkspaceFolder: () => folder,
+      saveAll: async () => true
+    },
+    window: { withProgress: async (_options, work) => work() },
+    commands: { registerCommand: disposable },
+    debug: {
+      registerDebugConfigurationProvider(_type, value) {
+        provider = value;
+        return disposable();
+      },
+      registerDebugAdapterDescriptorFactory(_type, value) {
+        factory = value;
+        return disposable();
+      },
+      onDidTerminateDebugSession: disposable
+    }
+  };
+  globalThis.__ycplDebugRuntime = {
+    compilerEnvironment: () => ({}),
+    compilerTarget: () => ({ input: source, cwd: root }),
+    findCompiler: () => "/fixture/ycc",
+    findOnPath: () => undefined,
+    isExecutable: () => false,
+    resolveConfiguredPath: (value) => value
+  };
+  globalThis.__ycplDebugProcess = {
+    execute: async (_compiler, args) => {
+      await fs.writeFile(path.join(args.at(-1), "merged.o"), "debug object");
+      return { code: 0, cancelled: false, stdout: "", stderr: "" };
+    }
+  };
+  try {
+    await fs.writeFile(source, "pub fn main() i32 { return 0 }\n");
+    await fs.mkdir(unrelated);
+    const { outputFiles } = await build({
+      entryPoints: [fileURLToPath(new URL("../src/debug.ts", import.meta.url))],
+      bundle: true,
+      platform: "node",
+      format: "esm",
+      write: false,
+      plugins: [
+        {
+          name: "debug-cleanup-fixture",
+          setup(builder) {
+            const fixtures = {
+              vscode: "__ycplDebugFixture",
+              "./runtime.js": "__ycplDebugRuntime",
+              "./process.js": "__ycplDebugProcess"
+            };
+            builder.onResolve({ filter: /^(vscode|\.\/(runtime|process)\.js)$/ }, (args) => ({
+              path: args.path,
+              namespace: "fixture"
+            }));
+            builder.onLoad({ filter: /.*/, namespace: "fixture" }, (args) => ({
+              contents: `module.exports = globalThis.${fixtures[args.path]};`,
+              loader: "js"
+            }));
+          }
+        }
+      ]
+    });
+    const url = `data:text/javascript;base64,${Buffer.from(outputFiles[0].text).toString("base64")}#${generation++}`;
+    const { registerDebugging } = await import(url);
+    registerDebugging({ subscriptions: [] }, { append() {} });
+    const configuration = await provider.resolveDebugConfigurationWithSubstitutedVariables(
+      folder,
+      { program: source },
+      { isCancellationRequested: false }
+    );
+    const directory = configuration.__ycplOutput;
+    assert.equal(await fs.readFile(path.join(directory, "merged.o"), "utf8"), "debug object");
+    await assert.rejects(
+      factory.createDebugAdapterDescriptor({ configuration, workspaceFolder: folder }),
+      /lldb-dap not found/
+    );
+    await assert.rejects(fs.stat(directory), { code: "ENOENT" });
+    await assert.rejects(
+      factory.createDebugAdapterDescriptor({
+        configuration: { __ycplOutput: unrelated },
+        workspaceFolder: folder
+      }),
+      /lldb-dap not found/
+    );
+    assert.equal((await fs.stat(unrelated)).isDirectory(), true);
+  } finally {
+    delete globalThis.__ycplDebugFixture;
+    delete globalThis.__ycplDebugRuntime;
+    delete globalThis.__ycplDebugProcess;
+    await fs.rm(root, { recursive: true, force: true });
   }
 });
