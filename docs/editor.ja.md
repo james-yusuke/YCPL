@@ -8,6 +8,18 @@
 `YCPL.stlRoot`、`YCPL.runtimeSource` も設定してください。
 **YCPL: Show Environment** で選択されたパスを確認できます。
 
+```mermaid
+flowchart TD
+    editor["VS Code / YCPL"] --> ts["TypeScript LSP（既定）"]
+    editor --> native["native LSP（設定で選択）"]
+    ts --> editing["補完・診断・移動・整形"]
+    ts --> refactoring["抽出・import 操作"]
+    native --> editing
+    editor --> commands["ビルド・テスト・デバッグ・計測"]
+    commands --> compiler["セルフホスト版 ycc + LLVM 22"]
+    compiler --> binary["ネイティブ実行ファイル"]
+```
+
 ## 編集とプロジェクト
 
 既定は VSIX 同梱の TypeScript LSP です。`YCPL.server.mode` を `auto` にすると
@@ -15,16 +27,16 @@
 使います。`native` は YCPL 製 LSP を必須にします。高度な抽出・import のコード
 アクションは TypeScript 版で利用してください。ステータスバーに動作中のサーバーを表示します。
 
-| 分野 | 利用できる機能 |
-|---|---|
-| 入力 | 補完、stdlib の自動 import、引数ヘルプ、ホバー、スニペット、意味に応じた色分け |
-| 移動 | 定義・宣言・型定義、参照、名前変更、シンボル検索、呼び出し階層、参照レンズ |
-| 整形 | ファイル・選択範囲・保存時の整形。raw string、文字リテラル、ネストしたコメントを保持 |
-| import | 追加、並べ替え、未使用 alias の削除、保存時の整理。付随コメント・副作用用 import を保持 |
-| リファクタリング | 変数・関数への抽出、定数リテラルのインライン化、空の構造体の基本型フィールド補完 |
-| 診断 | 編集中の構文診断、保存・Check 時の実コンパイラ診断、タスクの問題マッチャー |
-| プロジェクト | 新規作成、ローカル playground、YCPL.json の補完・検証、複数ルート、ビルドタスク |
-| テスト生成 | 公開関数用の TODO テスト生成、実装とテストファイルの切り替え |
+| 分野             | 利用できる機能                                                                          |
+| ---------------- | --------------------------------------------------------------------------------------- |
+| 入力             | 補完、stdlib の自動 import、引数ヘルプ、ホバー、スニペット、意味に応じた色分け          |
+| 移動             | 定義・宣言・型定義、参照、名前変更、シンボル検索、呼び出し階層、参照レンズ              |
+| 整形             | ファイル・選択範囲・保存時の整形。raw string、文字リテラル、ネストしたコメントを保持    |
+| import           | 追加、並べ替え、未使用 alias の削除、保存時の整理。付随コメント・副作用用 import を保持 |
+| リファクタリング | 変数・関数への抽出、定数リテラルのインライン化、空の構造体の基本型フィールド補完        |
+| 診断             | 編集中の構文診断、保存・Check 時の実コンパイラ診断、タスクの問題マッチャー              |
+| プロジェクト     | 新規作成、ローカル playground、YCPL.json の補完・検証、複数ルート、ビルドタスク         |
+| テスト生成       | 公開関数用の TODO テスト生成、実装とテストファイルの切り替え                            |
 
 抽出は制御フローの脱出やローカル変数の escape がある場合には提供しません。
 関数抽出のキャプチャはポインターを使い、書き込みを元の変数に反映します。
@@ -55,6 +67,20 @@ Run・Debug・Coverage のプロファイル、ワークスペース・ファイ
 テスト実行、Run Test レンズに対応します。true は成功、false は失敗、ビルド失敗は
 エラー、キャンセルはスキップとして表示します。生成した TODO テストは false を返すので、
 未実装のテストが成功したように見えることはありません。
+
+```mermaid
+flowchart TD
+    discover["テスト関数を検出"] --> mode{"実行モード"}
+    mode -->|Run| run["runner をビルド"]
+    mode -->|Debug| debug["ycc -g + lldb-dap"]
+    mode -->|Coverage| coverage["GCOV 計測付きビルド"]
+    run --> execute["runner を実行"]
+    debug --> execute
+    coverage --> execute
+    execute --> results["テスト結果を表示"]
+    execute --> counts["Coverage: 実行行数"]
+    results --> cleanup["一時ファイルを削除"]
+```
 
 ベンチマークの反復数は `YCPL.testing.benchmarkIterations` で設定します。
 計測値にはプロセス起動時間も含まれます。`fuzz_*` は i32 の連続した seed を渡す

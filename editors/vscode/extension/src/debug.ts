@@ -218,7 +218,7 @@ export function registerDebugging(context: vscode.ExtensionContext, output: vsco
   );
   context.subscriptions.push(
     vscode.debug.registerDebugAdapterDescriptorFactory("ycpl", {
-      createDebugAdapterDescriptor(session) {
+      async createDebugAdapterDescriptor(session) {
         const config = vscode.workspace.getConfiguration("YCPL", session.workspaceFolder?.uri);
         const configured = resolveConfiguredPath(
           config.get<string>("debug.adapterPath", ""),
@@ -237,10 +237,13 @@ export function registerDebugging(context: vscode.ExtensionContext, output: vsco
         const adapter = candidates.find(
           (candidate): candidate is string => !!candidate && isExecutable(candidate)
         );
-        if (!adapter)
+        if (!adapter) {
+          const directory = session.configuration.__ycplOutput as string | undefined;
+          if (directory && owned.delete(directory)) await fs.rm(directory, { recursive: true, force: true });
           throw new Error(
             "lldb-dap not found. Install LLDB (brew install lldb on macOS) or set YCPL.debug.adapterPath."
           );
+        }
         return new vscode.DebugAdapterExecutable(adapter);
       }
     })
