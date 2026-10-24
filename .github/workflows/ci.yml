@@ -235,7 +235,7 @@ jobs:
 
       - name: Upload Linux editor failure logs
         if: failure()
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: linux-editor-logs
           include-hidden-files: true
@@ -358,7 +358,7 @@ jobs:
           npm run check-package --prefix editors/vscode/extension
       - name: Upload editor failure logs
         if: failure()
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: editor-logs-${{ matrix.os }}
           include-hidden-files: true
